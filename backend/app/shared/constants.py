@@ -1,0 +1,5 @@
+# Application-wide constants
+
+DEFAULT_PAGE_LIMIT = 100
+MAX_SQL_ROW_LIMIT = 500
+SYSTEM_VERSION = "1.0.0"
