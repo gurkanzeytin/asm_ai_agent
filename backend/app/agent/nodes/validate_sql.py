@@ -1,34 +1,48 @@
 import logging
+import time
 
+from app.agent.nodes.node_interface import IAgentNode
 from app.agent.state import AgentState
-from app.validators.sql_validator import SQLValidator
 
 logger = logging.getLogger(__name__)
 
 
-async def validate_sql_node(state: AgentState) -> dict:
-    """Validates the security profile of the generated SQL.
+class ValidateSQLNode(IAgentNode):
+    """Workflow node responsible for verifying SQL query safety metadata."""
 
-    Args:
-        state: Active agent lifecycle state.
+    async def execute(self, state: AgentState) -> AgentState:
+        logger.info("ValidateSQLNode execution started.")
+        start_time = time.perf_counter()
 
-    Returns:
-        dict: State update dictionary containing validation status or errors.
-    """
-    logger.info("Running agent node: validate_sql")
+        duration = (time.perf_counter() - start_time) * 1000
 
-    sql_query = state.get("sql_query")
-    if not sql_query:
-        return {"sql_valid": False, "error": "No SQL query found for validation."}
+        if not state.generated_sql:
+            logger.error("ValidateSQLNode failed: GeneratedSQL missing in state.")
+            return state.model_copy(
+                update={
+                    "errors": state.errors + ["ValidateSQLNode failed: Generated SQL is missing."],
+                    "current_node": "validate_sql",
+                    "duration_ms": state.duration_ms + duration,
+                }
+            )
 
-    # Check if the query is a safe read-only query
-    is_safe = SQLValidator.is_safe_query(sql_query)
+        validation_result = state.generated_sql.validation_result
+        if not validation_result or not validation_result.valid:
+            reason = validation_result.reason if validation_result else "No validation metadata present."
+            logger.warning(f"SQL validation safety block triggered. Reason: {reason}")
+            return state.model_copy(
+                update={
+                    "errors": state.errors + [f"SQL Safety validation failed: {reason}"],
+                    "current_node": "validate_sql",
+                    "duration_ms": state.duration_ms + duration,
+                }
+            )
 
-    if not is_safe:
-        logger.warning(f"Malicious query pattern detected: {sql_query}")
-        return {
-            "sql_valid": False,
-            "error": "Query validation failed. Write operations are prohibited.",
-        }
-
-    return {"sql_valid": True}
+        logger.info("ValidateSQLNode execution completed successfully.")
+        return state.model_copy(
+            update={
+                "current_node": "validate_sql",
+                "completed_nodes": state.completed_nodes + ["validate_sql"],
+                "duration_ms": state.duration_ms + duration,
+            }
+        )

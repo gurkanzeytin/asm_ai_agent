@@ -1,50 +1,51 @@
 import logging
+import time
 
+from app.agent.nodes.node_interface import IAgentNode
 from app.agent.state import AgentState
-from app.llm.ollama import OllamaProvider
-from app.llm.parser import OutputParser
-from app.llm.prompt_builder import PromptBuilder
+from app.services.interfaces import IPromptService, IWorkflowService
 
 logger = logging.getLogger(__name__)
 
 
-async def generate_sql_node(state: AgentState) -> dict:
-    """Orchestrates prompts loading, LLM request execution, and SQL parsing.
+class GenerateSQLNode(IAgentNode):
+    """Workflow node responsible for invoking LLM SQL generation services."""
 
-    Args:
-        state: Active agent lifecycle state.
+    def __init__(self, prompt_service: IPromptService, workflow_service: IWorkflowService):
+        self.prompt_service = prompt_service
+        self.workflow_service = workflow_service
 
-    Returns:
-        dict: State update dictionary containing the parsed SQL query.
-    """
-    logger.info("Running agent node: generate_sql")
+    async def execute(self, state: AgentState) -> AgentState:
+        logger.info("GenerateSQLNode execution started.")
+        start_time = time.perf_counter()
 
-    # Initialize the LLM interface
-    llm = OllamaProvider()
+        try:
+            # Render and cache the prompt text for tracing/transparency
+            sql_prompt = await self.prompt_service.render_sql_prompt(state.question)
 
-    # Load external prompt templates
-    try:
-        system_prompt = PromptBuilder.load_prompt("system_prompt.md")
-        sql_prompt = PromptBuilder.load_prompt(
-            "sql_generation.md",
-            schema_description=state.get("schema_context", ""),
-            question=state.get("report_query", ""),
-        )
+            # Delegate text generation orchestration to application services
+            generated_sql = await self.workflow_service.execute_sql_generation(state.question)
 
-        full_prompt = f"{system_prompt}\n\n{sql_prompt}"
+            logger.info("GenerateSQLNode execution completed successfully.")
+            duration = (time.perf_counter() - start_time) * 1000
 
-        # Invoke generation
-        raw_response = await llm.generate(full_prompt)
+            return state.model_copy(
+                update={
+                    "sql_prompt": sql_prompt,
+                    "generated_sql": generated_sql,
+                    "current_node": "generate_sql",
+                    "completed_nodes": state.completed_nodes + ["generate_sql"],
+                    "duration_ms": state.duration_ms + duration,
+                }
+            )
+        except Exception as e:
+            logger.error(f"GenerateSQLNode execution failed: {e}")
+            duration = (time.perf_counter() - start_time) * 1000
 
-        # Parse the raw response to clean SQL code
-        sql_query = OutputParser.parse_sql(raw_response)
-
-        # Fallback query if mock placeholder response detected
-        if "[Simulated" in raw_response:
-            sql_query = "SELECT * FROM transactions LIMIT 5;"
-
-    except Exception as e:
-        logger.error(f"SQL generation node error: {e}")
-        sql_query = "SELECT * FROM transactions LIMIT 5;"  # Safe fallback block
-
-    return {"sql_query": sql_query}
+            return state.model_copy(
+                update={
+                    "errors": state.errors + [f"GenerateSQLNode failed: {e}"],
+                    "current_node": "generate_sql",
+                    "duration_ms": state.duration_ms + duration,
+                }
+            )

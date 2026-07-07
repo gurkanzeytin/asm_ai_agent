@@ -29,6 +29,15 @@ class PromptService(IPromptService):
         self.prompt_loader = prompt_loader
         self.prompt_renderer = prompt_renderer
 
+    async def retrieve_schema_context(self, question: str) -> DatabaseContext:
+        """Retrieves matching database schema context structured metadata."""
+        try:
+            schema = await self.schema_cache.get_schema()
+            return self.schema_retriever.retrieve_context(question, schema)
+        except Exception as e:
+            logger.error(f"Failed to retrieve schema context: {e}")
+            raise PromptServiceException(f"Failed to retrieve schema context: {e}") from e
+
     async def render_prompt(self, template_name: str, question: str, variables: Dict[str, Any]) -> str:
         """Loads prompt, retrieves schema context if required, and interpolates variables."""
         logger.info(

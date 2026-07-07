@@ -3,10 +3,23 @@ from typing import Any, Dict
 
 from app.application_models.generated_report import GeneratedReport
 from app.application_models.generated_sql import GeneratedSQL
+from app.database_intelligence.models import DatabaseContext
 
 
 class IPromptService(ABC):
     """Abstract interface defining contract for prompt loading, context extraction, and rendering."""
+
+    @abstractmethod
+    async def retrieve_schema_context(self, question: str) -> DatabaseContext:
+        """Retrieves matching database schema context structured metadata.
+
+        Args:
+            question: The user query context.
+
+        Returns:
+            DatabaseContext: Discovered database context object.
+        """
+        pass
 
     @abstractmethod
     async def render_prompt(self, template_name: str, question: str, variables: Dict[str, Any]) -> str:

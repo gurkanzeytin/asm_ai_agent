@@ -1,8 +1,7 @@
 import logging
 from typing import Any
 
-from app.agent.state import AgentState
-from app.agent.workflow import agent_graph
+from app.agent import AgentState, agent_graph
 
 logger = logging.getLogger(__name__)
 
@@ -22,23 +21,21 @@ class ReportingService:
         """
         logger.info(f"ReportingService: Triggering agent pipeline for query: {query}")
 
-        initial_state: AgentState = {
-            "messages": [],
-            "report_query": query,
-            "schema_context": None,
-            "sql_query": None,
-            "sql_valid": None,
-            "query_result": None,
-            "report_output": None,
-            "error": None,
-        }
+        initial_state = AgentState(question=query)
 
+        # Run compiled LangGraph workflow pipeline
         final_state = await agent_graph.ainvoke(initial_state)
+
+        generated_sql_dto = final_state.get("generated_sql")
+        errors = final_state.get("errors", [])
+        error_msg = errors[0] if errors else None
+
+        sql_query = generated_sql_dto.sql if generated_sql_dto else None
 
         return {
             "query": query,
-            "sql_query": final_state.get("sql_query"),
-            "query_result": final_state.get("query_result"),
-            "report": final_state.get("report_output"),
-            "error": final_state.get("error"),
+            "sql_query": sql_query,
+            "query_result": None,
+            "report": None,
+            "error": error_msg,
         }

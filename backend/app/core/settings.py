@@ -70,8 +70,8 @@ class Settings(BaseSettings):
 
     # Database configurations
     DATABASE_URL: str = Field(
-        default="sqlite+aiosqlite:///./sql_app.db",
-        description="Relational database connection string URL.",
+       default="sqlite+aiosqlite:///./data/hospital_demo.db",
+       description="Relational database connection string URL.",
     )
     DATABASE_POOL_SIZE: int = Field(
         default=10, description="Max database session connection pool size limit."
