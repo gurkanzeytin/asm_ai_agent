@@ -3,6 +3,7 @@ from typing import Any, Dict
 
 from app.application_models.generated_report import GeneratedReport
 from app.application_models.generated_sql import GeneratedSQL
+from app.application_models.workflow_models import QueryResult
 from app.database_intelligence.models import DatabaseContext
 
 
@@ -122,5 +123,33 @@ class IWorkflowService(ABC):
 
         Returns:
             GeneratedReport: Final narrative report DTO.
+        """
+        pass
+
+    @abstractmethod
+    async def execute_query(self, sql: str) -> QueryResult:
+        """Orchestrates query execution and maps result set DTO.
+
+        Args:
+            sql: Validated read-only SQL statement.
+
+        Returns:
+            QueryResult: The structured query results.
+        """
+        pass
+
+
+class IExecutionService(ABC):
+    """Abstract interface defining standard contract for SQL execution and mapping."""
+
+    @abstractmethod
+    async def execute_sql(self, sql: str) -> QueryResult:
+        """Executes a validated SQL query statement, returning query result DTO.
+
+        Args:
+            sql: Validated read-only SQL string.
+
+        Returns:
+            QueryResult: The structured result set DTO.
         """
         pass

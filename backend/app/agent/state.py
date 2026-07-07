@@ -2,6 +2,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from app.application_models.generated_sql import GeneratedSQL
+from app.application_models.workflow_models import QueryResult
 from app.database_intelligence.models import DatabaseContext
 
 
@@ -17,6 +18,9 @@ class AgentState(BaseModel):
     )
     generated_sql: Optional[GeneratedSQL] = Field(
         default=None, description="Generated SQL syntax with safety validation metrics."
+    )
+    query_result: Optional[QueryResult] = Field(
+        default=None, description="Structured SQL query execution result payload."
     )
     errors: List[str] = Field(
         default_factory=list, description="Accumulated diagnostic or safety validation errors."

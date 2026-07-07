@@ -3,7 +3,7 @@ import time
 from typing import Any
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.repositories.exceptions import RepositoryError
 from app.repositories.interfaces import IAnalyticalRepository
@@ -26,6 +26,10 @@ class AnalyticalRepository(IAnalyticalRepository):
         """
         logger.debug("Initializing AnalyticalRepository query engine.")
         self.session = session
+
+    async def execute_readonly_query(self, sql: str) -> list[dict[str, Any]]:
+        """Executes a validated read-only SQL query and returns list of dict rows."""
+        return await self.execute_query(sql)
 
     async def execute_query(
         self, query: str, params: dict[str, Any] | None = None
@@ -70,3 +74,48 @@ class AnalyticalRepository(IAnalyticalRepository):
         query_clean = query.strip().rstrip(";")
         paged_query = f"{query_clean} LIMIT {limit} OFFSET {skip};"
         return await self.execute_query(paged_query, params)
+
+
+class ScopedAnalyticalRepository(IAnalyticalRepository):
+    """Session-scoped proxy implementation of the IAnalyticalRepository interface.
+
+    Wraps the underlying AnalyticalRepository to automatically obtain and close
+    short-lived AsyncSession instances from the session factory per query execution.
+    This guarantees concurrency safety in multi-threaded/async request pools.
+    """
+
+    def __init__(self, session_maker: async_sessionmaker[AsyncSession]):
+        """Constructor dependency injection.
+
+        Args:
+            session_maker: Factory producing AsyncSession connections.
+        """
+        self.session_maker = session_maker
+
+    async def execute_readonly_query(self, sql: str) -> list[dict[str, Any]]:
+        """Obtains scoped session and runs execution."""
+        async with self.session_maker() as session:
+            repo = AnalyticalRepository(session)
+            return await repo.execute_readonly_query(sql)
+
+    async def execute_query(
+        self, query: str, params: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Obtains scoped session and runs execution."""
+        async with self.session_maker() as session:
+            repo = AnalyticalRepository(session)
+            return await repo.execute_query(query, params)
+
+    async def execute_scalar(self, query: str, params: dict[str, Any] | None = None) -> Any:
+        """Obtains scoped session and runs execution."""
+        async with self.session_maker() as session:
+            repo = AnalyticalRepository(session)
+            return await repo.execute_scalar(query, params)
+
+    async def fetch_paged_query(
+        self, query: str, *, skip: int = 0, limit: int = 100, params: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Obtains scoped session and runs execution."""
+        async with self.session_maker() as session:
+            repo = AnalyticalRepository(session)
+            return await repo.fetch_paged_query(query, skip=skip, limit=limit, params=params)

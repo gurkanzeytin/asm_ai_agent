@@ -10,6 +10,18 @@ class IAnalyticalRepository(ABC):
     """
 
     @abstractmethod
+    async def execute_readonly_query(self, sql: str) -> list[dict[str, Any]]:
+        """Executes a validated read-only SQL query and returns list of dict rows.
+
+        Args:
+            sql: The safe, validated SQL statement.
+
+        Returns:
+            list[dict]: List of row dictionaries.
+        """
+        pass
+
+    @abstractmethod
     async def execute_query(
         self, query: str, params: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:

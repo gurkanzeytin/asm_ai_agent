@@ -1,8 +1,23 @@
-from typing import Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.application_models.generated_report import GeneratedReport
 from app.application_models.generated_sql import GeneratedSQL
+
+
+class QueryResult(BaseModel):
+    """Structured DTO representing executed SQL query results."""
+
+    model_config = ConfigDict(frozen=True)
+
+    columns: List[str] = Field(..., description="Ordered list of column names in the result set.")
+    rows: List[Dict[str, Any]] = Field(..., description="List of rows represented as key-value dictionaries.")
+    row_count: int = Field(..., description="Total count of rows returned.")
+    execution_time_ms: float = Field(..., description="Time taken to execute query in milliseconds.")
+    success: bool = Field(..., description="Flag indicating whether query execution was successful.")
+    executed_at: datetime = Field(..., description="Timestamp showing when query execution occurred.")
+    database_provider: str = Field(..., description="Target database engine provider name.")
 
 
 class WorkflowExecutionResult(BaseModel):
@@ -12,6 +27,7 @@ class WorkflowExecutionResult(BaseModel):
 
     question: str = Field(..., description="The query parameter.")
     generated_sql: Optional[GeneratedSQL] = Field(default=None, description="The SQL generation details.")
+    query_result: Optional[QueryResult] = Field(default=None, description="The SQL execution query results.")
     generated_report: Optional[GeneratedReport] = Field(
         default=None, description="The narrative report summary details."
     )

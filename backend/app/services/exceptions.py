@@ -29,3 +29,15 @@ class WorkflowServiceException(ApplicationServiceException):
     """Raised when workflow orchestration steps encounter errors."""
 
     pass
+
+
+class ExecutionServiceException(ApplicationServiceException):
+    """Raised when execution service operations encounter general issues."""
+
+    pass
+
+
+class QueryExecutionException(ExecutionServiceException):
+    """Raised when query execution fails at the repository database boundary."""
+
+    pass

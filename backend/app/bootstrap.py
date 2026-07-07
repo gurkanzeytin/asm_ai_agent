@@ -1,7 +1,7 @@
 import logging
 
 from app.agent.graph import AgentGraphBuilder
-from app.database.session import engine
+from app.database.session import SessionLocal, engine
 from app.database_intelligence.cache import SchemaCache
 from app.database_intelligence.inspector import DatabaseInspector
 from app.database_intelligence.retriever import SchemaRetriever
@@ -9,6 +9,8 @@ from app.llm.provider import LLMFactory
 from app.parsers.output_parser import OutputParser
 from app.prompts.loader import prompt_loader
 from app.prompts.renderer import prompt_renderer
+from app.repositories.base import ScopedAnalyticalRepository
+from app.services.execution_service import ExecutionService
 from app.services.prompt_service import PromptService
 from app.services.report_service import ReportService
 from app.services.sql_service import SQLService
@@ -29,6 +31,9 @@ class AppContainer:
         self.inspector = DatabaseInspector(self.engine)
         self.schema_cache = SchemaCache(self.inspector)
         self.schema_retriever = SchemaRetriever()
+
+        # Scoped Repository mapping transient connection lifetimes dynamically
+        self.repository = ScopedAnalyticalRepository(SessionLocal)
 
         # 2. Prompt Management Infrastructure
         self.prompt_loader = prompt_loader
@@ -54,6 +59,12 @@ class AppContainer:
             sql_validator=self.sql_validator,
         )
 
+        # SQL Execution service
+        self.execution_service = ExecutionService(
+            repository=self.repository,
+            sql_validator=self.sql_validator,
+        )
+
         # 6. Narrative Report generation service
         self.report_service = ReportService(
             prompt_service=self.prompt_service,
@@ -65,6 +76,7 @@ class AppContainer:
             prompt_service=self.prompt_service,
             sql_service=self.sql_service,
             report_service=self.report_service,
+            execution_service=self.execution_service,
         )
 
         # 8. Agent State Graph Builder
