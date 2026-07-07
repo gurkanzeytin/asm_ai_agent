@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from app.application_models.generated_report import GeneratedReport
 from app.application_models.generated_sql import GeneratedSQL
@@ -49,13 +49,13 @@ class IPromptService(ABC):
         pass
 
     @abstractmethod
-    async def render_report_prompt(self, question: str, sql: str, query_result: list) -> str:
+    async def render_report_prompt(self, question: str, sql: str, query_result: QueryResult) -> str:
         """Loads templates and renders the combined report generation prompt.
 
         Args:
             question: The user question.
             sql: The executed SQL statement.
-            query_result: List of query rows from database.
+            query_result: Structured QueryResult database output DTO.
 
         Returns:
             str: Complete system + report generation prompt.
@@ -83,13 +83,16 @@ class IReportService(ABC):
     """Abstract interface defining contract for narrative report synthesis."""
 
     @abstractmethod
-    async def generate_report(self, question: str, sql: str, query_result: list) -> GeneratedReport:
+    async def generate_report(
+        self, question: str, sql: str, query_result: QueryResult, execution_id: Optional[str] = None
+    ) -> GeneratedReport:
         """Invokes prompt services and LLM provider to synthesize a narrative report DTO.
 
         Args:
             question: User question context.
             sql: Executed SQL query.
-            query_result: Returned database rows list.
+            query_result: Structured QueryResult database output DTO.
+            execution_id: Optional workflow run identifier.
 
         Returns:
             GeneratedReport: Narrative report DTO.
@@ -113,13 +116,16 @@ class IWorkflowService(ABC):
         pass
 
     @abstractmethod
-    async def execute_report_generation(self, question: str, sql: str, query_result: list) -> GeneratedReport:
+    async def execute_report_generation(
+        self, question: str, sql: str, query_result: QueryResult, execution_id: Optional[str] = None
+    ) -> GeneratedReport:
         """Coordinates narrative report generation.
 
         Args:
             question: User question.
             sql: Executed SQL.
-            query_result: Database output rows.
+            query_result: Structured QueryResult database output DTO.
+            execution_id: Optional workflow run identifier.
 
         Returns:
             GeneratedReport: Final narrative report DTO.

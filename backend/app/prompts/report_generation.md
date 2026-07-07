@@ -14,5 +14,19 @@ You are tasked with summarizing query results into a structured markdown report.
 {results}
 
 ## Instructions
-1. Present key metrics in a markdown table.
-2. Provide a 2-3 sentence executive summary explaining the findings.
+Please format the narrative response precisely using the following section headers in this deterministic order:
+
+# [Report Title]
+
+## Executive Summary
+[A concise 2-3 sentence executive summary explaining the overall findings]
+
+## Key Findings
+[List the main insights and key metrics, using a Markdown table where appropriate to summarize the dataset]
+
+## Recommendations
+[Any actionable suggestions or next steps based on the findings]
+
+## Data Notes
+[Brief documentation on data truncation or metrics, noting original vs. truncated rows if applicable]
+

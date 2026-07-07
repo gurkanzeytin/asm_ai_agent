@@ -43,11 +43,15 @@ class WorkflowService(IWorkflowService):
             logger.error(f"WorkflowService execute_sql_generation failed: {e}")
             raise WorkflowServiceException(f"Workflow execution failed: {e}") from e
 
-    async def execute_report_generation(self, question: str, sql: str, query_result: list) -> GeneratedReport:
+    async def execute_report_generation(
+        self, question: str, sql: str, query_result: QueryResult, execution_id: Optional[str] = None
+    ) -> GeneratedReport:
         """Coordinates narrative report generation delegation."""
         logger.info("WorkflowService execute_report_generation started.")
         try:
-            report_dto = await self.report_service.generate_report(question, sql, query_result)
+            report_dto = await self.report_service.generate_report(
+                question, sql, query_result, execution_id
+            )
             logger.info("WorkflowService execute_report_generation completed successfully.")
             return report_dto
         except Exception as e:

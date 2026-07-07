@@ -79,6 +79,16 @@ async def test_successful_workflow_execution():
     )
     workflow_service.execute_query.return_value = mock_query
 
+    from app.application_models.generated_report import GeneratedReport
+    mock_report = GeneratedReport(
+        title="Title",
+        markdown="Report text",
+        provider="ollama",
+        model="qwen3:8b",
+        latency_ms=250.0,
+    )
+    workflow_service.execute_report_generation.return_value = mock_report
+
     # Build and compile graph
     builder = AgentGraphBuilder(prompt_service, workflow_service)
     graph = builder.build()
@@ -92,11 +102,12 @@ async def test_successful_workflow_execution():
     assert final_state_dict["sql_prompt"] == "Rendered prompt text"
     assert final_state_dict["generated_sql"] == mock_generated_sql
     assert len(final_state_dict["errors"]) == 0
-    assert final_state_dict["current_node"] == "execute_sql"
+    assert final_state_dict["current_node"] == "generate_report"
     assert "retrieve_context" in final_state_dict["completed_nodes"]
     assert "generate_sql" in final_state_dict["completed_nodes"]
     assert "validate_sql" in final_state_dict["completed_nodes"]
     assert "execute_sql" in final_state_dict["completed_nodes"]
+    assert "generate_report" in final_state_dict["completed_nodes"]
     assert final_state_dict["duration_ms"] > 0.0
 
 
@@ -133,9 +144,10 @@ async def test_workflow_validation_failure():
     assert len(final_state_dict["errors"]) > 0
     assert "SQL Safety validation failed" in final_state_dict["errors"][0]
     assert final_state_dict["generated_sql"] == mock_invalid_sql
-    assert final_state_dict["current_node"] == "execute_sql"
+    assert final_state_dict["current_node"] == "generate_report"
     assert "validate_sql" not in final_state_dict["completed_nodes"]
     assert "execute_sql" not in final_state_dict["completed_nodes"]
+    assert "generate_report" not in final_state_dict["completed_nodes"]
 
 
 @pytest.mark.asyncio

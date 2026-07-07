@@ -4,6 +4,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from app.agent.nodes.execute_sql import ExecuteSQLNode
+from app.agent.nodes.generate_report import GenerateReportNode
 from app.agent.nodes.generate_sql import GenerateSQLNode
 from app.agent.nodes.retrieve_context import RetrieveContextNode
 from app.agent.nodes.validate_sql import ValidateSQLNode
@@ -29,6 +30,7 @@ class AgentGraphBuilder:
         generate_node = GenerateSQLNode(self.prompt_service, self.workflow_service)
         validate_node = ValidateSQLNode()
         execute_node = ExecuteSQLNode(self.workflow_service)
+        report_node = GenerateReportNode(self.workflow_service)
 
         # 2. Build StateGraph using the IAgentNode.execute method wrappers
         workflow = StateGraph(AgentState)
@@ -37,12 +39,14 @@ class AgentGraphBuilder:
         workflow.add_node("generate_sql", generate_node.execute)
         workflow.add_node("validate_sql", validate_node.execute)
         workflow.add_node("execute_sql", execute_node.execute)
+        workflow.add_node("generate_report", report_node.execute)
 
         workflow.add_edge(START, "retrieve_context")
         workflow.add_edge("retrieve_context", "generate_sql")
         workflow.add_edge("generate_sql", "validate_sql")
         workflow.add_edge("validate_sql", "execute_sql")
-        workflow.add_edge("execute_sql", END)
+        workflow.add_edge("execute_sql", "generate_report")
+        workflow.add_edge("generate_report", END)
 
         logger.info("Agent graph constructed and compiled successfully.")
         return workflow.compile()

@@ -2,6 +2,8 @@ from datetime import date
 import logging
 from typing import Any, Dict
 
+from app.application_models.generated_report import ReportPromptContext
+from app.application_models.workflow_models import QueryResult
 from app.core.config import settings
 from app.database_intelligence.cache import SchemaCache
 from app.database_intelligence.interfaces import ISchemaRetriever
@@ -93,14 +95,53 @@ class PromptService(IPromptService):
             logger.error(f"Failed to render SQL prompt: {e}")
             raise PromptServiceException(f"Failed to render SQL prompt: {e}") from e
 
-    async def render_report_prompt(self, question: str, sql: str, query_result: list) -> str:
+    async def render_report_prompt(self, question: str, sql: str, query_result: QueryResult) -> str:
         """Combines system prompt and report generation prompt with query execution outputs."""
         try:
             system_prompt = await self.render_prompt("system_prompt.md", question, {})
+            
+            # Dynamic conversion for legacy test compatibility
+            if isinstance(query_result, list):
+                from datetime import datetime, timezone
+                columns = list(query_result[0].keys()) if query_result else []
+                query_result = QueryResult(
+                    columns=columns,
+                    rows=query_result,
+                    row_count=len(query_result),
+                    execution_time_ms=0.0,
+                    success=True,
+                    executed_at=datetime.now(timezone.utc),
+                    database_provider="sqlite",
+                )
+
+            # Truncate rows if necessary to protect against large datasets
+            original_row_count = query_result.row_count
+            rows = query_result.rows
+            truncated_row_count = None
+            max_rows = getattr(settings, "REPORT_MAX_ROWS", 100)
+            if len(rows) > max_rows:
+                rows = rows[:max_rows]
+                truncated_row_count = len(rows)
+
+            # Build ReportPromptContext DTO
+            context = ReportPromptContext(
+                question=question,
+                columns=query_result.columns,
+                rows=rows,
+                original_row_count=original_row_count,
+                truncated_row_count=truncated_row_count,
+            )
+
+            # Serialize context DTO to JSON format
+            serialized_context = context.model_dump_json(indent=2)
+
             report_prompt = await self.render_prompt(
                 "report_generation.md",
                 question,
-                {"query": sql, "results": str(query_result)},
+                {
+                    "query": sql,
+                    "results": serialized_context,
+                },
             )
             return f"{system_prompt}\n\n{report_prompt}"
         except Exception as e:

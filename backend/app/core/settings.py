@@ -113,5 +113,11 @@ class Settings(BaseSettings):
         default="sqlite", description="Default SQL dialect parsed by safety validation layer."
     )
 
+    # Report configurations
+    REPORT_MAX_ROWS: int = Field(
+        default=100,
+        description="Maximum number of query result rows to include in the report prompt context.",
+    )
+
     # Logging configurations
     LOG_LEVEL: str = Field(default="INFO", description="Minimum log reporting levels.")

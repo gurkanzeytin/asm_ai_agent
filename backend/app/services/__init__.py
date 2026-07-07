@@ -19,6 +19,7 @@ from app.services.report_service import ReportService
 from app.services.sql_service import SQLService
 from app.services.workflow_service import WorkflowService
 from app.services.execution_service import ExecutionService
+from app.services.report_generator import IReportGenerator, NarrativeReportGenerator
 
 __all__ = [
     "IExecutionService",
@@ -31,6 +32,8 @@ __all__ = [
     "ReportService",
     "WorkflowService",
     "ExecutionService",
+    "IReportGenerator",
+    "NarrativeReportGenerator",
     "ApplicationServiceException",
     "PromptServiceException",
     "SQLServiceException",

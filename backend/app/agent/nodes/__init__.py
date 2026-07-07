@@ -1,4 +1,5 @@
 from app.agent.nodes.execute_sql import ExecuteSQLNode
+from app.agent.nodes.generate_report import GenerateReportNode
 from app.agent.nodes.generate_sql import GenerateSQLNode
 from app.agent.nodes.node_interface import IAgentNode
 from app.agent.nodes.retrieve_context import RetrieveContextNode
@@ -10,4 +11,5 @@ __all__ = [
     "GenerateSQLNode",
     "ValidateSQLNode",
     "ExecuteSQLNode",
+    "GenerateReportNode",
 ]

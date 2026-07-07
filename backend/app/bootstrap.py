@@ -13,6 +13,7 @@ from app.repositories.base import ScopedAnalyticalRepository
 from app.services.execution_service import ExecutionService
 from app.services.prompt_service import PromptService
 from app.services.report_service import ReportService
+from app.services.reporting_service import ReportingService
 from app.services.sql_service import SQLService
 from app.services.workflow_service import WorkflowService
 from app.sql_validator.validator import SQLValidator
@@ -85,6 +86,11 @@ class AppContainer:
             workflow_service=self.workflow_service,
         )
         self.agent_graph = self.agent_graph_builder.build()
+
+        # 9. Reporting Service — top-level API entry point backed by compiled agent graph
+        self.reporting_service = ReportingService(
+            agent_graph=self.agent_graph,
+        )
         logger.info("AppContainer initialized successfully.")
 
 

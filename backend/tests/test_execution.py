@@ -173,6 +173,16 @@ async def test_graph_builder_with_execution_node():
     )
     workflow_service.execute_query.return_value = mock_query_result
 
+    from app.application_models.generated_report import GeneratedReport
+    mock_report = GeneratedReport(
+        title="Title",
+        markdown="Report text",
+        provider="ollama",
+        model="qwen",
+        latency_ms=10.0,
+    )
+    workflow_service.execute_report_generation.return_value = mock_report
+
     # Build E2E graph
     builder = AgentGraphBuilder(prompt_service, workflow_service)
     graph = builder.build()
@@ -183,7 +193,13 @@ async def test_graph_builder_with_execution_node():
     final_state_dict = await graph.ainvoke(initial_state)
 
     # Check complete node lifecycle
-    assert final_state_dict["current_node"] == "execute_sql"
-    assert final_state_dict["completed_nodes"] == ["retrieve_context", "generate_sql", "validate_sql", "execute_sql"]
+    assert final_state_dict["current_node"] == "generate_report"
+    assert final_state_dict["completed_nodes"] == [
+        "retrieve_context",
+        "generate_sql",
+        "validate_sql",
+        "execute_sql",
+        "generate_report",
+    ]
     assert final_state_dict["query_result"] == mock_query_result
     assert len(final_state_dict["errors"]) == 0

@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.api import api_router
+from app.api.exception_handlers import EXCEPTION_HANDLERS
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.schemas.health import HealthCheckResponse
@@ -32,6 +33,10 @@ app = FastAPI(
     lifespan=lifespan,
     debug=settings.DEBUG,
 )
+
+# Register domain exception → HTTP status code handlers
+for exc_class, handler in EXCEPTION_HANDLERS:
+    app.add_exception_handler(exc_class, handler)
 
 # CORS configurations
 if settings.ALLOWED_ORIGINS:
