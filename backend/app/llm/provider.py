@@ -1,23 +1,57 @@
-from abc import ABC, abstractmethod
-from typing import Any
+import logging
+
+from app.core.config import settings
+from app.llm.interfaces import ILLMProvider
+from app.llm.ollama import OllamaProvider
+
+logger = logging.getLogger(__name__)
 
 
-class LLMProvider(ABC):
-    """Abstract interface representing a Large Language Model provider.
+class LLMFactory:
+    """Factory class to retrieve cached, singleton LLM provider instances.
 
-    Allows swapping backend models (Ollama, OpenAI, Anthropic, HuggingFace)
-    without modifying the business logic of nodes or agent systems.
+    Guarantees that only a single instance of each provider is created and reused,
+    preserving persistent HTTP clients and connection pools.
     """
 
-    @abstractmethod
-    async def generate(self, prompt: str, **kwargs: Any) -> str:
-        """Sends a text prompt to the LLM and returns the text response.
+    _instances: dict[str, ILLMProvider] = {}
+
+    @classmethod
+    def get_provider(cls, provider_type: str | None = None) -> ILLMProvider:
+        """Retrieves or instantiates the requested LLM Provider singleton.
+
+        Reads the active provider type from central configurations if not specified.
 
         Args:
-            prompt: Formatted user and system prompt string.
-            **kwargs: Extra hyperparameters (temperature, max_tokens, etc.).
+            provider_type: Optional string name of the provider (e.g. 'ollama').
 
         Returns:
-            str: Generated text answer from the LLM.
+            ILLMProvider: A shared concrete provider instance.
+
+        Raises:
+            ValueError: If the configured provider type is unknown or unsupported.
         """
-        pass
+        if provider_type is None:
+            provider_type = getattr(settings, "LLM_PROVIDER", "ollama")
+
+        provider_key = provider_type.strip().lower()
+
+        if provider_key not in cls._instances:
+            if provider_key == "ollama":
+                logger.info("Instantiating new singleton OllamaProvider instance.")
+                cls._instances[provider_key] = OllamaProvider()
+            else:
+                logger.error(f"Unsupported LLM provider requested: {provider_type}")
+                raise ValueError(f"Unsupported LLM provider: {provider_type}")
+
+        return cls._instances[provider_key]
+
+    @classmethod
+    async def clear_providers(cls) -> None:
+        """Closes and clears all cached provider instances to free resources."""
+        for provider_key, provider in list(cls._instances.items()):
+            try:
+                await provider.close()
+            except Exception as e:
+                logger.warning(f"Error closing provider '{provider_key}': {e}")
+        cls._instances.clear()

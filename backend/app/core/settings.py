@@ -80,12 +80,37 @@ class Settings(BaseSettings):
         default=False, description="Log database queries to std log out streams when set."
     )
 
-    # Ollama configurations
+    # LLM configurations
+    LLM_PROVIDER: str = Field(
+        default="ollama", description="Active LLM provider name."
+    )
     OLLAMA_BASE_URL: str = Field(
         default="http://localhost:11434", description="Ollama local API server endpoint."
     )
     OLLAMA_MODEL: str = Field(
         default="qwen3:8b", description="Target text LLM Qwen series model name."
+    )
+    OLLAMA_TIMEOUT: float = Field(
+        default=30.0, description="Ollama API request timeout in seconds."
+    )
+    LLM_RETRY_COUNT: int = Field(
+        default=3, description="Maximum retries for transient failures."
+    )
+
+    # Database Intelligence configurations
+    SCHEMA_CACHE_ENABLED: bool = Field(
+        default=True, description="Enable in-memory caching of the database schema."
+    )
+    SCHEMA_CACHE_TTL: float = Field(
+        default=3600.0, description="Schema cache expiration Time-To-Live in seconds."
+    )
+    AUTO_REFRESH_SCHEMA: bool = Field(
+        default=True, description="Automatically inspect database to refresh cache on expiration."
+    )
+
+    # SQL safety configurations
+    SQL_DIALECT: str = Field(
+        default="sqlite", description="Default SQL dialect parsed by safety validation layer."
     )
 
     # Logging configurations
