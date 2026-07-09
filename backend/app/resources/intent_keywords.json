@@ -1,0 +1,32 @@
+{
+  "help": {
+    "keywords": [
+      "help", "yardım", "yardim", "question", "soru", "example", "ornek", "örnek",
+      "how does this work", "nasil calisir", "nasıl çalışır", "how it works",
+      "what can i ask", "ne sorabilirim", "guidance", "rehber"
+    ],
+    "base_confidence": 1.0,
+    "priority": 1
+  },
+  "general_chat": {
+    "keywords": [
+      "hello", "hi", "hey", "merhaba", "selam", "who are you", "kimsin",
+      "what can you do", "ne yapabilirsin", "thank you", "thanks", "teşekkür",
+      "good morning", "gunaydin", "günaydın", "good afternoon", "good evening",
+      "iyi günler", "iyi gunler"
+    ],
+    "base_confidence": 1.0,
+    "priority": 2
+  },
+  "database_query": {
+    "keywords": [
+      "doctor", "doktor", "hekim", "appointment", "randevu", "patient", "hasta",
+      "department", "brans", "brani", "bolum", "clinic", "klinik", "busiest",
+      "highest", "most", "lowest", "least", "count", "average", "many", "registered",
+      "scheduled", "yesterday", "how many", "which", "show", "list", "find",
+      "en fazla", "en az", "kac", "kaç", "toplam", "ortalama", "tarih", "saat"
+    ],
+    "base_confidence": 0.9,
+    "priority": 3
+  }
+}

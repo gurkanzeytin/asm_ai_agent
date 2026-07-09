@@ -31,6 +31,7 @@ class RetrieveContextNode(IAgentNode):
                     "current_node": "retrieve_context",
                     "completed_nodes": state.completed_nodes + ["retrieve_context"],
                     "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "retrieve_context": duration},
                 }
             )
 
@@ -43,5 +44,7 @@ class RetrieveContextNode(IAgentNode):
                     "errors": state.errors + [f"RetrieveContextNode failed: {e}"],
                     "current_node": "retrieve_context",
                     "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "retrieve_context": duration},
                 }
             )
+

@@ -3,16 +3,20 @@ import time
 
 from app.agent.nodes.node_interface import IAgentNode
 from app.agent.state import AgentState
-from app.services.interfaces import IPromptService, IWorkflowService
+from app.services.interfaces import IWorkflowService
 
 logger = logging.getLogger(__name__)
 
 
 class GenerateSQLNode(IAgentNode):
-    """Workflow node responsible for invoking LLM SQL generation services."""
+    """Workflow node responsible for invoking LLM SQL generation services.
 
-    def __init__(self, prompt_service: IPromptService, workflow_service: IWorkflowService):
-        self.prompt_service = prompt_service
+    Depends only on IWorkflowService. Prompt rendering is performed exactly once
+    inside WorkflowService.execute_sql_generation(); the rendered prompt is returned
+    on GeneratedSQL.rendered_prompt and stored in state for observability.
+    """
+
+    def __init__(self, workflow_service: IWorkflowService):
         self.workflow_service = workflow_service
 
     async def execute(self, state: AgentState) -> AgentState:
@@ -20,22 +24,23 @@ class GenerateSQLNode(IAgentNode):
         start_time = time.perf_counter()
 
         try:
-            # Render and cache the prompt text for tracing/transparency
-            sql_prompt = await self.prompt_service.render_sql_prompt(state.question)
-
-            # Delegate text generation orchestration to application services
-            generated_sql = await self.workflow_service.execute_sql_generation(state.question)
+            # Prompt is rendered once inside WorkflowService and attached to the DTO
+            generated_sql = await self.workflow_service.execute_sql_generation(
+                state.question, database_context=state.database_context
+            )
 
             logger.info("GenerateSQLNode execution completed successfully.")
             duration = (time.perf_counter() - start_time) * 1000
 
             return state.model_copy(
                 update={
-                    "sql_prompt": sql_prompt,
+                    # Preserve rendered prompt in state for tracing/observability
+                    "sql_prompt": generated_sql.rendered_prompt,
                     "generated_sql": generated_sql,
                     "current_node": "generate_sql",
                     "completed_nodes": state.completed_nodes + ["generate_sql"],
                     "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "generate_sql": duration},
                 }
             )
         except Exception as e:
@@ -47,5 +52,6 @@ class GenerateSQLNode(IAgentNode):
                     "errors": state.errors + [f"GenerateSQLNode failed: {e}"],
                     "current_node": "generate_sql",
                     "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "generate_sql": duration},
                 }
             )

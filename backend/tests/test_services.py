@@ -125,11 +125,8 @@ async def test_prompt_service_context_formatting():
     rendered = await p_service.render_prompt("sql_generation.md", "Who are the admins?", {})
 
     assert "Table: users" in rendered
-    assert "Description: System users" in rendered
-    assert "Columns:" in rendered
-    assert "- id (INTEGER) [PK, NOT NULL]" in rendered
-    assert "- role_id (INTEGER) [Comment: User role reference]" in rendered
-    assert "- (role_id) -> roles(id)" in rendered
+    assert "Columns: id (INTEGER) [PK], role_id (INTEGER)" in rendered
+    assert "Foreign Keys: (role_id)->roles(id)" in rendered
 
 
 @pytest.mark.asyncio
@@ -179,6 +176,7 @@ async def test_sql_service_orchestration():
     assert res.provider == "ollama"
     assert res.model == "qwen3:8b"
     assert res.latency_ms == 120.0
+    llm_provider.generate.assert_called_once_with("Prompt context", think=False, options={"num_predict": 200})
 
 
 @pytest.mark.asyncio
@@ -253,6 +251,7 @@ async def test_workflow_service_orchestration():
 
     sql_dto = await w_service.execute_sql_generation("Test question")
     assert sql_dto.sql == "SELECT 1"
+    assert sql_dto.rendered_prompt == "Rendered prompt context"
 
     report_dto = await w_service.execute_report_generation("Test question", "SELECT 1", [])
     assert report_dto.markdown == "MD"
@@ -270,3 +269,104 @@ async def test_workflow_service_failures():
 
     with pytest.raises(WorkflowServiceException):
         await w_service.execute_sql_generation("Test question")
+
+
+def test_sql_parser_extraction_cases():
+    parser = OutputParser()
+
+    # Case 1: Plain SQL output
+    case1 = "SELECT name FROM doctors;"
+    assert parser.parse_sql(case1) == "SELECT name FROM doctors;"
+
+    # Case 2: Markdown code fences
+    case2 = "```sql\nSELECT name FROM doctors;\n```"
+    assert parser.parse_sql(case2) == "SELECT name FROM doctors;"
+    
+    # Case 2b: Code fences without sql identifier
+    case2b = "```\nSELECT name FROM doctors;\n```"
+    assert parser.parse_sql(case2b) == "SELECT name FROM doctors;"
+
+    # Case 3: Conversational wrappers (preceding and concluding text)
+    case3 = "Sure, here is the query: SELECT name FROM doctors; Hope this helps!"
+    assert parser.parse_sql(case3) == "SELECT name FROM doctors;"
+
+    # Case 3b: Text with CTE (WITH)
+    case3b = "Let's write a CTE:\nWITH doctors_cte AS (SELECT * FROM doctors) SELECT * FROM doctors_cte;\nThis solves it."
+    assert parser.parse_sql(case3b) == "WITH doctors_cte AS (SELECT * FROM doctors) SELECT * FROM doctors_cte;"
+
+
+@pytest.mark.asyncio
+async def test_sql_service_repair_success():
+    llm_provider = AsyncMock(spec=ILLMProvider)
+    output_parser = OutputParser()
+    sql_validator = MagicMock(spec=ISQLValidator)
+
+    # First attempt: returns bad conversational text with no SQL
+    # Second attempt: returns correct SQL query
+    llm_provider.generate.side_effect = [
+        LLMResponse(
+            content="I cannot help directly without more query instructions.",
+            model="qwen3:8b",
+            latency_ms=100.0,
+            prompt_tokens=10,
+            completion_tokens=20,
+        ),
+        LLMResponse(
+            content="SELECT * FROM patients;",
+            model="qwen3:8b",
+            latency_ms=120.0,
+            prompt_tokens=40,
+            completion_tokens=10,
+        )
+    ]
+    llm_provider.get_metadata.return_value = {"provider": "ollama"}
+    sql_validator.validate.return_value = SQLValidationResult(
+        valid=True,
+        normalized_sql="SELECT * FROM patients",
+        statement_type="Select",
+    )
+
+    sql_service = SQLService(llm_provider, output_parser, sql_validator)
+    
+    res = await sql_service.generate_sql("Prompt context")
+    
+    # Verify success after exactly one repair attempt
+    assert res.sql == "SELECT * FROM patients;"
+    assert llm_provider.generate.call_count == 2
+    
+    # Verify the repair prompt contains the original prompt, previous response, and instruction
+    first_call_args = llm_provider.generate.call_args_list[0]
+    second_call_args = llm_provider.generate.call_args_list[1]
+    
+    assert first_call_args[0][0] == "Prompt context"
+    assert "--- Previous response ---" in second_call_args[0][0]
+    assert "I cannot help directly" in second_call_args[0][0]
+    assert "The previous response was not valid SQL." in second_call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_sql_service_non_sql_failure():
+    llm_provider = AsyncMock(spec=ILLMProvider)
+    output_parser = OutputParser()
+    sql_validator = MagicMock(spec=ISQLValidator)
+
+    # Both attempts return non-SQL text
+    llm_provider.generate.return_value = LLMResponse(
+        content="This is conversational text explaining doctors.",
+        model="qwen3:8b",
+        latency_ms=100.0,
+        prompt_tokens=10,
+        completion_tokens=20,
+    )
+    llm_provider.get_metadata.return_value = {"provider": "ollama"}
+
+    sql_service = SQLService(llm_provider, output_parser, sql_validator)
+
+    # Should raise SQLServiceException immediately before any sql_validator calls
+    with pytest.raises(SQLServiceException) as exc_info:
+        await sql_service.generate_sql("Prompt context")
+
+    assert "does not start with SELECT or WITH" in str(exc_info.value)
+    sql_validator.validate.assert_not_called()
+    assert llm_provider.generate.call_count == 2
+

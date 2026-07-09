@@ -9,6 +9,8 @@ from app.services.exceptions import (
 )
 from app.services.interfaces import (
     IExecutionService,
+    IHelpService,
+    IIntentClassifier,
     IPromptService,
     IReportService,
     ISQLService,
@@ -20,6 +22,8 @@ from app.services.sql_service import SQLService
 from app.services.workflow_service import WorkflowService
 from app.services.execution_service import ExecutionService
 from app.services.report_generator import IReportGenerator, NarrativeReportGenerator
+from app.services.help_service import HelpService
+from app.services.intent_classifier import IntentClassifier
 
 __all__ = [
     "IExecutionService",
@@ -27,11 +31,15 @@ __all__ = [
     "ISQLService",
     "IReportService",
     "IWorkflowService",
+    "IHelpService",
+    "IIntentClassifier",
     "PromptService",
     "SQLService",
     "ReportService",
     "WorkflowService",
     "ExecutionService",
+    "HelpService",
+    "IntentClassifier",
     "IReportGenerator",
     "NarrativeReportGenerator",
     "ApplicationServiceException",

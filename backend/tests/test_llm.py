@@ -245,3 +245,11 @@ async def test_transient_retries_max_exceeded():
             mock_sleep.assert_called_once_with(0.5)
 
     await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_ollama_missing_base_url():
+    from app.shared.exceptions import ConfigurationError
+    with patch.object(settings, "OLLAMA_BASE_URL", ""):
+        with pytest.raises(ConfigurationError):
+            OllamaProvider(base_url="")

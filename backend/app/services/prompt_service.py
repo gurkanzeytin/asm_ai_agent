@@ -1,6 +1,7 @@
 from datetime import date
 import logging
-from typing import Any, Dict
+import time
+from typing import Any, Dict, Optional
 
 from app.application_models.generated_report import ReportPromptContext
 from app.application_models.workflow_models import QueryResult
@@ -61,6 +62,12 @@ class PromptService(IPromptService):
                 db_context = self.schema_retriever.retrieve_context(question, schema)
                 formatted_context = self._format_context(db_context)
 
+                if not formatted_context.strip():
+                    raise PromptServiceException(
+                        "Schema context resolved to empty string. "
+                        "The database schema may be empty or the retriever returned no tables."
+                    )
+
                 if "{schema}" in template_content:
                     enriched_vars["schema"] = formatted_context
                 if "{metadata}" in template_content:
@@ -78,19 +85,28 @@ class PromptService(IPromptService):
             logger.error(f"PromptService failed to render template '{template_name}': {e}")
             raise PromptServiceException(f"Failed to render template '{template_name}': {e}") from e
 
-    async def render_sql_prompt(self, question: str) -> str:
+    async def render_sql_prompt(self, question: str, database_context: Optional[DatabaseContext] = None) -> str:
         """Combines system prompt and SQL generation prompt with schema details."""
         try:
+            t0 = time.perf_counter()
             system_prompt = await self.render_prompt("system_prompt.md", question, {})
+
+            variables = {
+                "dialect": getattr(settings, "SQL_DIALECT", "sqlite"),
+                "current_date": date.today().isoformat(),
+            }
+            if database_context is not None:
+                variables["schema"] = self._format_context(database_context)
+
             sql_prompt = await self.render_prompt(
                 "sql_generation.md",
                 question,
-                {
-                    "dialect": getattr(settings, "SQL_DIALECT", "sqlite"),
-                    "current_date": date.today().isoformat(),
-                },
+                variables,
             )
-            return f"{system_prompt}\n\n{sql_prompt}"
+            combined = f"{system_prompt}\n\n{sql_prompt}"
+            render_ms = (time.perf_counter() - t0) * 1000
+            self._log_prompt_stats(combined, database_context, render_ms, label="sql")
+            return combined
         except Exception as e:
             logger.error(f"Failed to render SQL prompt: {e}")
             raise PromptServiceException(f"Failed to render SQL prompt: {e}") from e
@@ -98,8 +114,9 @@ class PromptService(IPromptService):
     async def render_report_prompt(self, question: str, sql: str, query_result: QueryResult) -> str:
         """Combines system prompt and report generation prompt with query execution outputs."""
         try:
+            t0 = time.perf_counter()
             system_prompt = await self.render_prompt("system_prompt.md", question, {})
-            
+
             # Dynamic conversion for legacy test compatibility
             if isinstance(query_result, list):
                 from datetime import datetime, timezone
@@ -143,38 +160,58 @@ class PromptService(IPromptService):
                     "results": serialized_context,
                 },
             )
-            return f"{system_prompt}\n\n{report_prompt}"
+            combined = f"{system_prompt}\n\n{report_prompt}"
+            render_ms = (time.perf_counter() - t0) * 1000
+            self._log_prompt_stats(combined, None, render_ms, label="report")
+            return combined
         except Exception as e:
             logger.error(f"Failed to render report prompt: {e}")
             raise PromptServiceException(f"Failed to render report prompt: {e}") from e
 
     def _format_context(self, context: DatabaseContext) -> str:
-        """Helper to format structured DatabaseContext metadata into prompt text representation."""
+        """Helper to format structured DatabaseContext metadata into a minimal prompt representation.
+
+        Omits table comments, column comments, nullability constraints, and column defaults
+        to save context tokens, while preserving exact table, column, and foreign key structures.
+        """
         lines = []
         for table in context.tables:
             lines.append(f"Table: {table.name}")
-            if table.comment:
-                lines.append(f"  Description: {table.comment}")
-            lines.append("  Columns:")
-            for col in table.columns:
-                col_info = f"    - {col.name} ({col.type_name})"
-                extra = []
-                if col.primary_key:
-                    extra.append("PK")
-                if not col.nullable:
-                    extra.append("NOT NULL")
-                if col.default:
-                    extra.append(f"DEFAULT {col.default}")
-                if col.comment:
-                    extra.append(f"Comment: {col.comment}")
-                if extra:
-                    col_info += f" [{', '.join(extra)}]"
-                lines.append(col_info)
+            cols = [
+                f"{col.name} ({col.type_name}){' [PK]' if col.primary_key else ''}"
+                for col in table.columns
+            ]
+            lines.append(f"  Columns: {', '.join(cols)}")
             if table.foreign_keys:
-                lines.append("  Foreign Keys:")
-                for fk in table.foreign_keys:
-                    lines.append(
-                        f"    - ({', '.join(fk.constrained_columns)}) -> {fk.referred_table}({', '.join(fk.referred_columns)})"
-                    )
+                fks = [
+                    f"({', '.join(fk.constrained_columns)})->{fk.referred_table}({', '.join(fk.referred_columns)})"
+                    for fk in table.foreign_keys
+                ]
+                lines.append(f"  Foreign Keys: {', '.join(fks)}")
             lines.append("")
         return "\n".join(lines).strip()
+
+
+    def _log_prompt_stats(
+        self,
+        rendered: str,
+        database_context: Optional[DatabaseContext],
+        render_ms: float,
+        label: str = "prompt",
+    ) -> None:
+        """Logs prompt statistics at INFO level. No prompt contents are logged."""
+        char_count = len(rendered)
+        estimated_tokens = char_count // 4
+        table_count = len(database_context.tables) if database_context else 0
+        column_count = (
+            sum(len(t.columns) for t in database_context.tables) if database_context else 0
+        )
+        logger.info(
+            "Prompt statistics [%s]: chars=%d estimated_tokens=%d tables=%d columns=%d render_ms=%.1f",
+            label,
+            char_count,
+            estimated_tokens,
+            table_count,
+            column_count,
+            render_ms,
+        )

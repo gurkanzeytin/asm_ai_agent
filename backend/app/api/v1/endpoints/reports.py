@@ -10,6 +10,8 @@ from app.schemas.report import (
     ReportRequest,
     ReportResponse,
     ReportSchema,
+    TimingSchema,
+    IntentSchema,
 )
 from app.services.reporting_service import ReportingService
 
@@ -50,6 +52,31 @@ def _map_to_response(result: WorkflowResult) -> ReportResponse:
             completion_tokens=rpt.completion_tokens,
         )
 
+    timing_schema = None
+    if result.metrics:
+        m = result.metrics
+        timing_schema = TimingSchema(
+            analyze_intent_ms=m.analyze_intent_ms,
+            retrieve_context_ms=m.retrieve_context_ms,
+            generate_sql_ms=m.generate_sql_ms,
+            validate_sql_ms=m.validate_sql_ms,
+            execute_sql_ms=m.execute_sql_ms,
+            generate_report_ms=m.generate_report_ms,
+            llm_total_ms=m.llm_total_ms,
+            total_ms=m.total_ms,
+        )
+
+    intent_schema = None
+    if result.intent:
+        it = result.intent
+        intent_schema = IntentSchema(
+            intent=it.intent.value,
+            confidence=it.confidence,
+            reason=it.reason,
+            matched_keywords=it.matched_keywords,
+            metadata=it.metadata,
+        )
+
     return ReportResponse(
         success=len(result.errors) == 0,
         workflow_id=result.workflow_id,
@@ -58,6 +85,8 @@ def _map_to_response(result: WorkflowResult) -> ReportResponse:
         query_result=query_result_schema,
         report=report_schema,
         metadata=metadata_schema,
+        timing=timing_schema,
+        intent=intent_schema,
     )
 
 

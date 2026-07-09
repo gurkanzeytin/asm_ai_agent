@@ -195,6 +195,7 @@ async def test_graph_builder_with_execution_node():
     # Check complete node lifecycle
     assert final_state_dict["current_node"] == "generate_report"
     assert final_state_dict["completed_nodes"] == [
+        "analyze_intent",
         "retrieve_context",
         "generate_sql",
         "validate_sql",

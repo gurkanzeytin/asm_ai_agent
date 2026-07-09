@@ -16,6 +16,8 @@ from app.services.report_service import ReportService
 from app.services.reporting_service import ReportingService
 from app.services.sql_service import SQLService
 from app.services.workflow_service import WorkflowService
+from app.services.help_service import HelpService
+from app.services.intent_classifier import IntentClassifier
 from app.sql_validator.validator import SQLValidator
 
 logger = logging.getLogger(__name__)
@@ -31,7 +33,7 @@ class AppContainer:
         self.engine = engine
         self.inspector = DatabaseInspector(self.engine)
         self.schema_cache = SchemaCache(self.inspector)
-        self.schema_retriever = SchemaRetriever()
+        self.schema_retriever = SchemaRetriever(schema_cache=self.schema_cache)
 
         # Scoped Repository mapping transient connection lifetimes dynamically
         self.repository = ScopedAnalyticalRepository(SessionLocal)
@@ -80,10 +82,17 @@ class AppContainer:
             execution_service=self.execution_service,
         )
 
-        # 8. Agent State Graph Builder
+        # 8. Help and Intent Classification services
+        self.help_service = HelpService()
+        self.intent_classifier = IntentClassifier()
+
+        # 9. Agent State Graph Builder
         self.agent_graph_builder = AgentGraphBuilder(
             prompt_service=self.prompt_service,
             workflow_service=self.workflow_service,
+            intent_classifier=self.intent_classifier,
+            help_service=self.help_service,
+            llm_provider=self.llm_provider,
         )
         self.agent_graph = self.agent_graph_builder.build()
 

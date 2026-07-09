@@ -15,3 +15,7 @@ class GeneratedSQL(BaseModel):
     latency_ms: float = Field(..., description="The generation execution time in milliseconds.")
     prompt_tokens: Optional[int] = Field(default=None, description="The prompt token count.")
     completion_tokens: Optional[int] = Field(default=None, description="The completion token count.")
+    rendered_prompt: Optional[str] = Field(
+        default=None,
+        description="The fully rendered prompt submitted to the LLM. Populated for observability/tracing; not exposed in API responses.",
+    )

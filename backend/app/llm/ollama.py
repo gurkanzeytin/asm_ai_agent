@@ -30,18 +30,68 @@ class OllamaProvider(ILLMProvider):
         retry_count: int | None = None,
     ):
         from app.core.config import settings
+        from app.shared.exceptions import ConfigurationError
 
-        self.base_url = (base_url or settings.OLLAMA_BASE_URL).rstrip("/")
+        self.base_url = (base_url or settings.OLLAMA_BASE_URL)
+        if self.base_url:
+            self.base_url = self.base_url.rstrip("/")
         self.model = model or settings.OLLAMA_MODEL
         self.timeout = timeout if timeout is not None else getattr(settings, "OLLAMA_TIMEOUT", 30.0)
         self.retry_count = (
             retry_count if retry_count is not None else getattr(settings, "LLM_RETRY_COUNT", 3)
         )
 
-        # Persistent HTTP client reused across requests
-        self._client = httpx.AsyncClient(timeout=self.timeout)
+        # Fail fast if base URL is missing
+        if not self.base_url:
+            logger.critical("Startup validation error: Ollama provider selected but OLLAMA_BASE_URL is missing.")
+            raise ConfigurationError("Ollama provider selected but OLLAMA_BASE_URL is missing.")
 
-    async def generate(self, prompt: str) -> LLMResponse:
+        # Initialize cached client and loop association immediately
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        self._client_loop = loop
+        self._cached_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(
+                connect=10.0,
+                write=10.0,
+                read=self.timeout,
+                pool=10.0,
+            )
+        )
+        # Log diagnostics
+        logger.info(
+            "Ollama initialized\n"
+            f"model={self.model}\n"
+            f"base_url={self.base_url}"
+        )
+
+    @property
+    def _client(self) -> httpx.AsyncClient:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if not hasattr(self, "_client_loop") or self._client_loop is not loop:
+            self._client_loop = loop
+            self._cached_client = httpx.AsyncClient(
+                timeout=httpx.Timeout(
+                    connect=10.0,
+                    write=10.0,
+                    read=self.timeout,
+                    pool=10.0,
+                )
+            )
+        return self._cached_client
+
+    async def generate(
+        self,
+        prompt: str,
+        think: bool = True,
+        options: dict[str, Any] | None = None,
+    ) -> LLMResponse:
         """Invokes the Ollama local API server to generate text with retry logic."""
         url = f"{self.base_url}/api/generate"
         payload = {
@@ -52,6 +102,11 @@ class OllamaProvider(ILLMProvider):
                 "temperature": 0.0,
             },
         }
+        if not think:
+            payload["think"] = False
+        if options:
+            payload["options"].update(options)
+
 
         retries = self.retry_count
         backoff = 0.5
@@ -62,12 +117,36 @@ class OllamaProvider(ILLMProvider):
 
         for attempt in range(retries + 1):
             try:
+                logger.debug(
+                    "Ollama HTTP request starting",
+                    extra={
+                        "attempt": attempt + 1,
+                        "total_attempts": retries + 1,
+                        "base_url": self.base_url,
+                        "endpoint": url,
+                        "model": self.model,
+                        "read_timeout": self.timeout,
+                        "payload_keys": list(payload.keys()),
+                    },
+                )
                 response = await self._client.post(url, json=payload)
+                if response.status_code == 400 and "think" in payload:
+                    logger.warning("Ollama server returned 400 Bad Request for think option. Retrying request without 'think' parameter.")
+                    del payload["think"]
+                    response = await self._client.post(url, json=payload)
                 if response.status_code in (502, 503, 504):
                     response.raise_for_status()
                 response.raise_for_status()
                 response_json = response.json()
                 last_exception = None
+                logger.debug(
+                    "Ollama HTTP response received",
+                    extra={
+                        "http_status": response.status_code,
+                        "response_bytes": len(response.content),
+                        "model": self.model,
+                    },
+                )
                 break  # Successful response, exit retry loop
             except (httpx.ConnectError, httpx.ConnectTimeout, httpx.TimeoutException) as e:
                 last_exception = e
@@ -137,14 +216,34 @@ class OllamaProvider(ILLMProvider):
         prompt_tokens = response_json.get("prompt_eval_count")
         completion_tokens = response_json.get("eval_count")
 
+        done = response_json.get("done", False)
+        done_reason = response_json.get("done_reason")
+
+        finish_reason = "other"
+        if done_reason:
+            done_reason_lower = done_reason.lower()
+            if "stop" in done_reason_lower:
+                finish_reason = "stop"
+            elif "length" in done_reason_lower or "limit" in done_reason_lower:
+                finish_reason = "max_tokens"
+            else:
+                finish_reason = done_reason_lower
+        elif done:
+            finish_reason = "stop"
+
         # Structured metadata logging without printing prompt/response content
         log_extra = {
+            "provider": "ollama",
+            "model": self.model,
             "model_name": self.model,
-            "request_timestamp": request_timestamp,
+            "latency_ms": latency_ms,
             "latency": latency_ms,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "finish_reason": finish_reason,
+            "request_timestamp": request_timestamp,
             "prompt_length": len(prompt),
             "response_length": len(response_content),
-            "provider": "ollama",
         }
         logger.info("LLM request completed successfully", extra=log_extra)
 
@@ -154,6 +253,7 @@ class OllamaProvider(ILLMProvider):
             latency_ms=latency_ms,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
+            finish_reason=finish_reason,
         )
 
     async def stream_generate(self, prompt: str) -> AsyncIterator[LLMResponse]:
@@ -189,3 +289,21 @@ class OllamaProvider(ILLMProvider):
     async def close(self) -> None:
         """Cleanly disposes of the persistent HTTP client."""
         await self._client.aclose()
+
+    async def embed(self, text: str) -> list[float]:
+        """Generates semantic vector embeddings for a given text string using Ollama."""
+        try:
+            cleaned_text = text.strip()
+            if not cleaned_text:
+                return [0.0] * 768
+            url = f"{self.base_url}/api/embeddings"
+            payload = {
+                "model": self.model,  # fall back to configured generation model (e.g. qwen3:8b)
+                "prompt": cleaned_text
+            }
+            res = await self._client.post(url, json=payload, timeout=self.timeout)
+            res.raise_for_status()
+            return res.json()["embedding"]
+        except Exception as e:
+            logger.error(f"OllamaProvider: embedding generation failed: {e}")
+            raise LLMResponseError(f"Embedding failed: {e}") from e

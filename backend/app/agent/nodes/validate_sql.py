@@ -23,6 +23,7 @@ class ValidateSQLNode(IAgentNode):
                     "errors": state.errors + ["ValidateSQLNode failed: Generated SQL is missing."],
                     "current_node": "validate_sql",
                     "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "validate_sql": duration},
                 }
             )
 
@@ -35,6 +36,7 @@ class ValidateSQLNode(IAgentNode):
                     "errors": state.errors + [f"SQL Safety validation failed: {reason}"],
                     "current_node": "validate_sql",
                     "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "validate_sql": duration},
                 }
             )
 
@@ -44,5 +46,6 @@ class ValidateSQLNode(IAgentNode):
                 "current_node": "validate_sql",
                 "completed_nodes": state.completed_nodes + ["validate_sql"],
                 "duration_ms": state.duration_ms + duration,
+                "node_timings": {**state.node_timings, "validate_sql": duration},
             }
         )

@@ -18,3 +18,4 @@ class LLMResponse(BaseModel):
     latency_ms: float = Field(..., description="Execution time of the request in milliseconds.")
     prompt_tokens: Optional[int] = Field(default=None, description="Number of tokens within the input prompt.")
     completion_tokens: Optional[int] = Field(default=None, description="Number of tokens in the generated response.")
+    finish_reason: Optional[str] = Field(default=None, description="Normalized reason why the generation stopped.")

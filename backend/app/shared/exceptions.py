@@ -20,3 +20,9 @@ class SQLSafetyViolation(AppBaseException):
     """Raised when queries violate read-only safety checks."""
 
     pass
+
+
+class ConfigurationError(AppBaseException):
+    """Exception raised when LLM provider or application configurations are invalid or missing."""
+
+    pass

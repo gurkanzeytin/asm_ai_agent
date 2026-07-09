@@ -61,6 +61,29 @@ class MetadataSchema(BaseModel):
 # Response
 # ─────────────────────────────────────────────
 
+class IntentSchema(BaseModel):
+    """Transport-layer representation of the classified user intent."""
+
+    intent: str = Field(..., description="The classified intent type.")
+    confidence: float = Field(..., description="Classification confidence score.")
+    reason: Optional[str] = Field(default=None, description="Detailed explanation of classification.")
+    matched_keywords: List[str] = Field(default_factory=list, description="Keywords matched.")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Custom metadata dictionary for routing details.")
+
+
+class TimingSchema(BaseModel):
+    """Transport-layer representation of per-node workflow execution timings."""
+
+    analyze_intent_ms: Optional[float] = Field(default=None, description="Intent analysis node duration (ms).")
+    retrieve_context_ms: Optional[float] = Field(default=None, description="Schema retrieval duration (ms).")
+    generate_sql_ms: Optional[float] = Field(default=None, description="SQL generation node duration (ms).")
+    validate_sql_ms: Optional[float] = Field(default=None, description="SQL validation duration (ms).")
+    execute_sql_ms: Optional[float] = Field(default=None, description="SQL execution duration (ms).")
+    generate_report_ms: Optional[float] = Field(default=None, description="Report generation node duration (ms).")
+    llm_total_ms: Optional[float] = Field(default=None, description="Aggregated LLM inference time: SQL + Report (ms).")
+    total_ms: float = Field(default=0.0, description="Sum of all node execution times (ms).")
+
+
 class ReportResponse(BaseModel):
     """API response payload returned by the AI report generation endpoint."""
 
@@ -71,6 +94,8 @@ class ReportResponse(BaseModel):
     query_result: Optional[QueryResultSchema] = Field(default=None, description="Structured database result set.")
     report: Optional[ReportSchema] = Field(default=None, description="Generated narrative report.")
     metadata: Optional[MetadataSchema] = Field(default=None, description="LLM execution observability metadata.")
+    timing: Optional[TimingSchema] = Field(default=None, description="Per-node workflow execution timing breakdown.")
+    intent: Optional[IntentSchema] = Field(default=None, description="Classified intent payload.")
 
     model_config = {
         "json_schema_extra": {
@@ -106,4 +131,6 @@ __all__ = [
     "QueryResultSchema",
     "ReportSchema",
     "MetadataSchema",
+    "TimingSchema",
+    "IntentSchema",
 ]

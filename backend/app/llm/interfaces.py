@@ -13,11 +13,18 @@ class ILLMProvider(ABC):
     """
 
     @abstractmethod
-    async def generate(self, prompt: str) -> LLMResponse:
+    async def generate(
+        self,
+        prompt: str,
+        think: bool = True,
+        options: dict[str, Any] | None = None,
+    ) -> LLMResponse:
         """Sends a text prompt to the LLM and returns the typed LLMResponse.
 
         Args:
             prompt: Formatted user and system prompt string.
+            think: Bypass or enable thinking/reasoning mode if supported.
+            options: Custom provider key-value overrides.
 
         Returns:
             LLMResponse: Typed response object containing text and metadata.
@@ -57,4 +64,16 @@ class ILLMProvider(ABC):
     @abstractmethod
     async def close(self) -> None:
         """Cleanly disposes of any cached resources (e.g. HTTP clients)."""
+        pass
+
+    @abstractmethod
+    async def embed(self, text: str) -> list[float]:
+        """Generates semantic vector embeddings for a given text string.
+
+        Args:
+            text: Input text string to embed.
+
+        Returns:
+            list[float]: Embedding vector values.
+        """
         pass

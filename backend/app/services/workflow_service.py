@@ -2,6 +2,7 @@ import logging
 from typing import Optional
 
 from app.application_models.generated_report import GeneratedReport
+from app.database_intelligence.models import DatabaseContext
 from app.application_models.generated_sql import GeneratedSQL
 from app.application_models.workflow_models import QueryResult
 from app.services.exceptions import WorkflowServiceException
@@ -31,17 +32,24 @@ class WorkflowService(IWorkflowService):
         self.report_service = report_service
         self.execution_service = execution_service
 
-    async def execute_sql_generation(self, question: str) -> GeneratedSQL:
-        """Coordinates prompt compilation and SQL validation delegation."""
+    async def execute_sql_generation(self, question: str, database_context: Optional[DatabaseContext] = None) -> GeneratedSQL:
+        """Coordinates prompt compilation and SQL validation delegation.
+
+        Renders the SQL prompt exactly once internally, passes the rendered string to
+        SQLService, then attaches it to the returned GeneratedSQL for state observability.
+        """
         logger.info("WorkflowService execute_sql_generation started.")
         try:
-            prompt = await self.prompt_service.render_sql_prompt(question)
+            prompt = await self.prompt_service.render_sql_prompt(question, database_context=database_context)
             sql_dto = await self.sql_service.generate_sql(prompt)
+            # Attach the rendered prompt for observability — GenerateSQLNode stores it in state
+            sql_dto_with_prompt = sql_dto.model_copy(update={"rendered_prompt": prompt})
             logger.info("WorkflowService execute_sql_generation completed successfully.")
-            return sql_dto
+            return sql_dto_with_prompt
         except Exception as e:
             logger.error(f"WorkflowService execute_sql_generation failed: {e}")
             raise WorkflowServiceException(f"Workflow execution failed: {e}") from e
+
 
     async def execute_report_generation(
         self, question: str, sql: str, query_result: QueryResult, execution_id: Optional[str] = None

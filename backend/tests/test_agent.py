@@ -64,6 +64,7 @@ async def test_successful_workflow_execution():
         provider="ollama",
         model="qwen3:8b",
         latency_ms=100.0,
+        rendered_prompt="Rendered prompt text",
     )
     workflow_service.execute_sql_generation.return_value = mock_generated_sql
     from datetime import datetime
@@ -109,6 +110,13 @@ async def test_successful_workflow_execution():
     assert "execute_sql" in final_state_dict["completed_nodes"]
     assert "generate_report" in final_state_dict["completed_nodes"]
     assert final_state_dict["duration_ms"] > 0.0
+    
+    # Verify node_timings are tracked
+    assert "retrieve_context" in final_state_dict["node_timings"]
+    assert "generate_sql" in final_state_dict["node_timings"]
+    assert "validate_sql" in final_state_dict["node_timings"]
+    assert "execute_sql" in final_state_dict["node_timings"]
+    assert "generate_report" in final_state_dict["node_timings"]
 
 
 @pytest.mark.asyncio
@@ -130,6 +138,7 @@ async def test_workflow_validation_failure():
         provider="ollama",
         model="qwen3:8b",
         latency_ms=80.0,
+        rendered_prompt="Rendered prompt text",
     )
     workflow_service.execute_sql_generation.return_value = mock_invalid_sql
 
@@ -201,10 +210,11 @@ async def test_node_execution_order_tracing():
         provider="ollama",
         model="qwen",
         latency_ms=10.0,
+        rendered_prompt="Prompt",
     )
 
     retrieve_node = TraceRetrieveNode(prompt_service)
-    generate_node = TraceGenerateNode(prompt_service, workflow_service)
+    generate_node = TraceGenerateNode(workflow_service)
     validate_node = TraceValidateNode()
 
     # Compile custom traced graph

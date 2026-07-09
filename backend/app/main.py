@@ -21,6 +21,18 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting application: {settings.APP_NAME}")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Version: {settings.APP_VERSION}")
+
+    # Log environment settings safely
+    gemini_key_present = "PRESENT" if settings.GEMINI_API_KEY else "MISSING"
+    logger.info(
+        "\n================ Environment Diagnostics ================\n"
+        f"LLM_PROVIDER : {settings.LLM_PROVIDER}\n"
+        f"GEMINI_MODEL : {settings.GEMINI_MODEL}\n"
+        f"API KEY      : {gemini_key_present}\n"
+        f"OLLAMA_MODEL : {settings.OLLAMA_MODEL}\n"
+        "========================================================="
+    )
+
     yield
     logger.info(f"Shutting down application: {settings.APP_NAME}")
 
@@ -34,19 +46,19 @@ app = FastAPI(
     debug=settings.DEBUG,
 )
 
+# CORS middleware — must be registered before any route or exception handler
+# to ensure OPTIONS preflight requests are handled correctly.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Register domain exception → HTTP status code handlers
 for exc_class, handler in EXCEPTION_HANDLERS:
     app.add_exception_handler(exc_class, handler)
-
-# CORS configurations
-if settings.ALLOWED_ORIGINS:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[str(origin) for origin in settings.ALLOWED_ORIGINS],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
 
 
 # Root endpoint "/"

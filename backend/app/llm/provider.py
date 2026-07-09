@@ -40,11 +40,27 @@ class LLMFactory:
             if provider_key == "ollama":
                 logger.info("Instantiating new singleton OllamaProvider instance.")
                 cls._instances[provider_key] = OllamaProvider()
+            elif provider_key == "gemini":
+                logger.info("Instantiating new singleton GeminiProvider instance.")
+                from app.llm.gemini import GeminiProvider
+                cls._instances[provider_key] = GeminiProvider()
             else:
                 logger.error(f"Unsupported LLM provider requested: {provider_type}")
                 raise ValueError(f"Unsupported LLM provider: {provider_type}")
 
-        return cls._instances[provider_key]
+        provider_instance = cls._instances[provider_key]
+        
+        # Log selection diagnostics
+        logger.info(
+            "\n================ LLM PROVIDER =================\n"
+            f"Configured provider : {settings.LLM_PROVIDER}\n"
+            f"Resolved provider   : {provider_key}\n"
+            f"Provider class      : {provider_instance.__class__.__name__}\n"
+            f"Model               : {getattr(provider_instance, 'model', 'unknown')}\n"
+            "=============================================="
+        )
+
+        return provider_instance
 
     @classmethod
     async def clear_providers(cls) -> None:

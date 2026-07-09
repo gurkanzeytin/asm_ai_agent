@@ -26,6 +26,7 @@ class GenerateReportNode(IAgentNode):
                 update={
                     "current_node": "generate_report",
                     "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "generate_report": duration},
                 }
             )
 
@@ -37,6 +38,7 @@ class GenerateReportNode(IAgentNode):
                     "errors": state.errors + ["GenerateReportNode failed: SQL query result is missing."],
                     "current_node": "generate_report",
                     "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "generate_report": duration},
                 }
             )
 
@@ -48,6 +50,7 @@ class GenerateReportNode(IAgentNode):
                     "errors": state.errors + ["GenerateReportNode failed: Generated SQL statement is missing."],
                     "current_node": "generate_report",
                     "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "generate_report": duration},
                 }
             )
 
@@ -68,6 +71,7 @@ class GenerateReportNode(IAgentNode):
                     "current_node": "generate_report",
                     "completed_nodes": state.completed_nodes + ["generate_report"],
                     "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "generate_report": duration},
                 }
             )
         except Exception as e:
@@ -79,5 +83,6 @@ class GenerateReportNode(IAgentNode):
                     "errors": state.errors + [f"GenerateReportNode failed: {e}"],
                     "current_node": "generate_report",
                     "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "generate_report": duration},
                 }
             )

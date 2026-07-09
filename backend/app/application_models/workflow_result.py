@@ -3,6 +3,8 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from app.application_models.generated_report import GeneratedReport
+from app.application_models.intent import IntentResult
+from app.application_models.workflow_metrics import WorkflowMetrics
 from app.application_models.workflow_models import QueryResult
 
 
@@ -36,4 +38,12 @@ class WorkflowResult(BaseModel):
     errors: List[str] = Field(
         default_factory=list,
         description="List of non-fatal error messages recorded during workflow execution.",
+    )
+    metrics: Optional[WorkflowMetrics] = Field(
+        default=None,
+        description="Workflow execution performance metrics including per-node and LLM timings.",
+    )
+    intent: Optional[IntentResult] = Field(
+        default=None,
+        description="The classified user intent details.",
     )

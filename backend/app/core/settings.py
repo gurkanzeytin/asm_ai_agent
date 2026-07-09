@@ -58,13 +58,17 @@ class Settings(BaseSettings):
     DEBUG: bool = Field(
         default=True, description="Indicates whether debugger execution configurations are active."
     )
+    INTENT_CONFIDENCE_THRESHOLD: float = Field(
+        default=0.6,
+        description="Threshold below which any intent classification defaults to DATABASE_QUERY."
+    )
 
     # API configurations
     API_V1_PREFIX: str = Field(
         default="/api/v1", description="Routing prefix path for version 1 API controllers."
     )
     ALLOWED_ORIGINS: Annotated[list[str], BeforeValidator(parse_allowed_origins)] = Field(
-        default=["http://localhost:3000"],
+        default=["http://localhost:3000", "http://localhost:3001"],
         description="CORS origins allowed to execute network requests.",
     )
 
@@ -88,13 +92,20 @@ class Settings(BaseSettings):
         default="http://localhost:11434", description="Ollama local API server endpoint."
     )
     OLLAMA_MODEL: str = Field(
-        default="qwen3:8b", description="Target text LLM Qwen series model name."
+        default="qwen3:8b",
+        description="Ollama model name. Use a smaller model (e.g. qwen2.5:3b) for faster development inference; qwen3:8b for production quality.",
     )
     OLLAMA_TIMEOUT: float = Field(
         default=30.0, description="Ollama API request timeout in seconds."
     )
     LLM_RETRY_COUNT: int = Field(
         default=3, description="Maximum retries for transient failures."
+    )
+    GEMINI_API_KEY: str = Field(
+        default="", description="Google Gemini API key."
+    )
+    GEMINI_MODEL: str = Field(
+        default="gemini-2.5-flash", description="Active Gemini model name."
     )
 
     # Database Intelligence configurations
@@ -106,6 +117,22 @@ class Settings(BaseSettings):
     )
     AUTO_REFRESH_SCHEMA: bool = Field(
         default=True, description="Automatically inspect database to refresh cache on expiration."
+    )
+    SCHEMA_MAX_TABLES: int = Field(
+        default=5,
+        description="Maximum number of tables included in LLM context during schema fallback. Reduce to shrink prompt size.",
+    )
+    SCHEMA_MAX_COLUMNS: int = Field(
+        default=15,
+        description="Maximum columns per table included in LLM context during schema fallback. PK and FK columns are always preserved.",
+    )
+    SCHEMA_TOKEN_BUDGET: int = Field(
+        default=1500,
+        description="Configurable token budget for rendering schema context in prompts.",
+    )
+    SCHEMA_GRAPH_MAX_DEPTH: int = Field(
+        default=2,
+        description="Maximum traversal depth for foreign key expansion graph search.",
     )
 
     # SQL safety configurations

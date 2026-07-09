@@ -45,6 +45,11 @@ class ReportService(IReportService):
                     break
 
             logger.info(
+                "ReportService LLM call completed: latency_ms=%.1f completion_tokens=%s",
+                llm_response.latency_ms,
+                llm_response.completion_tokens,
+            )
+            logger.info(
                 "ReportService report sequence completed successfully.",
                 extra={
                     "model": llm_response.model,
@@ -52,6 +57,7 @@ class ReportService(IReportService):
                     "report_length": len(llm_response.content),
                 },
             )
+
 
             meta = self.llm_provider.get_metadata()
             provider_name = "unknown"

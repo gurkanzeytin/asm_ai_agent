@@ -26,6 +26,7 @@ class ExecuteSQLNode(IAgentNode):
                 update={
                     "current_node": "execute_sql",
                     "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "execute_sql": duration},
                 }
             )
 
@@ -37,6 +38,7 @@ class ExecuteSQLNode(IAgentNode):
                     "errors": state.errors + ["ExecuteSQLNode failed: Generated SQL statement is missing."],
                     "current_node": "execute_sql",
                     "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "execute_sql": duration},
                 }
             )
 
@@ -53,6 +55,7 @@ class ExecuteSQLNode(IAgentNode):
                     "current_node": "execute_sql",
                     "completed_nodes": state.completed_nodes + ["execute_sql"],
                     "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "execute_sql": duration},
                 }
             )
         except Exception as e:
@@ -64,5 +67,6 @@ class ExecuteSQLNode(IAgentNode):
                     "errors": state.errors + [f"ExecuteSQLNode failed: {e}"],
                     "current_node": "execute_sql",
                     "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "execute_sql": duration},
                 }
             )

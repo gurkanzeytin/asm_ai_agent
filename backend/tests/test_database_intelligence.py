@@ -263,3 +263,116 @@ async def test_schema_retriever_keyword():
     context2 = retriever.retrieve_context("system audit log queries", schema)
     assert any(t.name == "system_audit_logs" for t in context2.tables)
     assert not any(t.name == "patients" for t in context2.tables)
+
+
+def test_schema_retriever_fallback_caps():
+    # Setup 8 dummy tables (more than fallback cap 5)
+    tables = {}
+    for i in range(1, 9):
+        col_id = ColumnMetadata(name="id", type_name="INTEGER", nullable=False, primary_key=True)
+        table = TableMetadata(
+            name=f"table_{i}",
+            columns=[col_id],
+            primary_keys=["id"],
+            foreign_keys=[],
+        )
+        tables[f"table_{i}"] = table
+
+    schema = DatabaseSchema(
+        tables=tables,
+        views={},
+        statistics=SchemaStatistics(table_count=8, column_count=8, foreign_key_count=0, view_count=0),
+        fingerprint="fp-fallback-test",
+    )
+
+    # Use explicit constructor values to override settings if necessary
+    retriever = SchemaRetriever(match_threshold=1, max_tables=5, max_columns_per_table=15)
+    
+    # Query matching nothing to trigger fallback branch
+    context = retriever.retrieve_context("match nothing query", schema)
+
+    assert len(context.tables) == 5
+    assert [t.name for t in context.tables] == ["table_1", "table_2", "table_3", "table_4", "table_5"]
+
+
+def test_schema_retriever_column_caps_preserves_pks_and_fks():
+    # Table with 20 columns: pk_col, fk_col, plus 18 other cols.
+    # We want to cap at 3 columns.
+    columns = [
+        ColumnMetadata(name="pk_col", type_name="INTEGER", nullable=False, primary_key=True),
+        ColumnMetadata(name="fk_col", type_name="INTEGER", nullable=False, primary_key=False),
+    ]
+    for i in range(1, 19):
+        columns.append(ColumnMetadata(name=f"col_{i}", type_name="VARCHAR", nullable=True, primary_key=False))
+
+    fk = ForeignKeyMetadata(
+        constrained_columns=["fk_col"],
+        referred_table="other_table",
+        referred_columns=["id"],
+    )
+
+    table = TableMetadata(
+        name="test_table",
+        columns=columns,
+        primary_keys=["pk_col"],
+        foreign_keys=[fk],
+    )
+
+    schema = DatabaseSchema(
+        tables={"test_table": table},
+        views={},
+        statistics=SchemaStatistics(table_count=1, column_count=20, foreign_key_count=1, view_count=0),
+        fingerprint="fp-col-cap-test",
+    )
+
+    # Cap to max 3 columns per table
+    retriever = SchemaRetriever(match_threshold=1, max_tables=5, max_columns_per_table=3)
+
+    # Query matching nothing to trigger fallback branch
+    context = retriever.retrieve_context("match nothing query", schema)
+    
+    assert len(context.tables) == 1
+    capped_table = context.tables[0]
+    assert len(capped_table.columns) == 3
+
+    # Primary key (pk_col) and Foreign key (fk_col) MUST be preserved in the capped column list
+    col_names = [c.name for c in capped_table.columns]
+    assert "pk_col" in col_names
+    assert "fk_col" in col_names
+    assert "col_1" in col_names
+
+
+def test_schema_retriever_synonym_expansion_and_diacritic_normalization():
+    # Schema matches Turkish doctor/appointment words (doktor, randevu)
+    col_id = ColumnMetadata(name="sehir_id", type_name="INTEGER", nullable=False, primary_key=True)
+    table_doktor = TableMetadata(
+        name="doktorlar",
+        columns=[col_id],
+        primary_keys=["sehir_id"],
+        foreign_keys=[],
+        comment="Doktor bilgileri",
+    )
+
+    schema = DatabaseSchema(
+        tables={"doktorlar": table_doktor},
+        views={},
+        statistics=SchemaStatistics(table_count=1, column_count=1, foreign_key_count=0, view_count=0),
+        fingerprint="fp-synonym-test",
+    )
+
+    retriever = SchemaRetriever(match_threshold=1)
+
+    # Query with English terms: "Which doctor has highest name?"
+    # "doctor" should map to "doktor", matching "doktorlar" table.
+    context = retriever.retrieve_context("Which doctor has highest name?", schema)
+
+    assert len(context.tables) == 1
+    assert context.tables[0].name == "doktorlar"
+
+    # Test diacritic normalization explicitly:
+    # Querying "şehir" or "ŞEHİR" should normalize and match "sehir_id" column,
+    # raising the score above threshold.
+    context_diacritic = retriever.retrieve_context("Which şehir doctor?", schema)
+    assert len(context_diacritic.tables) == 1
+    assert context_diacritic.tables[0].name == "doktorlar"
+
