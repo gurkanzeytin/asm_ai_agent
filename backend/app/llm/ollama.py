@@ -28,6 +28,7 @@ class OllamaProvider(ILLMProvider):
         model: str | None = None,
         timeout: float | None = None,
         retry_count: int | None = None,
+        validate_embedding_model: bool | None = None,
     ):
         from app.core.config import settings
         from app.shared.exceptions import ConfigurationError
@@ -36,15 +37,24 @@ class OllamaProvider(ILLMProvider):
         if self.base_url:
             self.base_url = self.base_url.rstrip("/")
         self.model = model or settings.OLLAMA_MODEL
+        self.embedding_model = settings.OLLAMA_EMBEDDING_MODEL
         self.timeout = timeout if timeout is not None else getattr(settings, "OLLAMA_TIMEOUT", 30.0)
         self.retry_count = (
             retry_count if retry_count is not None else getattr(settings, "LLM_RETRY_COUNT", 3)
+        )
+        should_validate_embedding_model = (
+            validate_embedding_model
+            if validate_embedding_model is not None
+            else base_url is None and model is None
         )
 
         # Fail fast if base URL is missing
         if not self.base_url:
             logger.critical("Startup validation error: Ollama provider selected but OLLAMA_BASE_URL is missing.")
             raise ConfigurationError("Ollama provider selected but OLLAMA_BASE_URL is missing.")
+
+        if should_validate_embedding_model:
+            self._validate_embedding_model_installed()
 
         # Initialize cached client and loop association immediately
         try:
@@ -64,8 +74,85 @@ class OllamaProvider(ILLMProvider):
         logger.info(
             "Ollama initialized\n"
             f"model={self.model}\n"
+            f"embedding_model={self.embedding_model}\n"
             f"base_url={self.base_url}"
         )
+
+    def _validate_embedding_model_installed(self) -> None:
+        """Validates that the configured embedding model is available in Ollama."""
+        from app.shared.exceptions import ConfigurationError
+
+        url = f"{self.base_url}/api/tags"
+        start_time = time.perf_counter()
+        try:
+            with httpx.Client(timeout=httpx.Timeout(connect=2.0, read=5.0, write=2.0, pool=2.0)) as client:
+                response = client.get(url)
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            response_body = response.text[:2000]
+
+            logger.info(
+                "Ollama embedding model startup validation completed.",
+                extra={
+                    "embedding_model": self.embedding_model,
+                    "endpoint": url,
+                    "http_status": response.status_code,
+                    "duration_ms": elapsed_ms,
+                },
+            )
+            response.raise_for_status()
+            payload = response.json()
+            installed_names = [
+                str(model.get("name", ""))
+                for model in payload.get("models", [])
+                if isinstance(model, dict)
+            ]
+            installed_base_names = {name.split(":", 1)[0] for name in installed_names}
+            configured_base_name = self.embedding_model.split(":", 1)[0]
+            if (
+                self.embedding_model not in installed_names
+                and configured_base_name not in installed_base_names
+            ):
+                raise ConfigurationError(
+                    f"Embedding model '{self.embedding_model}' is not installed.\n\n"
+                    "Install it using:\n\n"
+                    f"ollama pull {self.embedding_model}"
+                )
+        except ConfigurationError:
+            raise
+        except httpx.HTTPStatusError as e:
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            logger.warning(
+                "Ollama embedding model validation endpoint returned an error.",
+                extra={
+                    "embedding_model": self.embedding_model,
+                    "endpoint": url,
+                    "http_status": e.response.status_code,
+                    "response_body": e.response.text[:2000],
+                    "duration_ms": elapsed_ms,
+                },
+            )
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.TimeoutException, httpx.RequestError) as e:
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            logger.warning(
+                "Ollama embedding model validation skipped because Ollama is not reachable.",
+                extra={
+                    "embedding_model": self.embedding_model,
+                    "endpoint": url,
+                    "exception": str(e),
+                    "duration_ms": elapsed_ms,
+                },
+            )
+        except Exception as e:
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            logger.warning(
+                "Ollama embedding model validation failed unexpectedly.",
+                extra={
+                    "embedding_model": self.embedding_model,
+                    "endpoint": url,
+                    "exception": str(e),
+                    "duration_ms": elapsed_ms,
+                },
+            )
 
     @property
     def _client(self) -> httpx.AsyncClient:
@@ -278,11 +365,13 @@ class OllamaProvider(ILLMProvider):
         return {
             "provider": "ollama",
             "model": self.model,
+            "embedding_model": self.embedding_model,
             "timeout": self.timeout,
             "retry_count": self.retry_count,
             "capabilities": {
                 "streaming": False,
                 "text_generation": True,
+                "embeddings": True,
             },
         }
 
@@ -292,18 +381,68 @@ class OllamaProvider(ILLMProvider):
 
     async def embed(self, text: str) -> list[float]:
         """Generates semantic vector embeddings for a given text string using Ollama."""
+        url = f"{self.base_url}/api/embeddings"
+        start_time = time.perf_counter()
         try:
             cleaned_text = text.strip()
             if not cleaned_text:
                 return [0.0] * 768
-            url = f"{self.base_url}/api/embeddings"
             payload = {
-                "model": self.model,  # fall back to configured generation model (e.g. qwen3:8b)
+                "model": self.embedding_model,
                 "prompt": cleaned_text
             }
             res = await self._client.post(url, json=payload, timeout=self.timeout)
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            logger.info(
+                "Ollama embedding response received.",
+                extra={
+                    "embedding_model": self.embedding_model,
+                    "endpoint": url,
+                    "http_status": res.status_code,
+                    "duration_ms": elapsed_ms,
+                },
+            )
             res.raise_for_status()
-            return res.json()["embedding"]
+            payload = res.json()
+            embedding = payload.get("embedding")
+            if not isinstance(embedding, list):
+                raise LLMResponseError("Ollama embedding response did not include an embedding vector.")
+            return embedding
+        except httpx.HTTPStatusError as e:
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            response_body = e.response.text[:2000]
+            logger.error(
+                "OllamaProvider: embedding generation returned HTTP error.",
+                extra={
+                    "embedding_model": self.embedding_model,
+                    "endpoint": url,
+                    "http_status": e.response.status_code,
+                    "response_body": response_body,
+                    "duration_ms": elapsed_ms,
+                },
+            )
+            exc = LLMResponseError(
+                f"Embedding failed for model '{self.embedding_model}' with HTTP {e.response.status_code}: {response_body}"
+            )
+            exc.embedding_model = self.embedding_model
+            exc.endpoint = url
+            exc.http_status = e.response.status_code
+            exc.response_body = response_body
+            exc.duration_ms = elapsed_ms
+            raise exc from e
         except Exception as e:
-            logger.error(f"OllamaProvider: embedding generation failed: {e}")
-            raise LLMResponseError(f"Embedding failed: {e}") from e
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            logger.error(
+                "OllamaProvider: embedding generation failed.",
+                extra={
+                    "embedding_model": self.embedding_model,
+                    "endpoint": url,
+                    "exception": str(e),
+                    "duration_ms": elapsed_ms,
+                },
+            )
+            exc = LLMResponseError(f"Embedding failed for model '{self.embedding_model}': {e}")
+            exc.embedding_model = self.embedding_model
+            exc.endpoint = url
+            exc.duration_ms = elapsed_ms
+            raise exc from e

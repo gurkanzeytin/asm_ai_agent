@@ -7,13 +7,13 @@ from langgraph.graph.state import CompiledStateGraph
 from app.agent.graph import AgentGraphBuilder
 from app.agent.nodes.generate_report import GenerateReportNode
 from app.agent.state import AgentState
-from app.application_models.generated_report import GeneratedReport, ReportPromptContext
+from app.application_models.generated_report import GeneratedReport
 from app.application_models.generated_sql import GeneratedSQL
 from app.application_models.workflow_models import QueryResult
 from app.core.config import settings
+from app.database_intelligence.models import DatabaseContext
 from app.llm.interfaces import ILLMProvider
 from app.llm.schemas import LLMResponse
-from app.database_intelligence.models import DatabaseContext
 from app.services.interfaces import IPromptService, IWorkflowService
 from app.services.prompt_service import PromptService
 from app.services.report_generator import IReportGenerator
@@ -98,10 +98,11 @@ async def test_report_service_generate_report_metadata():
         prompt_service=prompt_service, llm_provider=llm_provider, generator=strategy
     )
 
+    rows = [{"id": i} for i in range(settings.REPORT_ANALYTICAL_ROW_THRESHOLD + 1)]
     query_result = QueryResult(
         columns=["id"],
-        rows=[],
-        row_count=0,
+        rows=rows,
+        row_count=len(rows),
         execution_time_ms=1.0,
         success=True,
         executed_at=datetime.now(),
@@ -109,7 +110,10 @@ async def test_report_service_generate_report_metadata():
     )
 
     report = await report_service.generate_report(
-        question="Select all", sql="SELECT 1", query_result=query_result, execution_id="exec-123"
+        question="Analyze this result trend",
+        sql="SELECT 1",
+        query_result=query_result,
+        execution_id="exec-123",
     )
 
     assert isinstance(report, GeneratedReport)
@@ -240,7 +244,10 @@ async def test_full_graph_execution_with_report():
     graph = builder.build()
     assert isinstance(graph, CompiledStateGraph)
 
-    initial_state = AgentState(question="Which doctor has the highest number of appointments?", workflow_id="exec-789")
+    initial_state = AgentState(
+        question="Which doctor has the highest number of appointments?",
+        workflow_id="exec-789",
+    )
     final_state_dict = await graph.ainvoke(initial_state)
 
     assert final_state_dict["generated_report"] == mock_report
@@ -294,7 +301,9 @@ async def test_report_generation_values_originating_from_query_result():
     prompt_service.prompt_loader.get_prompt.side_effect = lambda name: (
         "System template" if name == "system_prompt.md" else "{results}"
     )
-    prompt_service.prompt_renderer.render.side_effect = lambda template, vars: template.format(**vars)
+    prompt_service.prompt_renderer.render.side_effect = (
+        lambda template, vars: template.format(**vars)
+    )
 
     llm_provider = AsyncMock(spec=ILLMProvider)
     llm_provider.get_metadata.return_value = {"provider": "mock-ollama"}
@@ -325,6 +334,8 @@ async def test_report_generation_values_originating_from_query_result():
 
     # Assertions
     assert isinstance(report, GeneratedReport)
+    assert report.provider == "template"
+    assert report.model == "single_row"
     assert "Dr. Mehmet Öz" in report.markdown
     assert "999" in report.markdown
 

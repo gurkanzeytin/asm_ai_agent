@@ -1,0 +1,95 @@
+{
+  "entities": {
+    "Doctor": {
+      "canonical": "doktor",
+      "terms": ["doktor", "hekim", "uzman", "doctor"]
+    },
+    "Patient": {
+      "canonical": "hasta",
+      "terms": ["hasta", "kisi", "kişi", "patient"]
+    },
+    "Appointment": {
+      "canonical": "randevu",
+      "terms": ["randevu", "muayene", "kontrol", "appointment"]
+    },
+    "Department": {
+      "canonical": "bolum",
+      "terms": [
+        "bolum",
+        "bölüm",
+        "klinik",
+        "servis",
+        "brans",
+        "branş",
+        "department",
+        "kbb",
+        "kulak burun bogaz",
+        "kadın doğum",
+        "kadin dogum",
+        "kardiyoloji"
+      ]
+    },
+    "Prescription": {
+      "canonical": "recete",
+      "terms": ["recete", "reçete", "ilac", "ilaç", "prescription"]
+    },
+    "Diagnosis": {
+      "canonical": "tani",
+      "terms": ["tani", "tanı", "teshis", "teşhis", "diagnosis"]
+    },
+    "Invoice": {
+      "canonical": "fatura",
+      "terms": ["fatura", "odeme", "ödeme", "tutar", "invoice"]
+    },
+    "LaboratoryTest": {
+      "canonical": "laboratuvar test",
+      "terms": ["laboratuvar", "lab", "test", "tetkik"]
+    },
+    "Hospitalization": {
+      "canonical": "yatis",
+      "terms": ["yatis", "yatış", "oda", "servis", "hospitalization"]
+    }
+  },
+  "rewrites": [
+    {
+      "pattern": "en yogun doktor",
+      "replacement": "en fazla randevusu olan doktor",
+      "matched_synonym": "yogun -> en fazla randevu"
+    },
+    {
+      "pattern": "en yoğun doktor",
+      "replacement": "en fazla randevusu olan doktor",
+      "matched_synonym": "yoğun -> en fazla randevu"
+    },
+    {
+      "pattern": "muayene",
+      "replacement": "randevu",
+      "matched_synonym": "muayene -> randevu"
+    },
+    {
+      "pattern": "kbb doktorlari",
+      "replacement": "kulak burun bogaz bolumundeki doktorlar",
+      "matched_synonym": "kbb -> kulak burun bogaz"
+    },
+    {
+      "pattern": "kbb doktorları",
+      "replacement": "kulak burun bogaz bolumundeki doktorlar",
+      "matched_synonym": "kbb -> kulak burun bogaz"
+    },
+    {
+      "pattern": "kbb",
+      "replacement": "kulak burun bogaz",
+      "matched_synonym": "kbb -> kulak burun bogaz"
+    },
+    {
+      "pattern": "kadin dogum",
+      "replacement": "kadin hastaliklari ve dogum",
+      "matched_synonym": "kadin dogum -> kadin hastaliklari ve dogum"
+    },
+    {
+      "pattern": "kadın doğum",
+      "replacement": "kadin hastaliklari ve dogum",
+      "matched_synonym": "kadın doğum -> kadin hastaliklari ve dogum"
+    }
+  ]
+}

@@ -95,6 +95,10 @@ class Settings(BaseSettings):
         default="qwen3:8b",
         description="Ollama model name. Use a smaller model (e.g. qwen2.5:3b) for faster development inference; qwen3:8b for production quality.",
     )
+    OLLAMA_EMBEDDING_MODEL: str = Field(
+        default="nomic-embed-text",
+        description="Embedding model used for semantic retrieval.",
+    )
     OLLAMA_TIMEOUT: float = Field(
         default=30.0, description="Ollama API request timeout in seconds."
     )
@@ -144,6 +148,10 @@ class Settings(BaseSettings):
     REPORT_MAX_ROWS: int = Field(
         default=100,
         description="Maximum number of query result rows to include in the report prompt context.",
+    )
+    REPORT_ANALYTICAL_ROW_THRESHOLD: int = Field(
+        default=20,
+        description="Row count threshold above which report generation uses LLM analytical summarization.",
     )
 
     # Logging configurations

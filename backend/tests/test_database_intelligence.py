@@ -9,7 +9,6 @@ from app.database_intelligence import (
     DatabaseInspector,
     DatabaseSchema,
     SchemaCache,
-    SchemaCacheError,
     SchemaRetriever,
     calculate_fingerprint,
 )
@@ -247,7 +246,16 @@ async def test_schema_retriever_keyword():
         fingerprint="fingerprint",
     )
 
-    retriever = SchemaRetriever(match_threshold=1)
+    from app.database_intelligence.schema_graph import SchemaGraph
+
+    fake_index = MagicMock()
+    fake_index.last_embedding_error = None
+    fake_index.search = AsyncMock(return_value=[])
+    fake_cache = MagicMock()
+    fake_cache.get_graph = AsyncMock(return_value=SchemaGraph(schema))
+    fake_cache.get_index = AsyncMock(return_value=fake_index)
+
+    retriever = SchemaRetriever(schema_cache=fake_cache, match_threshold=1)
 
     # Search for "Appointments yesterday"
     context = retriever.retrieve_context("Appointments yesterday", schema)
@@ -286,8 +294,22 @@ def test_schema_retriever_fallback_caps():
     )
 
     # Use explicit constructor values to override settings if necessary
-    retriever = SchemaRetriever(match_threshold=1, max_tables=5, max_columns_per_table=15)
-    
+    from app.database_intelligence.schema_graph import SchemaGraph
+
+    fake_index = MagicMock()
+    fake_index.last_embedding_error = None
+    fake_index.search = AsyncMock(return_value=[])
+    fake_cache = MagicMock()
+    fake_cache.get_graph = AsyncMock(return_value=SchemaGraph(schema))
+    fake_cache.get_index = AsyncMock(return_value=fake_index)
+
+    retriever = SchemaRetriever(
+        schema_cache=fake_cache,
+        match_threshold=1,
+        max_tables=5,
+        max_columns_per_table=15,
+    )
+
     # Query matching nothing to trigger fallback branch
     context = retriever.retrieve_context("match nothing query", schema)
 
@@ -330,7 +352,7 @@ def test_schema_retriever_column_caps_preserves_pks_and_fks():
 
     # Query matching nothing to trigger fallback branch
     context = retriever.retrieve_context("match nothing query", schema)
-    
+
     assert len(context.tables) == 1
     capped_table = context.tables[0]
     assert len(capped_table.columns) == 3
@@ -375,4 +397,54 @@ def test_schema_retriever_synonym_expansion_and_diacritic_normalization():
     context_diacritic = retriever.retrieve_context("Which şehir doctor?", schema)
     assert len(context_diacritic.tables) == 1
     assert context_diacritic.tables[0].name == "doktorlar"
+
+
+def test_schema_retriever_logs_embedding_failure_diagnostics(caplog):
+    col_id = ColumnMetadata(name="id", type_name="INTEGER", nullable=False, primary_key=True)
+    table_appointments = TableMetadata(
+        name="appointments",
+        columns=[col_id],
+        primary_keys=["id"],
+        foreign_keys=[],
+        comment="Stores appointments",
+    )
+    schema = DatabaseSchema(
+        tables={"appointments": table_appointments},
+        views={},
+        statistics=SchemaStatistics(table_count=1, column_count=1, foreign_key_count=0, view_count=0),
+        fingerprint="fp-diagnostics-test",
+    )
+
+    from app.database_intelligence.schema_graph import SchemaGraph
+
+    fake_index = MagicMock()
+    fake_index.last_embedding_error = {
+        "embedding_model": "nomic-embed-text",
+        "endpoint": "http://localhost:11434/api/embeddings",
+        "http_status": 500,
+        "response_body": "embedding failure",
+        "exception": "HTTP 500",
+        "duration_ms": 12.5,
+    }
+    fake_index.search = AsyncMock(return_value=[("appointments", 0.9)])
+
+    fake_cache = MagicMock()
+    fake_cache.get_graph = AsyncMock(return_value=SchemaGraph(schema))
+    fake_cache.get_index = AsyncMock(return_value=fake_index)
+
+    retriever = SchemaRetriever(schema_cache=fake_cache, match_threshold=1)
+
+    with caplog.at_level("ERROR"):
+        context = retriever.retrieve_context("appointments", schema)
+
+    assert len(context.tables) == 1
+    log_record = next(
+        rec
+        for rec in caplog.records
+        if rec.message == "Semantic retrieval embedding failed; continuing with hash fallback diagnostics."
+    )
+    assert log_record.embedding_model == "nomic-embed-text"
+    assert log_record.endpoint == "http://localhost:11434/api/embeddings"
+    assert log_record.http_status == 500
+    assert log_record.response_body == "embedding failure"
 

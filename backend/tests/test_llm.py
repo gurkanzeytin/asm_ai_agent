@@ -1,4 +1,3 @@
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -188,10 +187,142 @@ async def test_get_metadata():
     meta = provider.get_metadata()
     assert meta["provider"] == "ollama"
     assert meta["model"] == "test-model"
+    assert meta["embedding_model"] == settings.OLLAMA_EMBEDDING_MODEL
     assert meta["timeout"] == 12.0
     assert meta["retry_count"] == 5
     assert meta["capabilities"]["streaming"] is False
     assert meta["capabilities"]["text_generation"] is True
+    assert meta["capabilities"]["embeddings"] is True
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_ollama_embedding_uses_dedicated_embedding_model():
+    with patch.object(settings, "OLLAMA_EMBEDDING_MODEL", "embed-model"):
+        provider = OllamaProvider(
+            base_url="http://test-ollama:11434",
+            model="generation-model",
+            retry_count=0,
+        )
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"embedding": [0.1, 0.2, 0.3]}
+
+    with patch.object(provider._client, "post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = mock_response
+
+        embedding = await provider.embed("table description")
+
+        assert embedding == [0.1, 0.2, 0.3]
+        called_url = mock_post.call_args.args[0]
+        called_payload = mock_post.call_args.kwargs["json"]
+        assert called_url == "http://test-ollama:11434/api/embeddings"
+        assert called_payload["model"] == "embed-model"
+        assert provider.model == "generation-model"
+
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_ollama_generation_and_embedding_models_are_separate():
+    with patch.object(settings, "OLLAMA_EMBEDDING_MODEL", "embed-model"):
+        provider = OllamaProvider(
+            base_url="http://test-ollama:11434",
+            model="generation-model",
+            retry_count=0,
+        )
+
+    generation_response = MagicMock()
+    generation_response.status_code = 200
+    generation_response.json.return_value = {
+        "response": "SELECT 1",
+        "prompt_eval_count": 1,
+        "eval_count": 1,
+    }
+    embedding_response = MagicMock()
+    embedding_response.status_code = 200
+    embedding_response.json.return_value = {"embedding": [0.5, 0.6]}
+
+    with patch.object(provider._client, "post", new_callable=AsyncMock) as mock_post:
+        mock_post.side_effect = [generation_response, embedding_response]
+
+        await provider.generate("Generate SQL", think=False)
+        await provider.embed("schema text")
+
+        generate_payload = mock_post.call_args_list[0].kwargs["json"]
+        embed_payload = mock_post.call_args_list[1].kwargs["json"]
+        assert generate_payload["model"] == "generation-model"
+        assert embed_payload["model"] == "embed-model"
+
+    await provider.close()
+
+
+def test_ollama_missing_embedding_model_validation_raises_configuration_error():
+    from app.shared.exceptions import ConfigurationError
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.text = '{"models":[{"name":"qwen3:8b"}]}'
+    mock_response.json.return_value = {"models": [{"name": "qwen3:8b"}]}
+
+    with patch.object(settings, "OLLAMA_EMBEDDING_MODEL", "nomic-embed-text"):
+        with patch("app.llm.ollama.httpx.Client") as mock_client_class:
+            mock_client = mock_client_class.return_value.__enter__.return_value
+            mock_client.get.return_value = mock_response
+
+            with pytest.raises(ConfigurationError) as exc:
+                OllamaProvider(
+                    base_url="http://test-ollama:11434",
+                    model="qwen3:8b",
+                    validate_embedding_model=True,
+                )
+
+    assert "Embedding model 'nomic-embed-text' is not installed" in str(exc.value)
+    assert "ollama pull nomic-embed-text" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_ollama_embedding_failure_logs_diagnostics(caplog):
+    with patch.object(settings, "OLLAMA_EMBEDDING_MODEL", "embed-model"):
+        provider = OllamaProvider(
+            base_url="http://test-ollama:11434",
+            model="generation-model",
+            retry_count=0,
+        )
+
+    mock_response = MagicMock()
+    mock_response.status_code = 500
+    mock_response.text = "embedding endpoint failed"
+    mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "Internal Server Error",
+        request=MagicMock(),
+        response=mock_response,
+    )
+
+    with patch.object(provider._client, "post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = mock_response
+
+        with caplog.at_level("ERROR"):
+            with pytest.raises(LLMResponseError) as exc:
+                await provider.embed("schema text")
+
+    assert exc.value.embedding_model == "embed-model"
+    assert exc.value.endpoint == "http://test-ollama:11434/api/embeddings"
+    assert exc.value.http_status == 500
+    assert exc.value.response_body == "embedding endpoint failed"
+
+    record = next(
+        rec
+        for rec in caplog.records
+        if rec.message == "OllamaProvider: embedding generation returned HTTP error."
+    )
+    assert record.embedding_model == "embed-model"
+    assert record.endpoint == "http://test-ollama:11434/api/embeddings"
+    assert record.http_status == 500
+    assert record.response_body == "embedding endpoint failed"
+    assert hasattr(record, "duration_ms")
+
     await provider.close()
 
 

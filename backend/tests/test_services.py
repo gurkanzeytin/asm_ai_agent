@@ -1,8 +1,10 @@
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from app.application_models import GeneratedReport, GeneratedSQL
+from app.application_models.workflow_models import QueryResult
 from app.database_intelligence.cache import SchemaCache
 from app.database_intelligence.interfaces import ISchemaRetriever
 from app.database_intelligence.models import (
@@ -199,6 +201,7 @@ async def test_report_service_orchestration():
     llm_provider = AsyncMock(spec=ILLMProvider)
 
     prompt_service.render_report_prompt.return_value = "Rendered prompt text"
+    llm_provider.get_metadata.return_value = {"provider": "mock-provider"}
     llm_provider.generate.return_value = LLMResponse(
         content="# User Report\nThis is executive narrative summary.",
         model="qwen3:8b",
@@ -206,8 +209,22 @@ async def test_report_service_orchestration():
     )
 
     r_service = ReportService(prompt_service, llm_provider)
+    rows = [{"id": i} for i in range(21)]
+    query_result = QueryResult(
+        columns=["id"],
+        rows=rows,
+        row_count=len(rows),
+        execution_time_ms=1.0,
+        success=True,
+        executed_at=datetime.now(),
+        database_provider="sqlite",
+    )
 
-    res = await r_service.generate_report("Question", "SELECT * FROM users", [{"id": 1}])
+    res = await r_service.generate_report(
+        "Analyze user trends",
+        "SELECT role, COUNT(*) AS user_count FROM users GROUP BY role",
+        query_result,
+    )
 
     assert isinstance(res, GeneratedReport)
     assert res.title == "User Report"
@@ -222,9 +239,23 @@ async def test_report_service_failures():
     prompt_service.render_report_prompt.side_effect = Exception("Rendering error")
 
     r_service = ReportService(prompt_service, llm_provider)
+    rows = [{"id": i} for i in range(21)]
+    query_result = QueryResult(
+        columns=["id"],
+        rows=rows,
+        row_count=len(rows),
+        execution_time_ms=1.0,
+        success=True,
+        executed_at=datetime.now(),
+        database_provider="sqlite",
+    )
 
     with pytest.raises(ReportServiceException):
-        await r_service.generate_report("Question", "SELECT *", [])
+        await r_service.generate_report(
+            "Analyze user trends",
+            "SELECT role, COUNT(*) AS user_count FROM users GROUP BY role",
+            query_result,
+        )
 
 
 @pytest.mark.asyncio
@@ -281,7 +312,7 @@ def test_sql_parser_extraction_cases():
     # Case 2: Markdown code fences
     case2 = "```sql\nSELECT name FROM doctors;\n```"
     assert parser.parse_sql(case2) == "SELECT name FROM doctors;"
-    
+
     # Case 2b: Code fences without sql identifier
     case2b = "```\nSELECT name FROM doctors;\n```"
     assert parser.parse_sql(case2b) == "SELECT name FROM doctors;"
@@ -327,17 +358,17 @@ async def test_sql_service_repair_success():
     )
 
     sql_service = SQLService(llm_provider, output_parser, sql_validator)
-    
+
     res = await sql_service.generate_sql("Prompt context")
-    
+
     # Verify success after exactly one repair attempt
     assert res.sql == "SELECT * FROM patients;"
     assert llm_provider.generate.call_count == 2
-    
+
     # Verify the repair prompt contains the original prompt, previous response, and instruction
     first_call_args = llm_provider.generate.call_args_list[0]
     second_call_args = llm_provider.generate.call_args_list[1]
-    
+
     assert first_call_args[0][0] == "Prompt context"
     assert "--- Previous response ---" in second_call_args[0][0]
     assert "I cannot help directly" in second_call_args[0][0]
@@ -369,4 +400,5 @@ async def test_sql_service_non_sql_failure():
     assert "does not start with SELECT or WITH" in str(exc_info.value)
     sql_validator.validate.assert_not_called()
     assert llm_provider.generate.call_count == 2
+
 

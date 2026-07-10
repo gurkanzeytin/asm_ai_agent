@@ -17,6 +17,7 @@ from app.services.interfaces import (
     IWorkflowService,
 )
 from app.services.prompt_service import PromptService
+from app.services.query_analyzer import QueryAnalyzer
 from app.services.report_service import ReportService
 from app.services.sql_service import SQLService
 from app.services.workflow_service import WorkflowService
@@ -34,6 +35,7 @@ __all__ = [
     "IHelpService",
     "IIntentClassifier",
     "PromptService",
+    "QueryAnalyzer",
     "SQLService",
     "ReportService",
     "WorkflowService",

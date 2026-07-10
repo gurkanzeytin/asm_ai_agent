@@ -1,5 +1,8 @@
 import logging
 
+import sqlglot
+import sqlglot.expressions as exp
+
 from app.application_models.generated_sql import GeneratedSQL
 from app.core.config import settings
 from app.llm.interfaces import ILLMProvider
@@ -49,7 +52,9 @@ class SQLService(ISQLService):
                     llm_response.content,
                 )
 
-            cleaned_sql = self.output_parser.parse_sql(llm_response.content)
+            cleaned_sql = self._remove_redundant_identifier_projection(
+                self.output_parser.parse_sql(llm_response.content)
+            )
             
             # Check if it starts with SELECT or WITH (case-insensitive)
             upper_sql = cleaned_sql.upper().strip()
@@ -107,7 +112,9 @@ class SQLService(ISQLService):
                         llm_response.content,
                     )
 
-                cleaned_sql = self.output_parser.parse_sql(llm_response.content)
+                cleaned_sql = self._remove_redundant_identifier_projection(
+                    self.output_parser.parse_sql(llm_response.content)
+                )
                 upper_sql = cleaned_sql.upper().strip()
                 is_sql = upper_sql.startswith("SELECT") or upper_sql.startswith("WITH")
                 
@@ -202,3 +209,63 @@ class SQLService(ISQLService):
         except Exception as e:
             logger.error(f"SQLService failed during SQL generation sequence: {e}")
             raise SQLServiceException(f"Failed during SQL generation sequence: {e}") from e
+
+    def _remove_redundant_identifier_projection(self, sql: str) -> str:
+        try:
+            expression = sqlglot.parse_one(sql, read=getattr(settings, "SQL_DIALECT", "sqlite"))
+        except Exception:
+            return sql
+
+        select = expression if isinstance(expression, exp.Select) else expression.find(exp.Select)
+        if not select:
+            return sql
+
+        projections = list(select.expressions)
+        if len(projections) < 3:
+            return sql
+
+        has_aggregate = any(_is_aggregate_projection(projection) for projection in projections)
+        has_descriptive = any(_is_descriptive_projection(projection) for projection in projections)
+        if not has_aggregate or not has_descriptive:
+            return sql
+
+        filtered = [
+            projection
+            for projection in projections
+            if not _is_identifier_projection(projection)
+        ]
+        if len(filtered) == len(projections) or len(filtered) < 2:
+            return sql
+
+        select.set("expressions", filtered)
+        normalized = expression.sql(dialect=getattr(settings, "SQL_DIALECT", "sqlite"), pretty=False)
+        return normalized if normalized.endswith(";") else f"{normalized};"
+
+
+def _projection_name(projection: exp.Expression) -> str:
+    return (projection.alias_or_name or "").lower()
+
+
+def _is_aggregate_projection(projection: exp.Expression) -> bool:
+    upper_sql = projection.sql().upper()
+    return any(function in upper_sql for function in ("COUNT(", "SUM(", "AVG(", "MIN(", "MAX("))
+
+
+def _is_descriptive_projection(projection: exp.Expression) -> bool:
+    name = _projection_name(projection)
+    sql = projection.sql().lower()
+    markers = ("ad_soyad", "bolum_adi", "sirket_adi", "test_adi", "name", "title", "unvan")
+    return any(marker in name or marker in sql for marker in markers) or name.endswith("_adi")
+
+
+def _is_identifier_projection(projection: exp.Expression) -> bool:
+    name = _projection_name(projection)
+    if name == "id" or name.endswith("_id"):
+        return True
+    if isinstance(projection, exp.Column):
+        column_name = projection.name.lower()
+        return column_name == "id" or column_name.endswith("_id")
+    if isinstance(projection, exp.Alias) and isinstance(projection.this, exp.Column):
+        column_name = projection.this.name.lower()
+        return column_name == "id" or column_name.endswith("_id")
+    return False

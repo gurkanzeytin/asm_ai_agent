@@ -1,32 +1,25 @@
-# Report Generation Template
+Summarize the SQL result as a concise markdown report.
 
-You are tasked with summarizing query results into a structured markdown report.
-
-## User Question
+Question:
 {question}
 
-## Query Executed
-```sql
+SQL:
 {query}
-```
 
-## Results Data
+Results:
 {results}
-
-## Instructions
-Please format the narrative response precisely using the following section headers in this deterministic order:
 
 # [Report Title]
 
 ## Executive Summary
-[A concise 2-3 sentence executive summary explaining the overall findings]
+2-3 concise sentences.
 
 ## Key Findings
-[List the main insights and key metrics, using a Markdown table where appropriate to summarize the dataset]
+Main metrics and insights. Use a markdown table when useful.
 
 ## Recommendations
-[Any actionable suggestions or next steps based on the findings]
+Actionable next steps, if any.
 
 ## Data Notes
-[Brief documentation on data truncation or metrics, noting original vs. truncated rows if applicable]
+Mention truncation or data limits when present.
 

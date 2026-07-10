@@ -1,10 +1,11 @@
+import hashlib
+import json
 import logging
 import os
-import json
-import hashlib
-import numpy as np
+
 import faiss
-from typing import Dict, List, Tuple, Optional
+import numpy as np
+
 from app.database_intelligence.models import DatabaseSchema, TableMetadata
 from app.database_intelligence.synonyms import SYNONYM_MAP
 from app.llm.interfaces import ILLMProvider
@@ -88,21 +89,58 @@ class SemanticSchemaIndex:
     Supports persistent cache, incremental embedding updates, and validation controls.
     """
 
-    def __init__(self, schema: DatabaseSchema, llm_provider: Optional[ILLMProvider], dimension: int = 768):
+    def __init__(
+        self,
+        schema: DatabaseSchema,
+        llm_provider: ILLMProvider | None,
+        dimension: int = 768,
+    ):
         self.schema = schema
         self.llm_provider = llm_provider
         self.dimension = dimension
         self.index = None
-        self.table_names: List[str] = []
-        self._cached_metadata: Dict = {}
+        self.table_names: list[str] = []
+        self._cached_metadata: dict = {}
+        self.last_embedding_error: dict | None = None
+
+    def _embedding_model_name(self) -> str:
+        """Returns the active embedding model identifier used for cache compatibility."""
+        if not self.llm_provider:
+            return "mock-hash"
+        metadata = self.llm_provider.get_metadata()
+        if isinstance(metadata, dict):
+            for key in ("embedding_model", "model"):
+                value = metadata.get(key)
+                if isinstance(value, str) and value:
+                    return value
+        embedding_model = getattr(self.llm_provider, "embedding_model", None)
+        if isinstance(embedding_model, str) and embedding_model:
+            return embedding_model
+        model = getattr(self.llm_provider, "model", None)
+        if isinstance(model, str) and model:
+            return model
+        return "unknown"
 
     async def _get_embedding(self, text: str) -> list[float]:
         """Generates embedding using LLM provider, falling back to hashed mock embeddings."""
         try:
             if self.llm_provider and hasattr(self.llm_provider, "embed"):
-                return await self.llm_provider.embed(text)
+                embedding = await self.llm_provider.embed(text)
+                self.last_embedding_error = None
+                return embedding
         except Exception as e:
-            logger.debug(f"LLM provider failed to generate embedding: {e}. Falling back to hash embedding.")
+            self.last_embedding_error = {
+                "embedding_model": self._embedding_model_name(),
+                "exception": str(e),
+                "http_status": getattr(e, "http_status", None),
+                "response_body": getattr(e, "response_body", None),
+                "endpoint": getattr(e, "endpoint", None),
+                "duration_ms": getattr(e, "duration_ms", None),
+            }
+            logger.warning(
+                "LLM provider failed to generate embedding. Falling back to hash embedding.",
+                extra=self.last_embedding_error,
+            )
 
         return get_hash_embedding(text, self.dimension)
 
@@ -112,24 +150,36 @@ class SemanticSchemaIndex:
             if not os.path.exists(INDEX_FILE) or not os.path.exists(META_FILE):
                 return False
 
-            with open(META_FILE, "r", encoding="utf-8") as f:
+            with open(META_FILE, encoding="utf-8") as f:
                 self._cached_metadata = json.load(f)
 
             # Validate cache compatibility
             cached_version = self._cached_metadata.get("index_format_version")
             if cached_version != INDEX_FORMAT_VERSION:
-                logger.info(f"Cached index version '{cached_version}' mismatch. Expecting '{INDEX_FORMAT_VERSION}'. Rebuilding.")
+                logger.info(
+                    "Cached index version '%s' mismatch. Expecting '%s'. Rebuilding.",
+                    cached_version,
+                    INDEX_FORMAT_VERSION,
+                )
                 return False
 
-            model_name = self.llm_provider.model if self.llm_provider else "mock-hash"
+            model_name = self._embedding_model_name()
             cached_model = self._cached_metadata.get("embedding_model")
             if cached_model != model_name:
-                logger.info(f"Cached embedding model '{cached_model}' mismatch. Expecting '{model_name}'. Rebuilding.")
+                logger.info(
+                    "Cached embedding model '%s' mismatch. Expecting '%s'. Rebuilding.",
+                    cached_model,
+                    model_name,
+                )
                 return False
 
             cached_dim = self._cached_metadata.get("dimension")
             if cached_dim != self.dimension:
-                logger.info(f"Cached embedding dimension '{cached_dim}' mismatch. Expecting '{self.dimension}'. Rebuilding.")
+                logger.info(
+                    "Cached embedding dimension '%s' mismatch. Expecting '%s'. Rebuilding.",
+                    cached_dim,
+                    self.dimension,
+                )
                 return False
 
             return True
@@ -137,13 +187,13 @@ class SemanticSchemaIndex:
             logger.warning(f"Failed to load FAISS cache: {e}")
             return False
 
-    def save_cache(self, fingerprints: Dict[str, str], embeddings: Dict[str, List[float]]) -> None:
+    def save_cache(self, fingerprints: dict[str, str], embeddings: dict[str, list[float]]) -> None:
         """Saves current index structure and computed embeddings metadata to cache files."""
         try:
             os.makedirs(CACHE_DIR, exist_ok=True)
             faiss.write_index(self.index, INDEX_FILE)
 
-            model_name = self.llm_provider.model if self.llm_provider else "mock-hash"
+            model_name = self._embedding_model_name()
             metadata = {
                 "index_format_version": INDEX_FORMAT_VERSION,
                 "embedding_model": model_name,
@@ -163,9 +213,12 @@ class SemanticSchemaIndex:
         """Constructs and populates the FAISS index with incremental updates support."""
         # 1. Try to load cache metadata
         cache_loaded = self.load_cache()
-        
+
         # Check if entire schema matches cached version
-        if cache_loaded and self._cached_metadata.get("schema_fingerprint") == self.schema.fingerprint:
+        if (
+            cache_loaded
+            and self._cached_metadata.get("schema_fingerprint") == self.schema.fingerprint
+        ):
             try:
                 self.table_names = self._cached_metadata.get("table_names", [])
                 self.index = faiss.read_index(INDEX_FILE)
@@ -175,11 +228,15 @@ class SemanticSchemaIndex:
                 logger.warning(f"Failed to read index file: {e}. Recomputing.")
 
         # 2. Build or reload incrementally
-        cached_fingerprints = self._cached_metadata.get("table_fingerprints", {}) if cache_loaded else {}
-        cached_embeddings = self._cached_metadata.get("table_embeddings", {}) if cache_loaded else {}
+        cached_fingerprints = (
+            self._cached_metadata.get("table_fingerprints", {}) if cache_loaded else {}
+        )
+        cached_embeddings = (
+            self._cached_metadata.get("table_embeddings", {}) if cache_loaded else {}
+        )
 
-        active_fingerprints: Dict[str, str] = {}
-        active_embeddings: Dict[str, List[float]] = {}
+        active_fingerprints: dict[str, str] = {}
+        active_embeddings: dict[str, list[float]] = {}
         self.table_names = []
 
         reused_count = 0
@@ -193,7 +250,11 @@ class SemanticSchemaIndex:
             self.table_names.append(table_name)
 
             # Incremental check: reuse if document hash is identical
-            if table_name in cached_fingerprints and cached_fingerprints[table_name] == doc_hash and table_name in cached_embeddings:
+            if (
+                table_name in cached_fingerprints
+                and cached_fingerprints[table_name] == doc_hash
+                and table_name in cached_embeddings
+            ):
                 active_embeddings[table_name] = cached_embeddings[table_name]
                 reused_count += 1
             else:
@@ -229,7 +290,7 @@ class SemanticSchemaIndex:
         # 3. Persist compiled index and mappings to disk
         self.save_cache(active_fingerprints, active_embeddings)
 
-    async def search(self, query: str, k: int = 5) -> List[Tuple[str, float]]:
+    async def search(self, query: str, k: int = 5) -> list[tuple[str, float]]:
         """Searches index for matching table names, returning name and cosine similarity score."""
         if self.index is None or not self.table_names:
             logger.warning("FAISS index is not built or empty.")
@@ -248,7 +309,7 @@ class SemanticSchemaIndex:
         distances, indices = self.index.search(query_vector, limit)
 
         results = []
-        for dist, idx in zip(distances[0], indices[0]):
+        for dist, idx in zip(distances[0], indices[0], strict=False):
             if idx >= 0 and idx < len(self.table_names):
                 results.append((self.table_names[idx], float(dist)))
 
