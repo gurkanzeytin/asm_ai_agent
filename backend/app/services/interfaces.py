@@ -69,11 +69,20 @@ class ISQLService(ABC):
     """Abstract interface defining contract for LLM SQL generation and safety verification."""
 
     @abstractmethod
-    async def generate_sql(self, prompt: str) -> GeneratedSQL:
+    async def generate_sql(
+        self,
+        prompt: str,
+        question: str | None = None,
+        database_context: Optional[DatabaseContext] = None,
+    ) -> GeneratedSQL:
         """Invokes LLM provider, extracts SQL syntax, performs safety validator checks, and returns metadata.
 
         Args:
             prompt: Pre-rendered safety prompt.
+            question: Optional normalized question whose vocabulary is canonical for
+                string literal values.
+            database_context: Optional retrieved schema context used to validate
+                that the SQL references only known tables and columns.
 
         Returns:
             GeneratedSQL: Structured SQL metadata DTO.

@@ -17,3 +17,15 @@ class ISQLValidator(ABC):
             SQLValidationResult: Result model representing query state and properties.
         """
         pass
+
+    def validate_schema_identifiers(self, sql: str, database_context) -> list[str]:
+        """Compares SQL identifiers against the retrieved schema context.
+
+        Args:
+            sql: Raw SQL query string.
+            database_context: Retrieved DatabaseContext with allowed tables/columns.
+
+        Returns:
+            list[str]: Issues for identifiers absent from the context; empty when clean.
+        """
+        return []

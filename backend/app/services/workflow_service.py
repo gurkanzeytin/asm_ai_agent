@@ -41,7 +41,9 @@ class WorkflowService(IWorkflowService):
         logger.info("WorkflowService execute_sql_generation started.")
         try:
             prompt = await self.prompt_service.render_sql_prompt(question, database_context=database_context)
-            sql_dto = await self.sql_service.generate_sql(prompt)
+            sql_dto = await self.sql_service.generate_sql(
+                prompt, question=question, database_context=database_context
+            )
             # Attach the rendered prompt for observability — GenerateSQLNode stores it in state
             sql_dto_with_prompt = sql_dto.model_copy(update={"rendered_prompt": prompt})
             logger.info("WorkflowService execute_sql_generation completed successfully.")

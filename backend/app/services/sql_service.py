@@ -5,6 +5,7 @@ import sqlglot.expressions as exp
 
 from app.application_models.generated_sql import GeneratedSQL
 from app.core.config import settings
+from app.database_intelligence.models import DatabaseContext
 from app.llm.interfaces import ILLMProvider
 from app.parsers.interfaces import IOutputParser
 from app.services.exceptions import SQLServiceException
@@ -12,6 +13,25 @@ from app.services.interfaces import ISQLService
 from app.sql_validator.interfaces import ISQLValidator
 
 logger = logging.getLogger(__name__)
+
+# One-to-one Turkish diacritic fold used to keep string literals aligned with the
+# normalized (ASCII) vocabulary of the question.
+_TURKISH_FOLD_TABLE = str.maketrans(
+    {
+        "ı": "i",
+        "İ": "I",
+        "ğ": "g",
+        "Ğ": "G",
+        "ş": "s",
+        "Ş": "S",
+        "ç": "c",
+        "Ç": "C",
+        "ö": "o",
+        "Ö": "O",
+        "ü": "u",
+        "Ü": "U",
+    }
+)
 
 
 class SQLService(ISQLService):
@@ -27,11 +47,19 @@ class SQLService(ISQLService):
         self.output_parser = output_parser
         self.sql_validator = sql_validator
 
-    async def generate_sql(self, prompt: str) -> GeneratedSQL:
+    async def generate_sql(
+        self,
+        prompt: str,
+        question: str | None = None,
+        database_context: DatabaseContext | None = None,
+    ) -> GeneratedSQL:
         """Sends pre-rendered prompt to LLM provider, parses SQL, and verifies safety.
 
         Uses think=False and num_predict=200 for fast completion and output size control.
-        Executes exactly one repair attempt if the output is invalid SQL or unsafe.
+        Executes exactly one repair attempt if the output is invalid SQL, unsafe, or
+        references identifiers absent from the retrieved schema context. String literals
+        are canonicalized against the normalized question vocabulary so the LLM cannot
+        re-introduce Turkish diacritics into filter values.
         """
         logger.info("SQLService SQL generation and validation sequence started.")
         try:
@@ -52,17 +80,9 @@ class SQLService(ISQLService):
                     llm_response.content,
                 )
 
-            cleaned_sql = self._remove_redundant_identifier_projection(
-                self.output_parser.parse_sql(llm_response.content)
+            cleaned_sql, is_sql, validation_result, schema_issues = self._parse_and_validate(
+                llm_response.content, question, database_context
             )
-            
-            # Check if it starts with SELECT or WITH (case-insensitive)
-            upper_sql = cleaned_sql.upper().strip()
-            is_sql = upper_sql.startswith("SELECT") or upper_sql.startswith("WITH")
-            
-            validation_result = None
-            if is_sql:
-                validation_result = self.sql_validator.validate(cleaned_sql)
 
             # Determine if a repair is needed
             repair_attempt_used = False
@@ -70,25 +90,37 @@ class SQLService(ISQLService):
                 not is_sql
                 or not validation_result
                 or not validation_result.valid
+                or bool(schema_issues)
             )
 
             if first_attempt_failed:
                 repair_attempt_used = True
                 raw_preview = llm_response.content[:300]
                 logger.warning(
-                    f"First SQL generation attempt failed safety or formatting checks.\n"
+                    f"First SQL generation attempt failed safety, formatting, or schema checks.\n"
                     f"  - Bounded raw output preview: {raw_preview!r}\n"
                     f"  - Validation Result: {validation_result.valid if validation_result else False}\n"
+                    f"  - Schema identifier issues: {schema_issues or 'none'}\n"
                     "Executing single repair attempt."
                 )
 
                 # Build repair prompt combining original prompt, failed response, and correction
-                repair_instruction = (
-                    "The previous response was not valid SQL. "
-                    "Generate ONE executable SQL statement only. "
-                    "Do not explain. "
-                    "Return only SQL."
-                )
+                if schema_issues:
+                    repair_instruction = (
+                        "The previous SQL references identifiers that do not exist in the "
+                        f"schema: {'; '.join(schema_issues)}. "
+                        "Rewrite the SQL using ONLY the tables and columns listed in the "
+                        "Schema section, spelled exactly as listed. "
+                        "Generate ONE executable SQL statement only. "
+                        "Do not explain. Return only SQL."
+                    )
+                else:
+                    repair_instruction = (
+                        "The previous response was not valid SQL. "
+                        "Generate ONE executable SQL statement only. "
+                        "Do not explain. "
+                        "Return only SQL."
+                    )
                 repair_prompt = (
                     f"{prompt}\n\n"
                     f"--- Previous response ---\n"
@@ -112,16 +144,9 @@ class SQLService(ISQLService):
                         llm_response.content,
                     )
 
-                cleaned_sql = self._remove_redundant_identifier_projection(
-                    self.output_parser.parse_sql(llm_response.content)
+                cleaned_sql, is_sql, validation_result, schema_issues = self._parse_and_validate(
+                    llm_response.content, question, database_context
                 )
-                upper_sql = cleaned_sql.upper().strip()
-                is_sql = upper_sql.startswith("SELECT") or upper_sql.startswith("WITH")
-                
-                if is_sql:
-                    validation_result = self.sql_validator.validate(cleaned_sql)
-                else:
-                    validation_result = None
 
             # 2. Final check before completing flow:
             # If no SQL statement starting with SELECT/WITH can be extracted, fail immediately
@@ -132,6 +157,17 @@ class SQLService(ISQLService):
                     f"  - Bounded raw output preview: {raw_preview!r}"
                 )
                 raise SQLServiceException("Failed to generate a valid SQL query: output does not start with SELECT or WITH.")
+
+            # Schema identifier check: never let SQL with unknown identifiers reach execution
+            if schema_issues:
+                logger.error(
+                    "SQL generation failed: query references identifiers outside the "
+                    f"retrieved schema context after repair: {'; '.join(schema_issues)}"
+                )
+                raise SQLServiceException(
+                    "Failed to generate a valid SQL query: unknown schema identifiers "
+                    f"({'; '.join(schema_issues)})."
+                )
 
             # Safety check validation
             assert validation_result is not None
@@ -209,6 +245,83 @@ class SQLService(ISQLService):
         except Exception as e:
             logger.error(f"SQLService failed during SQL generation sequence: {e}")
             raise SQLServiceException(f"Failed during SQL generation sequence: {e}") from e
+
+    def _parse_and_validate(
+        self,
+        raw_content: str,
+        question: str | None,
+        database_context: DatabaseContext | None,
+    ) -> tuple[str, bool, object | None, list[str]]:
+        """Extracts, cleans, canonicalizes, and validates SQL from raw LLM output."""
+        cleaned_sql = self._remove_redundant_identifier_projection(
+            self.output_parser.parse_sql(raw_content)
+        )
+        cleaned_sql = self._canonicalize_string_literals(cleaned_sql, question)
+
+        upper_sql = cleaned_sql.upper().strip()
+        is_sql = upper_sql.startswith("SELECT") or upper_sql.startswith("WITH")
+
+        validation_result = None
+        schema_issues: list[str] = []
+        if is_sql:
+            validation_result = self.sql_validator.validate(cleaned_sql)
+            if validation_result.valid and database_context is not None:
+                schema_issues = self.sql_validator.validate_schema_identifiers(
+                    cleaned_sql, database_context
+                )
+        return cleaned_sql, is_sql, validation_result, schema_issues
+
+    def _canonicalize_string_literals(self, sql: str, question: str | None) -> str:
+        """Restores normalized-question vocabulary inside generated string literals.
+
+        The question arrives ASCII-normalized (canonical database vocabulary), but the
+        LLM tends to 'correct' filter values back to proper Turkish spelling
+        ('Çocuk Sağlığı' instead of the stored 'Cocuk Sagligi'). Any string literal
+        whose diacritic-folded form appears in the folded question is rewritten to
+        that folded form. On SQLite, equality comparisons against such vocabulary
+        literals additionally get COLLATE NOCASE, because the normalized question is
+        lowercase while stored values may be title case ('cocuk sagligi' vs
+        'Cocuk Sagligi') and '=' is case-sensitive.
+        """
+        if not question:
+            return sql
+        dialect = getattr(settings, "SQL_DIALECT", "sqlite")
+        try:
+            expression = sqlglot.parse_one(sql, read=dialect)
+        except Exception:
+            return sql
+        if expression is None:
+            return sql
+
+        folded_question = question.translate(_TURKISH_FOLD_TABLE).lower()
+        changed = False
+        for literal in list(expression.find_all(exp.Literal)):
+            if not literal.is_string:
+                continue
+            value = literal.this
+            folded_value = value.translate(_TURKISH_FOLD_TABLE)
+            if folded_value.lower() not in folded_question:
+                continue
+            if folded_value != value:
+                literal.set("this", folded_value)
+                changed = True
+            parent = literal.parent
+            if (
+                dialect == "sqlite"
+                and isinstance(parent, exp.EQ)
+                and not isinstance(parent.parent, exp.Collate)
+            ):
+                collated = exp.Collate(
+                    this=exp.Literal(this=literal.this, is_string=True),
+                    expression=exp.Var(this="NOCASE"),
+                )
+                literal.replace(collated)
+                changed = True
+        if not changed:
+            return sql
+
+        normalized = expression.sql(dialect=getattr(settings, "SQL_DIALECT", "sqlite"), pretty=False)
+        return normalized if normalized.endswith(";") else f"{normalized};"
 
     def _remove_redundant_identifier_projection(self, sql: str) -> str:
         try:

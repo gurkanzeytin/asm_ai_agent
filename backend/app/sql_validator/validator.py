@@ -132,6 +132,94 @@ class SQLValidator(ISQLValidator):
             statement_type=statement_type,
         )
 
+    def validate_schema_identifiers(self, sql: str, database_context) -> list[str]:
+        """Compares SQL identifiers against the retrieved schema context.
+
+        Returns human-readable issues for tables or columns that do not exist in the
+        retrieved DatabaseContext. CTEs, subquery aliases, and SELECT aliases are
+        treated as legitimate derived sources. Returns an empty list when the SQL
+        cannot be parsed (syntax problems are reported by validate()).
+        """
+        if database_context is None:
+            return []
+        try:
+            expression = sqlglot.parse_one(sql.strip().rstrip(";"), read=self.dialect)
+        except Exception:
+            return []
+        if expression is None:
+            return []
+
+        known_columns: dict[str, set[str] | None] = {
+            table.name.lower(): {column.name.lower() for column in table.columns}
+            for table in database_context.tables
+        }
+        for view in database_context.views:
+            # ViewMetadata carries no column list; accept the view, skip column checks.
+            known_columns.setdefault(view.name.lower(), None)
+
+        derived_sources = {
+            cte.alias_or_name.lower()
+            for cte in expression.find_all(exp.CTE)
+            if cte.alias_or_name
+        }
+        for subquery in expression.find_all(exp.Subquery):
+            if subquery.alias:
+                derived_sources.add(subquery.alias.lower())
+
+        issues: list[str] = []
+
+        def add_issue(issue: str) -> None:
+            if issue not in issues:
+                issues.append(issue)
+
+        alias_to_table: dict[str, str] = {}
+        for table in expression.find_all(exp.Table):
+            table_name = table.name.lower()
+            alias = (table.alias or table.name).lower()
+            alias_to_table[alias] = table_name
+            if table_name not in known_columns and table_name not in derived_sources:
+                add_issue(f"unknown table '{table.name}'")
+
+        select_aliases = {
+            alias_expr.alias.lower()
+            for alias_expr in expression.find_all(exp.Alias)
+            if alias_expr.alias
+        }
+
+        for column in expression.find_all(exp.Column):
+            if isinstance(column.this, exp.Star):
+                continue
+            column_name = column.name.lower()
+            if not column_name or column_name == "*":
+                continue
+            qualifier = (column.table or "").lower()
+            if qualifier:
+                source = alias_to_table.get(qualifier, qualifier)
+                if source in derived_sources:
+                    continue
+                columns = known_columns.get(source)
+                if columns is None:
+                    # Unknown table (already reported) or view without column metadata.
+                    continue
+                if column_name not in columns:
+                    add_issue(f"unknown column '{qualifier}.{column.name}'")
+            else:
+                if column_name in select_aliases or derived_sources:
+                    continue
+                referenced = {
+                    source for source in alias_to_table.values() if known_columns.get(source)
+                }
+                candidate_sets = (
+                    [known_columns[table] for table in referenced]
+                    if referenced
+                    else [columns for columns in known_columns.values() if columns]
+                )
+                searchable_columns: set[str] = set().union(*candidate_sets) if candidate_sets else set()
+                if searchable_columns and column_name not in searchable_columns:
+                    add_issue(f"unknown column '{column.name}'")
+
+        return issues
+
     def assert_valid(self, sql: str) -> None:
         """Helper assertion method raising custom exceptions if validation fails."""
         result = self.validate(sql)

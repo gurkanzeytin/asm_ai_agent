@@ -24,9 +24,23 @@ class GenerateSQLNode(IAgentNode):
         start_time = time.perf_counter()
 
         try:
+            # SQL generation must see the query-analysis normalized question so domain
+            # synonyms (e.g. "kalp" -> "kardiyoloji") reach the SQL prompt.
+            question = state.question
+            if state.database_context and state.database_context.normalized_query:
+                question = state.database_context.normalized_query
+                if question != state.question:
+                    logger.info(
+                        "GenerateSQLNode using normalized question.",
+                        extra={
+                            "original_question": state.question,
+                            "normalized_question": question,
+                        },
+                    )
+
             # Prompt is rendered once inside WorkflowService and attached to the DTO
             generated_sql = await self.workflow_service.execute_sql_generation(
-                state.question, database_context=state.database_context
+                question, database_context=state.database_context
             )
 
             logger.info("GenerateSQLNode execution completed successfully.")

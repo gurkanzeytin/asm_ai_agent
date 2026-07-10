@@ -370,7 +370,11 @@ class SchemaRetriever(ISchemaRetriever):
                 },
             )
 
-            return DatabaseContext(tables=selected_tables, views=selected_views)
+            return DatabaseContext(
+                tables=selected_tables,
+                views=selected_views,
+                normalized_query=query_analysis.normalized_query,
+            )
 
         except Exception as e:
             logger.error(f"Error during schema context retrieval: {e}")

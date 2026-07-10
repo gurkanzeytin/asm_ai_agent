@@ -15,6 +15,29 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_SYNONYMS_PATH = Path(__file__).resolve().parents[1] / "resources" / "domain_synonyms.json"
 
+_BACK_VOWELS = set("aıou")
+_FRONT_VOWELS = set("eiöü")
+_VOWELS = _BACK_VOWELS | _FRONT_VOWELS
+
+# One-to-one Turkish diacritic fold. Length-preserving so match positions on the
+# folded text map directly back onto the original text during rewrites.
+_TURKISH_FOLD_TABLE = str.maketrans(
+    {
+        "ı": "i",
+        "İ": "i",
+        "ğ": "g",
+        "Ğ": "g",
+        "ş": "s",
+        "Ş": "s",
+        "ç": "c",
+        "Ç": "c",
+        "ö": "o",
+        "Ö": "o",
+        "ü": "u",
+        "Ü": "u",
+    }
+)
+
 _MONTHS = {
     "ocak": 1,
     "subat": 2,
@@ -95,11 +118,97 @@ class QueryAnalyzer:
         for rule in rules.get("rewrites", []):
             pattern = self._normalize_query_text(str(rule.get("pattern", "")))
             replacement = self._normalize_query_text(str(rule.get("replacement", "")))
-            if not pattern or pattern not in rewritten:
+            if not pattern:
                 continue
-            rewritten = re.sub(rf"\b{re.escape(pattern)}\b", replacement, rewritten)
-            matched.append(str(rule.get("matched_synonym", f"{pattern} -> {replacement}")))
+            regex = self._compile_rewrite_pattern(pattern, rule)
+            rewritten, rule_matched = self._replace_fold_insensitive(
+                rewritten,
+                regex,
+                replacement,
+                keep_suffix=bool(rule.get("match_suffix")),
+            )
+            if rule_matched:
+                matched.append(str(rule.get("matched_synonym", f"{pattern} -> {replacement}")))
         return re.sub(r"\s+", " ", rewritten).strip(), matched
+
+    def _compile_rewrite_pattern(self, pattern: str, rule: dict[str, Any]) -> str:
+        body = r"\b" + re.escape(self._fold(pattern))
+        if rule.get("match_suffix"):
+            body += r"(\w*)"
+        else:
+            body += r"\b"
+        followed_by = self._fold_terms(rule.get("followed_by", []))
+        if followed_by:
+            body += r"(?=\s+(?:" + "|".join(followed_by) + r")\w*)"
+        not_followed_by = self._fold_terms(rule.get("not_followed_by", []))
+        if not_followed_by:
+            body += r"(?!\s+(?:" + "|".join(not_followed_by) + r")\w*)"
+        return body
+
+    def _fold_terms(self, terms: list[Any]) -> list[str]:
+        folded = (self._fold(self._normalize_query_text(str(term))) for term in terms)
+        return [re.escape(term) for term in folded if term]
+
+    def _replace_fold_insensitive(
+        self,
+        text: str,
+        pattern: str,
+        replacement: str,
+        keep_suffix: bool,
+    ) -> tuple[str, bool]:
+        """Rewrites diacritic-insensitively while preserving diacritics outside the match.
+
+        Matching runs on a length-preserving folded copy, so match spans map one-to-one
+        back onto the original text. With keep_suffix, the matched Turkish suffix
+        (group 1) is carried over after the replacement.
+        """
+        folded = self._fold(text)
+        pieces: list[str] = []
+        last = 0
+        matched = False
+        for match in re.finditer(pattern, folded):
+            matched = True
+            pieces.append(text[last : match.start()])
+            pieces.append(replacement)
+            if keep_suffix and match.lastindex:
+                suffix_start, suffix_end = match.span(1)
+                pieces.append(self._harmonize_suffix(text[suffix_start:suffix_end], replacement))
+            last = match.end()
+        if not matched:
+            return text, False
+        pieces.append(text[last:])
+        return "".join(pieces), True
+
+    def _harmonize_suffix(self, suffix: str, stem: str) -> str:
+        """Re-applies Turkish vowel harmony to a suffix carried onto a new stem.
+
+        Each suffix vowel harmonizes with the vowel before it (initially the stem's
+        last vowel): a/e follow the 2-way rule, ı/i/u/ü the 4-way rule. This turns
+        e.g. "hekim" + "leri" into "doktor" + "ları" instead of "doktorleri".
+        """
+        prev = next((char for char in reversed(stem) if char in _VOWELS), None)
+        if prev is None or not suffix:
+            return suffix
+        harmonized: list[str] = []
+        for char in suffix:
+            if char in ("a", "e"):
+                char = "a" if prev in _BACK_VOWELS else "e"
+            elif char in ("ı", "i", "u", "ü"):
+                if prev in ("a", "ı"):
+                    char = "ı"
+                elif prev in ("e", "i"):
+                    char = "i"
+                elif prev in ("o", "u"):
+                    char = "u"
+                else:
+                    char = "ü"
+            if char in _VOWELS:
+                prev = char
+            harmonized.append(char)
+        return "".join(harmonized)
+
+    def _fold(self, text: str) -> str:
+        return text.translate(_TURKISH_FOLD_TABLE)
 
     def _apply_domain_rewrite_fallbacks(self, query: str) -> tuple[str, list[str]]:
         query_ascii = self._strip_diacritics(query)

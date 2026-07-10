@@ -77,6 +77,10 @@ class DatabaseContext(BaseModel):
 
     tables: List[TableMetadata] = Field(..., description="List of relevant table metadata.")
     views: List[ViewMetadata] = Field(..., description="List of relevant view metadata.")
+    normalized_query: Optional[str] = Field(
+        default=None,
+        description="Query-analysis normalized question used for retrieval and SQL generation.",
+    )
 
 
 def calculate_fingerprint(tables: Dict[str, TableMetadata], views: Dict[str, ViewMetadata]) -> str:

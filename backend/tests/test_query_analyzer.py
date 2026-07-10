@@ -65,6 +65,109 @@ def test_query_analyzer_temporal_variants(query, expected_start, expected_end):
     assert analysis.detected_dates[0].end_date == expected_end
 
 
+@pytest.mark.parametrize(
+    ("query", "expected_normalized", "expected_synonym"),
+    [
+        (
+            "Kalp doktorlarını listele",
+            "kardiyoloji doktorlarını listele",
+            "kalp -> kardiyoloji",
+        ),
+        (
+            "Çocuk doktorlarını göster",
+            "cocuk sagligi doktorlarını göster",
+            "çocuk -> çocuk sağlığı",
+        ),
+        (
+            "Pediatri doktorları",
+            "cocuk sagligi doktorları",
+            "pediatri -> çocuk sağlığı",
+        ),
+        (
+            "Kadın doğum doktorları",
+            "kadin hastaliklari ve dogum doktorları",
+            "kadın doğum -> kadın hastalıkları ve doğum",
+        ),
+        (
+            "Hekim listesi",
+            "doktor listesi",
+            "hekim -> doktor",
+        ),
+        (
+            "Hekimleri göster",
+            "doktorları göster",
+            "hekim -> doktor",
+        ),
+        (
+            "Hekimleri listele",
+            "doktorları listele",
+            "hekim -> doktor",
+        ),
+        (
+            "Hekime sor",
+            "doktora sor",
+            "hekim -> doktor",
+        ),
+        (
+            "Muayeneleri göster",
+            "randevuları göster",
+            "muayene -> randevu",
+        ),
+        (
+            "Muayene sayısı",
+            "randevu sayısı",
+            "muayene -> randevu",
+        ),
+        (
+            "En yoğun klinik",
+            "en yoğun poliklinik",
+            "klinik -> poliklinik",
+        ),
+        (
+            "Kaç kontrol yapıldı",
+            "kaç kontrol randevusu yapıldı",
+            "kontrol -> kontrol randevusu",
+        ),
+    ],
+)
+def test_query_analyzer_domain_synonym_normalization(
+    query, expected_normalized, expected_synonym
+):
+    analyzer = QueryAnalyzer(today=date(2026, 7, 10))
+
+    analysis = analyzer.analyze(query)
+
+    assert analysis.normalized_query == expected_normalized
+    assert expected_synonym in analysis.matched_synonyms
+
+
+def test_query_analyzer_kalp_rewrite_detects_department_entity():
+    analyzer = QueryAnalyzer(today=date(2026, 7, 10))
+
+    analysis = analyzer.analyze("Kalp doktorlarını listele")
+
+    assert {"Department", "Doctor"}.issubset(
+        {entity.entity_type for entity in analysis.entities}
+    )
+
+
+def test_query_analyzer_cocuk_rewrite_requires_department_context():
+    analyzer = QueryAnalyzer(today=date(2026, 7, 10))
+
+    analysis = analyzer.analyze("Kaç çocuk hasta geldi")
+
+    assert "sagligi" not in analysis.normalized_query
+    assert "çocuk -> çocuk sağlığı" not in analysis.matched_synonyms
+
+
+def test_query_analyzer_kontrol_randevu_not_rewritten_twice():
+    analyzer = QueryAnalyzer(today=date(2026, 7, 10))
+
+    analysis = analyzer.analyze("Kontrol randevusu sayısı")
+
+    assert analysis.normalized_query == "kontrol randevusu sayısı"
+
+
 def test_query_analyzer_kbb_rewrite():
     analyzer = QueryAnalyzer(today=date(2026, 7, 10))
 
@@ -167,6 +270,88 @@ async def test_schema_retriever_uses_normalized_query_and_entity_boost():
 
     assert fake_index.search_queries == ["en fazla randevusu olan doktor kim"]
     assert [table.name for table in context.tables] == ["doktorlar"]
+    assert context.normalized_query == "en fazla randevusu olan doktor kim"
+
+
+@pytest.mark.asyncio
+async def test_schema_retriever_resolves_cocuk_to_real_department_vocabulary():
+    col_id = ColumnMetadata(name="id", type_name="INTEGER", nullable=False, primary_key=True)
+    table_doctors = TableMetadata(
+        name="doktorlar",
+        columns=[col_id],
+        primary_keys=["id"],
+        foreign_keys=[],
+        comment="Doktor bilgileri",
+    )
+    table_departments = TableMetadata(
+        name="bolumler",
+        columns=[col_id],
+        primary_keys=["id"],
+        foreign_keys=[],
+        comment="Bolum adlari: Kardiyoloji, Cocuk Sagligi",
+    )
+    schema = DatabaseSchema(
+        tables={"doktorlar": table_doctors, "bolumler": table_departments},
+        views={},
+        statistics=SchemaStatistics(
+            table_count=2,
+            column_count=2,
+            foreign_key_count=0,
+            view_count=0,
+        ),
+        fingerprint="fp-cocuk-sagligi",
+    )
+
+    class FakeIndex:
+        last_embedding_error = None
+
+        def __init__(self):
+            self.search_queries = []
+
+        async def search(self, query, k=5):
+            self.search_queries.append(query)
+            return []
+
+    fake_index = FakeIndex()
+    fake_cache = type(
+        "FakeCache",
+        (),
+        {
+            "get_graph": lambda self: _async_value(SchemaGraph(schema)),
+            "get_index": lambda self: _async_value(fake_index),
+        },
+    )()
+    retriever = SchemaRetriever(schema_cache=fake_cache, match_threshold=1)
+
+    context = retriever.retrieve_context("Çocuk doktorlarını göster", schema)
+
+    assert fake_index.search_queries == ["cocuk sagligi doktorlarını göster"]
+    assert context.normalized_query == "cocuk sagligi doktorlarını göster"
+    retrieved = {table.name for table in context.tables}
+    assert {"doktorlar", "bolumler"}.issubset(retrieved)
+
+
+@pytest.mark.asyncio
+async def test_generate_sql_node_receives_normalized_query():
+    from unittest.mock import AsyncMock
+
+    from app.agent.nodes.generate_sql import GenerateSQLNode
+    from app.agent.state import AgentState
+    from app.database_intelligence.models import DatabaseContext
+
+    workflow_service = AsyncMock()
+    context = DatabaseContext(
+        tables=[],
+        views=[],
+        normalized_query="kardiyoloji doktorlarını listele",
+    )
+    state = AgentState(question="Kalp doktorlarını listele", database_context=context)
+
+    await GenerateSQLNode(workflow_service).execute(state)
+
+    workflow_service.execute_sql_generation.assert_awaited_once_with(
+        "kardiyoloji doktorlarını listele", database_context=context
+    )
 
 
 async def _async_value(value):

@@ -18,6 +18,7 @@
         "bolum",
         "bölüm",
         "klinik",
+        "poliklinik",
         "servis",
         "brans",
         "branş",
@@ -26,7 +27,9 @@
         "kulak burun bogaz",
         "kadın doğum",
         "kadin dogum",
-        "kardiyoloji"
+        "kardiyoloji",
+        "pediatri",
+        "cocuk sagligi"
       ]
     },
     "Prescription": {
@@ -54,25 +57,27 @@
     {
       "pattern": "en yogun doktor",
       "replacement": "en fazla randevusu olan doktor",
-      "matched_synonym": "yogun -> en fazla randevu"
-    },
-    {
-      "pattern": "en yoğun doktor",
-      "replacement": "en fazla randevusu olan doktor",
       "matched_synonym": "yoğun -> en fazla randevu"
     },
     {
-      "pattern": "muayene",
-      "replacement": "randevu",
-      "matched_synonym": "muayene -> randevu"
+      "pattern": "kalp",
+      "replacement": "kardiyoloji",
+      "followed_by": ["doktor", "hekim", "uzman", "bolum", "poliklinik", "klinik", "servis", "brans"],
+      "matched_synonym": "kalp -> kardiyoloji"
+    },
+    {
+      "pattern": "cocuk",
+      "replacement": "cocuk sagligi",
+      "followed_by": ["doktor", "hekim", "uzman", "bolum", "poliklinik", "klinik", "servis", "brans"],
+      "matched_synonym": "çocuk -> çocuk sağlığı"
+    },
+    {
+      "pattern": "pediatri",
+      "replacement": "cocuk sagligi",
+      "matched_synonym": "pediatri -> çocuk sağlığı"
     },
     {
       "pattern": "kbb doktorlari",
-      "replacement": "kulak burun bogaz bolumundeki doktorlar",
-      "matched_synonym": "kbb -> kulak burun bogaz"
-    },
-    {
-      "pattern": "kbb doktorları",
       "replacement": "kulak burun bogaz bolumundeki doktorlar",
       "matched_synonym": "kbb -> kulak burun bogaz"
     },
@@ -84,12 +89,31 @@
     {
       "pattern": "kadin dogum",
       "replacement": "kadin hastaliklari ve dogum",
-      "matched_synonym": "kadin dogum -> kadin hastaliklari ve dogum"
+      "matched_synonym": "kadın doğum -> kadın hastalıkları ve doğum"
     },
     {
-      "pattern": "kadın doğum",
-      "replacement": "kadin hastaliklari ve dogum",
-      "matched_synonym": "kadın doğum -> kadin hastaliklari ve dogum"
+      "pattern": "hekim",
+      "replacement": "doktor",
+      "match_suffix": true,
+      "matched_synonym": "hekim -> doktor"
+    },
+    {
+      "pattern": "muayene",
+      "replacement": "randevu",
+      "match_suffix": true,
+      "matched_synonym": "muayene -> randevu"
+    },
+    {
+      "pattern": "kontrol",
+      "replacement": "kontrol randevusu",
+      "not_followed_by": ["randevu"],
+      "matched_synonym": "kontrol -> kontrol randevusu"
+    },
+    {
+      "pattern": "klinik",
+      "replacement": "poliklinik",
+      "match_suffix": true,
+      "matched_synonym": "klinik -> poliklinik"
     }
   ]
 }
