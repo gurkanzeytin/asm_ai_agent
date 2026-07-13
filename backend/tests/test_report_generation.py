@@ -16,7 +16,7 @@ from app.llm.interfaces import ILLMProvider
 from app.llm.schemas import LLMResponse
 from app.services.interfaces import IPromptService, IWorkflowService
 from app.services.prompt_service import PromptService
-from app.services.report_generator import IReportGenerator
+from app.services.report_generator import IReportGenerator, NarrativeReportGenerator
 from app.services.report_service import ReportService
 from app.sql_validator import SQLValidationResult
 
@@ -338,4 +338,89 @@ async def test_report_generation_values_originating_from_query_result():
     assert report.model == "single_row"
     assert "Dr. Mehmet Öz" in report.markdown
     assert "999" in report.markdown
+
+
+@pytest.mark.asyncio
+async def test_comparison_query_report_disables_llm_thinking_mode():
+    """Regression: comparison questions classify as ANALYTICAL and are the only
+    report path that invokes the LLM. The narrative report call must pass
+    think=False — with thinking enabled, reasoning models (qwen3) spend the whole
+    read-timeout window inside the <think> block, so every comparison report died
+    with LLMTimeoutError while template-path queries kept working.
+    """
+    prompt_service = AsyncMock(spec=IPromptService)
+    prompt_service.render_report_prompt.return_value = "Rendered Report Prompt"
+
+    llm_provider = AsyncMock(spec=ILLMProvider)
+    llm_provider.get_metadata.return_value = {"provider": "mock-ollama"}
+    llm_provider.generate.return_value = LLMResponse(
+        content="# Karsilastirma Raporu\n\nBolumler karsilastirildi.",
+        model="qwen3:8b",
+        latency_ms=100.0,
+    )
+
+    report_service = ReportService(
+        prompt_service=prompt_service,
+        llm_provider=llm_provider,
+        generator=NarrativeReportGenerator(),
+    )
+
+    query_result = QueryResult(
+        columns=["bolum_adi", "randevu_sayisi"],
+        rows=[
+            {"bolum_adi": "Kardiyoloji", "randevu_sayisi": 120},
+            {"bolum_adi": "Pediatri", "randevu_sayisi": 95},
+        ],
+        row_count=2,
+        execution_time_ms=4.0,
+        success=True,
+        executed_at=datetime.now(),
+        database_provider="sqlite",
+    )
+
+    report = await report_service.generate_report(
+        question="Kardiyoloji ile pediatri bölümlerinin randevu sayılarını karşılaştır",
+        sql="SELECT bolum_adi, COUNT(*) AS randevu_sayisi FROM randevular GROUP BY bolum_adi",
+        query_result=query_result,
+        execution_id="exec-comparison",
+    )
+
+    # Comparison must take the LLM path (not a deterministic template) ...
+    assert report.provider == "mock-ollama"
+    assert report.markdown == "# Karsilastirma Raporu\n\nBolumler karsilastirildi."
+    # ... and the LLM call must disable thinking mode.
+    llm_provider.generate.assert_awaited_once_with("Rendered Report Prompt", think=False)
+
+
+@pytest.mark.asyncio
+async def test_non_analytical_query_still_uses_template_without_llm():
+    """Guard: the comparison fix must not change successful (template-path) queries."""
+    prompt_service = AsyncMock(spec=IPromptService)
+    llm_provider = AsyncMock(spec=ILLMProvider)
+
+    report_service = ReportService(
+        prompt_service=prompt_service,
+        llm_provider=llm_provider,
+        generator=NarrativeReportGenerator(),
+    )
+
+    query_result = QueryResult(
+        columns=["toplam_hasta"],
+        rows=[{"toplam_hasta": 42}],
+        row_count=1,
+        execution_time_ms=2.0,
+        success=True,
+        executed_at=datetime.now(),
+        database_provider="sqlite",
+    )
+
+    report = await report_service.generate_report(
+        question="Kaç hasta var?",
+        sql="SELECT COUNT(*) AS toplam_hasta FROM hastalar",
+        query_result=query_result,
+    )
+
+    assert report.provider == "template"
+    llm_provider.generate.assert_not_awaited()
+    prompt_service.render_report_prompt.assert_not_awaited()
 
