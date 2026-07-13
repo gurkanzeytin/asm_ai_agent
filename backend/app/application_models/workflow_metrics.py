@@ -29,6 +29,15 @@ class WorkflowMetrics(BaseModel):
     analyze_intent_ms: Optional[float] = Field(
         default=None, description="Time spent in the intent classification node (ms)."
     )
+    analyze_results_ms: Optional[float] = Field(
+        default=None, description="Time spent in the deterministic analytics node (ms)."
+    )
+    generate_insights_ms: Optional[float] = Field(
+        default=None, description="Time spent in the insight generation node (ms)."
+    )
+    generate_observations_ms: Optional[float] = Field(
+        default=None, description="Time spent in the observation engine node (ms)."
+    )
     llm_total_ms: Optional[float] = Field(
         default=None,
         description="Aggregated LLM inference time: SQL generation latency + report generation latency (ms).",

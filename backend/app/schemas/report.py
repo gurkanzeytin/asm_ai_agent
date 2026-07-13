@@ -71,10 +71,62 @@ class IntentSchema(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Custom metadata dictionary for routing details.")
 
 
+class VisualizationSchema(BaseModel):
+    """Transport-layer visualization recommendation (metadata only, no rendering)."""
+
+    type: str = Field(..., description="Recommended visualization type (CARD, TABLE, BAR_CHART, LINE_CHART, PIE_CHART).")
+    reason: str = Field(..., description="Deterministic reason behind the recommendation.")
+
+
+class AnalyticsSchema(BaseModel):
+    """Transport-layer representation of the deterministic analytics result."""
+
+    analytics_type: str = Field(..., description="Primary analytics classification (trend, comparison, ranking...).")
+    intents: List[str] = Field(default_factory=list, description="All detected analytical intents.")
+    data_shape: str = Field(..., description="Structural classification of the result set.")
+    metrics: Dict[str, Any] = Field(default_factory=dict, description="Deterministically calculated metrics.")
+    insights: Dict[str, Any] = Field(default_factory=dict, description="Structured summary fields prepared for future insight generation.")
+    visualization: Optional[VisualizationSchema] = Field(default=None, description="Recommended visualization metadata.")
+    row_count: int = Field(default=0, description="Number of rows analyzed.")
+
+
+class InsightSchema(BaseModel):
+    """Transport-layer representation of the executive insight narrative."""
+
+    title: str = Field(..., description="Short descriptive insight title.")
+    summary: str = Field(..., description="Executive summary grounded in the analytics.")
+    highlights: List[str] = Field(default_factory=list, description="Key observations.")
+    observations: List[str] = Field(default_factory=list, description="Important findings and business interpretation.")
+    considerations: List[str] = Field(default_factory=list, description="Potential considerations supported by the analytics.")
+    rules: List[str] = Field(default_factory=list, description="Deterministic business rules detected before narrative generation.")
+    confidence: str = Field(..., description="Deterministically computed confidence level (HIGH, MEDIUM, LOW).")
+    llm_generated: bool = Field(default=False, description="Whether the narrative was produced by the LLM or deterministic templates.")
+
+
+class ObservationItemSchema(BaseModel):
+    """A single noteworthy, evidence-based observation."""
+
+    rule: str = Field(..., description="Deterministic rule that produced the observation.")
+    category: str = Field(..., description="Observation category (growth, trend, distribution...).")
+    text: str = Field(..., description="Neutral, evidence-based observation wording.")
+    evidence: Dict[str, Any] = Field(default_factory=dict, description="Metric values grounding the observation.")
+
+
+class ObservationsSchema(BaseModel):
+    """Transport-layer representation of the observation layer."""
+
+    observations: List[ObservationItemSchema] = Field(default_factory=list, description="Noteworthy facts.")
+    confidence: str = Field(..., description="Deterministically computed confidence (HIGH, MEDIUM, LOW).")
+    llm_worded: bool = Field(default=False, description="Whether the LLM reworded the deterministic texts.")
+
+
 class TimingSchema(BaseModel):
     """Transport-layer representation of per-node workflow execution timings."""
 
     analyze_intent_ms: Optional[float] = Field(default=None, description="Intent analysis node duration (ms).")
+    analyze_results_ms: Optional[float] = Field(default=None, description="Analytics engine node duration (ms).")
+    generate_insights_ms: Optional[float] = Field(default=None, description="Insight engine node duration (ms).")
+    generate_observations_ms: Optional[float] = Field(default=None, description="Observation engine node duration (ms).")
     retrieve_context_ms: Optional[float] = Field(default=None, description="Schema retrieval duration (ms).")
     generate_sql_ms: Optional[float] = Field(default=None, description="SQL generation node duration (ms).")
     validate_sql_ms: Optional[float] = Field(default=None, description="SQL validation duration (ms).")
@@ -96,6 +148,19 @@ class ReportResponse(BaseModel):
     metadata: Optional[MetadataSchema] = Field(default=None, description="LLM execution observability metadata.")
     timing: Optional[TimingSchema] = Field(default=None, description="Per-node workflow execution timing breakdown.")
     intent: Optional[IntentSchema] = Field(default=None, description="Classified intent payload.")
+    analytics: Optional[AnalyticsSchema] = Field(
+        default=None, description="Deterministic analytics computed from the query result."
+    )
+    insights: Optional[InsightSchema] = Field(
+        default=None, description="Executive insight narrative grounded in the analytics."
+    )
+    observations: Optional[ObservationsSchema] = Field(
+        default=None, description="Layer 4: noteworthy evidence-based observations."
+    )
+    visualization: Optional[VisualizationSchema] = Field(
+        default=None,
+        description="Layer 5: recommended visualization metadata (mirrors analytics.visualization).",
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -133,4 +198,9 @@ __all__ = [
     "MetadataSchema",
     "TimingSchema",
     "IntentSchema",
+    "AnalyticsSchema",
+    "VisualizationSchema",
+    "InsightSchema",
+    "ObservationsSchema",
+    "ObservationItemSchema",
 ]

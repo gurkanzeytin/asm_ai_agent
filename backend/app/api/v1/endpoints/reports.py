@@ -5,6 +5,10 @@ from fastapi import APIRouter, Depends
 from app.api.deps import get_reporting_service
 from app.application_models.workflow_result import WorkflowResult
 from app.schemas.report import (
+    AnalyticsSchema,
+    InsightSchema,
+    ObservationItemSchema,
+    ObservationsSchema,
     MetadataSchema,
     QueryResultSchema,
     ReportRequest,
@@ -12,6 +16,7 @@ from app.schemas.report import (
     ReportSchema,
     TimingSchema,
     IntentSchema,
+    VisualizationSchema,
 )
 from app.services.reporting_service import ReportingService
 
@@ -57,6 +62,9 @@ def _map_to_response(result: WorkflowResult) -> ReportResponse:
         m = result.metrics
         timing_schema = TimingSchema(
             analyze_intent_ms=m.analyze_intent_ms,
+            analyze_results_ms=m.analyze_results_ms,
+            generate_insights_ms=m.generate_insights_ms,
+            generate_observations_ms=m.generate_observations_ms,
             retrieve_context_ms=m.retrieve_context_ms,
             generate_sql_ms=m.generate_sql_ms,
             validate_sql_ms=m.validate_sql_ms,
@@ -77,6 +85,56 @@ def _map_to_response(result: WorkflowResult) -> ReportResponse:
             metadata=it.metadata,
         )
 
+    analytics_schema = None
+    visualization_schema = None
+    if result.analytics:
+        an = result.analytics
+        if an.visualization:
+            visualization_schema = VisualizationSchema(
+                type=an.visualization.type.value,
+                reason=an.visualization.reason,
+            )
+        analytics_schema = AnalyticsSchema(
+            analytics_type=an.analytics_type,
+            intents=[intent.value for intent in an.intents],
+            data_shape=an.data_shape.value,
+            metrics=an.metrics,
+            insights=an.insights,
+            visualization=visualization_schema,
+            row_count=an.row_count,
+        )
+
+    insight_schema = None
+    if result.insights:
+        ins = result.insights
+        insight_schema = InsightSchema(
+            title=ins.title,
+            summary=ins.summary,
+            highlights=ins.highlights,
+            observations=ins.observations,
+            considerations=ins.considerations,
+            rules=[rule.value for rule in ins.rules],
+            confidence=ins.confidence.value,
+            llm_generated=ins.llm_generated,
+        )
+
+    observations_schema = None
+    if result.observations:
+        obs = result.observations
+        observations_schema = ObservationsSchema(
+            observations=[
+                ObservationItemSchema(
+                    rule=item.rule,
+                    category=item.category.value,
+                    text=item.text,
+                    evidence=item.evidence,
+                )
+                for item in obs.observations
+            ],
+            confidence=obs.confidence.value,
+            llm_worded=obs.llm_worded,
+        )
+
     return ReportResponse(
         success=len(result.errors) == 0,
         workflow_id=result.workflow_id,
@@ -87,6 +145,10 @@ def _map_to_response(result: WorkflowResult) -> ReportResponse:
         metadata=metadata_schema,
         timing=timing_schema,
         intent=intent_schema,
+        analytics=analytics_schema,
+        insights=insight_schema,
+        observations=observations_schema,
+        visualization=visualization_schema,
     )
 
 

@@ -49,6 +49,9 @@ class ReportingService:
         query_result_dto = final_state.get("query_result")
         generated_report_dto = final_state.get("generated_report")
         intent_dto = final_state.get("intent")
+        analytics_dto = final_state.get("analytics")
+        insights_dto = final_state.get("insights")
+        observations_dto = final_state.get("observations")
         errors = final_state.get("errors", [])
         node_timings: dict[str, float] = final_state.get("node_timings") or {}
 
@@ -64,6 +67,9 @@ class ReportingService:
             execute_sql_ms=node_timings.get("execute_sql"),
             generate_report_ms=node_timings.get("generate_report"),
             analyze_intent_ms=node_timings.get("analyze_intent"),
+            analyze_results_ms=node_timings.get("analyze_results"),
+            generate_insights_ms=node_timings.get("generate_insights"),
+            generate_observations_ms=node_timings.get("generate_observations"),
             llm_total_ms=llm_total_ms,
             total_ms=sum(node_timings.values()),
         )
@@ -79,6 +85,9 @@ class ReportingService:
             "  │ Generate SQL            │ %9s  │\n"
             "  │ Validate SQL            │ %9s  │\n"
             "  │ Execute SQL             │ %9s  │\n"
+            "  │ Analytics Engine        │ %9s  │\n"
+            "  │ Insight Engine          │ %9s  │\n"
+            "  │ Observation Engine      │ %9s  │\n"
             "  │ Generate Report         │ %9s  │\n"
             "  ├─────────────────────────┼─────────────┤\n"
             "  │ Total                   │ %9s  │\n"
@@ -90,6 +99,9 @@ class ReportingService:
             _fmt_ms(metrics.generate_sql_ms),
             _fmt_ms(metrics.validate_sql_ms),
             _fmt_ms(metrics.execute_sql_ms),
+            _fmt_ms(metrics.analyze_results_ms),
+            _fmt_ms(metrics.generate_insights_ms),
+            _fmt_ms(metrics.generate_observations_ms),
             _fmt_ms(metrics.generate_report_ms),
             _fmt_ms(metrics.total_ms),
             _fmt_ms(metrics.llm_total_ms),
@@ -130,6 +142,9 @@ class ReportingService:
             errors=errors,
             metrics=metrics,
             intent=intent_dto,
+            analytics=analytics_dto,
+            insights=insights_dto,
+            observations=observations_dto,
         )
 
 

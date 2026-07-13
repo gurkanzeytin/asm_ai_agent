@@ -8,7 +8,12 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
-from app.application_models.query_analysis import DateRange, DetectedEntity, QueryAnalysis
+from app.application_models.query_analysis import (
+    AmbiguityResult,
+    DateRange,
+    DetectedEntity,
+    QueryAnalysis,
+)
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -72,24 +77,48 @@ class QueryAnalyzer:
     def analyze(self, query: str) -> QueryAnalysis:
         rules = self._load_rules()
         original_query = query
-        normalized_query = self._normalize_query_text(query)
-        rewritten_query, matched_synonyms = self._rewrite_query(normalized_query, rules)
-        rewritten_query, fallback_synonyms = self._apply_domain_rewrite_fallbacks(rewritten_query)
-        matched_synonyms.extend(fallback_synonyms)
-        entities = self._detect_entities(rewritten_query, normalized_query, rules)
-        detected_dates = self._detect_dates(normalized_query)
-        confidence = self._confidence(entities, detected_dates, matched_synonyms)
+        normalized_input = self._normalize_query_text(query)
+
+        # Structured signals are detected on the raw normalized text so that
+        # conversational rewrites (e.g. "görebilir miyim" -> "göster") cannot
+        # hide the user's original wording from detection.
+        detected_operations = self._detect_operations(normalized_input, rules)
+        detected_limit, detected_order = self._detect_limit_and_order(normalized_input)
+        ambiguity = self._match_ambiguity(normalized_input, rules)
+
+        rewritten_query, expanded_query, matched_synonyms = self._rewrite_stages(
+            normalized_input, rules
+        )
+        entities = self._detect_entities(expanded_query, normalized_input, rules)
+        detected_dates = self._detect_dates(normalized_input)
+        final_query = self._resolve_dates(expanded_query, detected_dates)
+        confidence = self._confidence(
+            entities, detected_dates, matched_synonyms, detected_operations
+        )
 
         analysis = QueryAnalysis(
             original_query=original_query,
-            normalized_query=rewritten_query,
+            normalized_query=expanded_query,
+            rewritten_query=rewritten_query,
+            expanded_query=expanded_query,
+            final_query=final_query,
             entities=entities,
             detected_dates=detected_dates,
             matched_synonyms=matched_synonyms,
+            detected_operations=detected_operations,
+            detected_limit=detected_limit,
+            detected_order=detected_order,
+            is_ambiguous=ambiguity is not None,
+            ambiguity=ambiguity,
             confidence=confidence,
         )
         self._log_analysis(analysis)
         return analysis
+
+    def detect_ambiguity(self, query: str) -> AmbiguityResult | None:
+        """Checks whether a query contains a ranking phrase without a deterministic metric."""
+        rules = self._load_rules()
+        return self._match_ambiguity(self._normalize_query_text(query), rules)
 
     def _load_rules(self) -> dict[str, Any]:
         mtime = self.synonyms_path.stat().st_mtime
@@ -106,16 +135,58 @@ class QueryAnalyzer:
         return self._rules or {"entities": {}, "rewrites": []}
 
     def _normalize_query_text(self, query: str) -> str:
-        lowered = query.lower().strip()
+        # Turkish dotted capital İ lowercases to "i" + U+0307 combining dot in
+        # Python; map it up front so word-boundary matching works on "İlk", "İç"...
+        lowered = query.replace("İ", "i").lower().replace("̇", "").strip()
         punctuation = string.punctuation.replace("-", "")
         translator = str.maketrans({char: " " for char in punctuation})
         normalized = lowered.translate(translator)
         return re.sub(r"\s+", " ", normalized).strip()
 
-    def _rewrite_query(self, query: str, rules: dict[str, Any]) -> tuple[str, list[str]]:
+    def _rewrite_stages(
+        self, query: str, rules: dict[str, Any]
+    ) -> tuple[str, str, list[str]]:
+        """Applies configured rewrite groups in order and returns staged outputs.
+
+        Groups run in configuration order. The ``expansion`` group runs last and
+        its output is tracked separately so logging can distinguish the rewrite
+        stage from the query-expansion stage.
+        """
+        groups = self._rewrite_rule_groups(rules)
+        matched: list[str] = []
+
+        rewritten = query
+        for name, group_rules in groups:
+            if name == "expansion":
+                continue
+            rewritten, group_matched = self._apply_rewrite_rules(rewritten, group_rules)
+            matched.extend(group_matched)
+
+        expanded = rewritten
+        for name, group_rules in groups:
+            if name != "expansion":
+                continue
+            expanded, group_matched = self._apply_rewrite_rules(expanded, group_rules)
+            matched.extend(group_matched)
+
+        return rewritten, expanded, matched
+
+    def _rewrite_rule_groups(self, rules: dict[str, Any]) -> list[tuple[str, list[dict]]]:
+        """Collects rewrite rules from the flat legacy list and the grouped config."""
+        groups: list[tuple[str, list[dict]]] = []
+        legacy = rules.get("rewrites", [])
+        if legacy:
+            groups.append(("legacy", legacy))
+        for name, group_rules in rules.get("rewrite_groups", {}).items():
+            groups.append((str(name), list(group_rules)))
+        return groups
+
+    def _apply_rewrite_rules(
+        self, query: str, rewrite_rules: list[dict]
+    ) -> tuple[str, list[str]]:
         rewritten = query
         matched: list[str] = []
-        for rule in rules.get("rewrites", []):
+        for rule in rewrite_rules:
             pattern = self._normalize_query_text(str(rule.get("pattern", "")))
             replacement = self._normalize_query_text(str(rule.get("replacement", "")))
             if not pattern:
@@ -210,14 +281,74 @@ class QueryAnalyzer:
     def _fold(self, text: str) -> str:
         return text.translate(_TURKISH_FOLD_TABLE)
 
-    def _apply_domain_rewrite_fallbacks(self, query: str) -> tuple[str, list[str]]:
-        query_ascii = self._strip_diacritics(query)
-        if "yogun" in query_ascii and "bolum" in query_ascii and "randevu" not in query_ascii:
-            rewritten = re.sub(r"\byogun\b", "fazla randevusu olan", query_ascii)
-            return re.sub(r"\s+", " ", rewritten).strip(), [
-                "yogun bolum -> en fazla randevu"
-            ]
-        return query, []
+    def _detect_operations(self, normalized_query: str, rules: dict[str, Any]) -> list[str]:
+        """Maps natural action/aggregation wording to canonical operations (LIST, COUNT...)."""
+        folded = self._fold(normalized_query)
+        operations: list[str] = []
+        for operation, terms in rules.get("operations", {}).items():
+            for term in terms:
+                folded_term = self._fold(self._normalize_query_text(str(term)))
+                if not folded_term:
+                    continue
+                if re.search(r"\b" + re.escape(folded_term) + r"\w*", folded):
+                    operations.append(str(operation))
+                    break
+        return operations
+
+    def _detect_limit_and_order(self, normalized_query: str) -> tuple[int | None, str | None]:
+        """Detects 'ilk N' (LIMIT N) and 'son N' (ORDER DESC LIMIT N) ranking phrases.
+
+        'son N gün/hafta/ay/yıl' is temporal wording and is excluded here; it is
+        handled by date detection instead.
+        """
+        folded = self._fold(normalized_query)
+        match = re.search(r"\bilk\s+(\d+)\b", folded)
+        if match:
+            return int(match.group(1)), None
+        match = re.search(r"\bson\s+(\d+)\b(?!\s*(?:gun|hafta|ay|yil)\w*)", folded)
+        if match:
+            return int(match.group(1)), "DESC"
+        return None, None
+
+    def _match_ambiguity(
+        self, normalized_query: str, rules: dict[str, Any]
+    ) -> AmbiguityResult | None:
+        folded = self._fold(normalized_query)
+        for spec in rules.get("ambiguous", []):
+            pattern = self._fold(self._normalize_query_text(str(spec.get("pattern", ""))))
+            if not pattern:
+                continue
+            if re.search(r"\b" + re.escape(pattern) + r"\b", folded):
+                return AmbiguityResult(
+                    matched_phrase=str(spec.get("pattern", "")),
+                    question=str(spec.get("question", "")),
+                    options=[str(option) for option in spec.get("options", [])],
+                )
+        return None
+
+    def _resolve_dates(self, text: str, detected_dates: list[DateRange]) -> str:
+        """Replaces relative temporal wording with explicit ISO date ranges.
+
+        The result is the final query sent to SQL generation, so downstream
+        nodes never have to interpret relative Turkish dates themselves.
+        """
+        resolved = text
+        for date_range in detected_dates:
+            expression = self._fold(self._normalize_query_text(date_range.expression))
+            if not expression:
+                continue
+            if date_range.start_date == date_range.end_date:
+                replacement = f"{date_range.start_date.isoformat()} tarihinde"
+            else:
+                replacement = (
+                    f"{date_range.start_date.isoformat()} ile "
+                    f"{date_range.end_date.isoformat()} tarihleri arasinda"
+                )
+            pattern = r"\b" + re.escape(expression) + r"\b"
+            resolved, _ = self._replace_fold_insensitive(
+                resolved, pattern, replacement, keep_suffix=False
+            )
+        return re.sub(r"\s+", " ", resolved).strip()
 
     def _detect_entities(
         self,
@@ -268,10 +399,17 @@ class QueryAnalyzer:
             if re.search(rf"\b{expression}\b", query_ascii):
                 ranges.append(self._date_range(expression, start, end, granularity))
 
+        if "bu hafta" in query_ascii:
+            start = today - timedelta(days=today.weekday())
+            ranges.append(self._date_range("bu hafta", start, start + timedelta(days=6), "week"))
+
         if "gecen hafta" in query_ascii:
             this_week_start = today - timedelta(days=today.weekday())
             start = this_week_start - timedelta(days=7)
             ranges.append(self._date_range("gecen hafta", start, start + timedelta(days=6), "week"))
+
+        if re.search(r"\bbu ay\w*\b", query_ascii):
+            ranges.append(self._month_range("bu ay", today.year, today.month))
 
         if "gecen ay" in query_ascii:
             year = today.year if today.month > 1 else today.year - 1
@@ -287,10 +425,25 @@ class QueryAnalyzer:
                 self._date_range("gecen yil", date(year, 1, 1), date(year, 12, 31), "year")
             )
 
-        for match in re.finditer(r"\bson\s+(\d+)\s+gun\b", query_ascii):
+        for match in re.finditer(r"\bson\s+(\d+)\s+gun\w*\b", query_ascii):
             days = int(match.group(1))
             start = today - timedelta(days=max(days - 1, 0))
             ranges.append(self._date_range(match.group(0), start, today, "day"))
+
+        for match in re.finditer(r"\bson\s+(\d+)\s+hafta\w*\b", query_ascii):
+            weeks = int(match.group(1))
+            start = today - timedelta(days=max(weeks * 7 - 1, 0))
+            ranges.append(self._date_range(match.group(0), start, today, "week"))
+
+        for match in re.finditer(r"\bson\s+(\d+)\s+ay\w*\b", query_ascii):
+            months = int(match.group(1))
+            start = self._shift_months(today, months)
+            ranges.append(self._date_range(match.group(0), start, today, "month"))
+
+        for match in re.finditer(r"\bson\s+(\d+)\s+yil\w*\b", query_ascii):
+            years = int(match.group(1))
+            start = self._shift_months(today, years * 12)
+            ranges.append(self._date_range(match.group(0), start, today, "year"))
 
         for month_name, month in _MONTHS.items():
             if re.search(rf"\b{self._strip_diacritics(month_name)}\s+ayinda\b", query_ascii):
@@ -318,6 +471,14 @@ class QueryAnalyzer:
             granularity=granularity,
         )
 
+    def _shift_months(self, base: date, months_back: int) -> date:
+        """Returns the date ``months_back`` calendar months before ``base``, day-clamped."""
+        total = base.year * 12 + (base.month - 1) - months_back
+        year, month_index = divmod(total, 12)
+        month = month_index + 1
+        day = min(base.day, monthrange(year, month)[1])
+        return date(year, month, day)
+
     def _month_range(self, expression: str, year: int, month: int) -> DateRange:
         last_day = monthrange(year, month)[1]
         return self._date_range(
@@ -332,6 +493,7 @@ class QueryAnalyzer:
         entities: list[DetectedEntity],
         detected_dates: list[DateRange],
         matched_synonyms: list[str],
+        detected_operations: list[str] | None = None,
     ) -> float:
         score = 0.45
         if entities:
@@ -340,6 +502,8 @@ class QueryAnalyzer:
             score += 0.1
         if matched_synonyms:
             score += min(0.1, len(matched_synonyms) * 0.05)
+        if detected_operations:
+            score += 0.05
         return min(0.99, score)
 
     def _strip_diacritics(self, text: str) -> str:
@@ -365,24 +529,41 @@ class QueryAnalyzer:
         return "".join(char for char in normalized if not unicodedata.combining(char))
 
     def _log_analysis(self, analysis: QueryAnalysis) -> None:
+        operations = list(analysis.detected_operations)
+        if analysis.detected_limit is not None:
+            operations.append(f"LIMIT {analysis.detected_limit}")
+        if analysis.detected_order is not None:
+            operations.append(f"ORDER {analysis.detected_order}")
         logger.info(
-            "\n================ QUERY ANALYSIS ================\n"
+            "\n================ QUERY ANALYSIS (NLU PIPELINE) ================\n"
             f"Original Query\n{analysis.original_query}\n\n"
             f"Normalized Query\n{analysis.normalized_query}\n\n"
+            f"Rewritten Query\n{analysis.rewritten_query}\n\n"
+            f"Expanded Query\n{analysis.expanded_query}\n\n"
+            "Detected Intent (Operations)\n"
+            f"{', '.join(operations) or 'None'}\n\n"
             "Detected Entities\n"
             f"{', '.join(entity.entity_type for entity in analysis.entities) or 'None'}\n\n"
             "Matched Synonyms\n"
             f"{', '.join(analysis.matched_synonyms) or 'None'}\n\n"
             "Date Expressions\n"
             f"{', '.join(self._date_expressions(analysis)) or 'None'}\n\n"
+            f"Ambiguous: {'Yes' if analysis.is_ambiguous else 'No'}"
+            f"{' (' + analysis.ambiguity.matched_phrase + ')' if analysis.ambiguity else ''}\n\n"
+            f"Final Query Sent to SQL Generation\n{analysis.final_query}\n\n"
             f"Confidence\n{analysis.confidence:.2f}\n"
             "================================================",
             extra={
                 "original_query": analysis.original_query,
                 "normalized_query": analysis.normalized_query,
+                "rewritten_query": analysis.rewritten_query,
+                "expanded_query": analysis.expanded_query,
+                "final_query": analysis.final_query,
+                "detected_operations": operations,
                 "entities": [entity.entity_type for entity in analysis.entities],
                 "matched_synonyms": analysis.matched_synonyms,
                 "date_expressions": self._date_expressions(analysis),
+                "is_ambiguous": analysis.is_ambiguous,
                 "confidence": analysis.confidence,
             },
         )

@@ -111,6 +111,13 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = Field(
         default="gemini-2.5-flash", description="Active Gemini model name."
     )
+    OBSERVATION_LLM_WORDING: bool = Field(
+        default=False,
+        description=(
+            "Use the LLM to reword deterministic observations into natural language. "
+            "Facts always come from templates; the LLM never adds or removes observations."
+        ),
+    )
 
     # Database Intelligence configurations
     SCHEMA_CACHE_ENABLED: bool = Field(

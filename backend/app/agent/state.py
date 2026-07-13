@@ -3,7 +3,11 @@ from pydantic import BaseModel, Field
 
 from app.application_models.generated_report import GeneratedReport
 from app.application_models.generated_sql import GeneratedSQL
+from app.analytics.models import AnalyticsResult
 from app.application_models.intent import IntentResult
+from app.insights.models import InsightResult
+from app.intelligence.models import ObservationResult
+from app.application_models.query_analysis import AmbiguityResult
 from app.application_models.workflow_models import QueryResult
 from app.database_intelligence.models import DatabaseContext
 
@@ -23,6 +27,18 @@ class AgentState(BaseModel):
     )
     query_result: Optional[QueryResult] = Field(
         default=None, description="Structured SQL query execution result payload."
+    )
+    analytics: Optional[AnalyticsResult] = Field(
+        default=None,
+        description="Deterministic analytics computed from the executed query result.",
+    )
+    insights: Optional[InsightResult] = Field(
+        default=None,
+        description="Executive-level insight narrative grounded in the analytics result.",
+    )
+    observations: Optional[ObservationResult] = Field(
+        default=None,
+        description="Noteworthy evidence-based observations derived from analytics metadata.",
     )
     generated_report: Optional[GeneratedReport] = Field(
         default=None, description="The narrative report summary details."
@@ -46,5 +62,9 @@ class AgentState(BaseModel):
     intent: Optional[IntentResult] = Field(
         default=None,
         description="The analyzed user intent result details.",
+    )
+    ambiguity: Optional[AmbiguityResult] = Field(
+        default=None,
+        description="Ambiguous ranking phrase detected in the question, requiring clarification.",
     )
 

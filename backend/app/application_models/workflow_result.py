@@ -2,7 +2,10 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.analytics.models import AnalyticsResult
 from app.application_models.generated_report import GeneratedReport
+from app.insights.models import InsightResult
+from app.intelligence.models import ObservationResult
 from app.application_models.intent import IntentResult
 from app.application_models.workflow_metrics import WorkflowMetrics
 from app.application_models.workflow_models import QueryResult
@@ -46,4 +49,16 @@ class WorkflowResult(BaseModel):
     intent: Optional[IntentResult] = Field(
         default=None,
         description="The classified user intent details.",
+    )
+    analytics: Optional[AnalyticsResult] = Field(
+        default=None,
+        description="Deterministic analytics computed from the executed query result.",
+    )
+    insights: Optional[InsightResult] = Field(
+        default=None,
+        description="Executive-level insight narrative grounded in the analytics result.",
+    )
+    observations: Optional[ObservationResult] = Field(
+        default=None,
+        description="Noteworthy evidence-based observations derived from analytics metadata.",
     )

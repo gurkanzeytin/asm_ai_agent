@@ -200,6 +200,9 @@ async def test_graph_builder_with_execution_node():
         "generate_sql",
         "validate_sql",
         "execute_sql",
+        "analyze_results",
+        "generate_insights",
+        "generate_observations",
         "generate_report",
     ]
     assert final_state_dict["query_result"] == mock_query_result

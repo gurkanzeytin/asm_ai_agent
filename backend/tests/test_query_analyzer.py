@@ -120,7 +120,7 @@ def test_query_analyzer_temporal_variants(query, expected_start, expected_end):
         ),
         (
             "En yoğun klinik",
-            "en yoğun poliklinik",
+            "en fazla randevusu olan poliklinik",
             "klinik -> poliklinik",
         ),
         (

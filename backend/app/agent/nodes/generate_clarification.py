@@ -16,12 +16,18 @@ class GenerateClarificationNode(IAgentNode):
         start_time = time.perf_counter()
 
         try:
-            clarification_text = (
-                "I'm not sure what you'd like to know. Could you rephrase your question?"
-            )
+            if state.ambiguity is not None:
+                option_lines = "\n".join(f"• {option}" for option in state.ambiguity.options)
+                clarification_text = f"{state.ambiguity.question}\n\n{option_lines}".strip()
+                title = "Netleştirme Gerekli"
+            else:
+                clarification_text = (
+                    "I'm not sure what you'd like to know. Could you rephrase your question?"
+                )
+                title = "Clarification Required"
 
             report_dto = GeneratedReport(
-                title="Clarification Required",
+                title=title,
                 markdown=clarification_text,
                 provider="static",
                 model="clarification_node",

@@ -4,6 +4,9 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from app.agent.nodes.analyze_intent import AnalyzeIntentNode
+from app.agent.nodes.analyze_results import AnalyzeResultsNode
+from app.agent.nodes.generate_insights import GenerateInsightsNode
+from app.agent.nodes.generate_observations import GenerateObservationsNode
 from app.agent.nodes.generate_chat_response import GenerateChatResponseNode
 from app.agent.nodes.generate_help import GenerateHelpNode
 from app.agent.nodes.generate_clarification import GenerateClarificationNode
@@ -33,12 +36,17 @@ def route_by_intent(state: AgentState) -> str:
     """
     intent_res = state.intent
     if not intent_res:
-        return "database_query"
+        return "unknown" if state.ambiguity is not None else "database_query"
 
     if intent_res.confidence < settings.INTENT_CONFIDENCE_THRESHOLD:
         decision = "database_query"
     else:
         decision = intent_res.intent.value
+
+    # Ambiguous ranking phrases ("en iyi doktor") cannot be mapped to SQL
+    # deterministically — divert to clarification instead of generating SQL.
+    if decision == "database_query" and state.ambiguity is not None:
+        decision = "unknown"
 
     # Extract timing of analysis node
     elapsed_ms = state.node_timings.get("analyze_intent", 0.0)
@@ -102,6 +110,16 @@ class AgentGraphBuilder:
         generate_node = GenerateSQLNode(self.workflow_service)
         validate_node = ValidateSQLNode()
         execute_node = ExecuteSQLNode(self.workflow_service)
+        analyze_results_node = AnalyzeResultsNode()
+        from app.insights.insight_engine import InsightEngine
+        from app.intelligence.observation_engine import ObservationEngine
+        insights_node = GenerateInsightsNode(InsightEngine(llm_provider=self.llm_provider))
+        observations_node = GenerateObservationsNode(
+            ObservationEngine(
+                llm_provider=self.llm_provider,
+                use_llm_wording=settings.OBSERVATION_LLM_WORDING,
+            )
+        )
         report_node = GenerateReportNode(self.workflow_service)
 
         # 2. Build StateGraph using the IAgentNode.execute method wrappers
@@ -116,6 +134,9 @@ class AgentGraphBuilder:
         workflow.add_node("generate_sql", generate_node.execute)
         workflow.add_node("validate_sql", validate_node.execute)
         workflow.add_node("execute_sql", execute_node.execute)
+        workflow.add_node("analyze_results", analyze_results_node.execute)
+        workflow.add_node("generate_insights", insights_node.execute)
+        workflow.add_node("generate_observations", observations_node.execute)
         workflow.add_node("generate_report", report_node.execute)
 
         # 3. Add Edges & Conditional Routing
@@ -141,7 +162,10 @@ class AgentGraphBuilder:
         workflow.add_edge("retrieve_context", "generate_sql")
         workflow.add_edge("generate_sql", "validate_sql")
         workflow.add_edge("validate_sql", "execute_sql")
-        workflow.add_edge("execute_sql", "generate_report")
+        workflow.add_edge("execute_sql", "analyze_results")
+        workflow.add_edge("analyze_results", "generate_insights")
+        workflow.add_edge("generate_insights", "generate_observations")
+        workflow.add_edge("generate_observations", "generate_report")
         workflow.add_edge("generate_report", END)
 
         logger.info("Agent graph constructed and compiled successfully.")

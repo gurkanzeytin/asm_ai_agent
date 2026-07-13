@@ -29,7 +29,20 @@
         "kadin dogum",
         "kardiyoloji",
         "pediatri",
-        "cocuk sagligi"
+        "cocuk sagligi",
+        "dahiliye",
+        "ic hastaliklari",
+        "iç hastalıkları",
+        "dermatoloji",
+        "cildiye",
+        "ortopedi",
+        "travmatoloji",
+        "goz hastaliklari",
+        "göz hastalıkları",
+        "noroloji",
+        "nöroloji",
+        "uroloji",
+        "üroloji"
       ]
     },
     "Prescription": {
@@ -53,67 +66,231 @@
       "terms": ["yatis", "yatış", "oda", "servis", "hospitalization"]
     }
   },
-  "rewrites": [
+  "rewrite_groups": {
+    "conversational": [
+      {
+        "pattern": "rica etsem",
+        "replacement": "",
+        "matched_synonym": "filler: rica etsem"
+      },
+      {
+        "pattern": "gorebilir miyim",
+        "replacement": "goster",
+        "matched_synonym": "görebilir miyim -> göster"
+      },
+      {
+        "pattern": "gosterebilir misin",
+        "replacement": "goster",
+        "matched_synonym": "gösterebilir misin -> göster"
+      },
+      {
+        "pattern": "gosterir misin",
+        "replacement": "goster",
+        "matched_synonym": "gösterir misin -> göster"
+      },
+      {
+        "pattern": "bakabilir misin",
+        "replacement": "goster",
+        "matched_synonym": "bakabilir misin -> göster"
+      },
+      {
+        "pattern": "soyleyebilir misin",
+        "replacement": "",
+        "matched_synonym": "filler: söyleyebilir misin"
+      },
+      {
+        "pattern": "soyler misin",
+        "replacement": "",
+        "matched_synonym": "filler: söyler misin"
+      },
+      {
+        "pattern": "lutfen",
+        "replacement": "",
+        "matched_synonym": "filler: lütfen"
+      },
+      {
+        "pattern": "acaba",
+        "replacement": "",
+        "matched_synonym": "filler: acaba"
+      },
+      {
+        "pattern": "bana",
+        "replacement": "",
+        "matched_synonym": "filler: bana"
+      }
+    ],
+    "medical": [
+      {
+        "pattern": "kalp",
+        "replacement": "kardiyoloji",
+        "followed_by": ["doktor", "hekim", "uzman", "bolum", "poliklinik", "klinik", "servis", "brans"],
+        "matched_synonym": "kalp -> kardiyoloji"
+      },
+      {
+        "pattern": "cocuk",
+        "replacement": "cocuk sagligi",
+        "followed_by": ["doktor", "hekim", "uzman", "bolum", "poliklinik", "klinik", "servis", "brans"],
+        "matched_synonym": "çocuk -> çocuk sağlığı"
+      },
+      {
+        "pattern": "pediatri",
+        "replacement": "cocuk sagligi",
+        "matched_synonym": "pediatri -> çocuk sağlığı"
+      },
+      {
+        "pattern": "kbb doktorlari",
+        "replacement": "kulak burun bogaz bolumundeki doktorlar",
+        "matched_synonym": "kbb -> kulak burun bogaz"
+      },
+      {
+        "pattern": "kbb",
+        "replacement": "kulak burun bogaz",
+        "matched_synonym": "kbb -> kulak burun bogaz"
+      },
+      {
+        "pattern": "kadin dogum",
+        "replacement": "kadin hastaliklari ve dogum",
+        "matched_synonym": "kadın doğum -> kadın hastalıkları ve doğum"
+      },
+      {
+        "pattern": "dahiliye",
+        "replacement": "ic hastaliklari",
+        "match_suffix": true,
+        "matched_synonym": "dahiliye -> iç hastalıkları"
+      },
+      {
+        "pattern": "cildiye",
+        "replacement": "dermatoloji",
+        "match_suffix": true,
+        "matched_synonym": "cildiye -> dermatoloji"
+      },
+      {
+        "pattern": "goz",
+        "replacement": "goz hastaliklari",
+        "followed_by": ["doktor", "hekim", "uzman", "bolum", "poliklinik", "klinik", "servis", "brans"],
+        "matched_synonym": "göz -> göz hastalıkları"
+      },
+      {
+        "pattern": "ortopedi",
+        "replacement": "ortopedi ve travmatoloji",
+        "not_followed_by": ["ve"],
+        "matched_synonym": "ortopedi -> ortopedi ve travmatoloji"
+      }
+    ],
+    "domain": [
+      {
+        "pattern": "hekim",
+        "replacement": "doktor",
+        "match_suffix": true,
+        "matched_synonym": "hekim -> doktor"
+      },
+      {
+        "pattern": "muayene",
+        "replacement": "randevu",
+        "match_suffix": true,
+        "matched_synonym": "muayene -> randevu"
+      },
+      {
+        "pattern": "kontrol",
+        "replacement": "kontrol randevusu",
+        "not_followed_by": ["randevu"],
+        "matched_synonym": "kontrol -> kontrol randevusu"
+      },
+      {
+        "pattern": "klinik",
+        "replacement": "poliklinik",
+        "match_suffix": true,
+        "matched_synonym": "klinik -> poliklinik"
+      }
+    ],
+    "ranking": [
+      {
+        "pattern": "en yogun doktor",
+        "replacement": "en fazla randevusu olan doktor",
+        "matched_synonym": "yoğun -> en fazla randevu"
+      },
+      {
+        "pattern": "en yogun olan",
+        "replacement": "en fazla randevusu olan",
+        "matched_synonym": "en yoğun -> en fazla randevusu olan"
+      },
+      {
+        "pattern": "en yogun",
+        "replacement": "en fazla randevusu olan",
+        "not_followed_by": ["randevu"],
+        "matched_synonym": "en yoğun -> en fazla randevusu olan"
+      },
+      {
+        "pattern": "en bos olan",
+        "replacement": "en az randevusu olan",
+        "matched_synonym": "en boş -> en az randevusu olan"
+      },
+      {
+        "pattern": "en bos",
+        "replacement": "en az randevusu olan",
+        "not_followed_by": ["randevu"],
+        "matched_synonym": "en boş -> en az randevusu olan"
+      },
+      {
+        "pattern": "en cok calisan",
+        "replacement": "en fazla islem yapan",
+        "matched_synonym": "en çok çalışan -> en fazla işlem yapan"
+      },
+      {
+        "pattern": "en fazla calisan",
+        "replacement": "en fazla islem yapan",
+        "matched_synonym": "en fazla çalışan -> en fazla işlem yapan"
+      },
+      {
+        "pattern": "en az calisan",
+        "replacement": "en az islem yapan",
+        "matched_synonym": "en az çalışan -> en az işlem yapan"
+      }
+    ],
+    "expansion": [
+      {
+        "pattern": "en cok hasta bakan",
+        "replacement": "en fazla hastasi olan",
+        "matched_synonym": "en çok hasta bakan -> en fazla hastası olan"
+      },
+      {
+        "pattern": "en fazla hasta bakan",
+        "replacement": "en fazla hastasi olan",
+        "matched_synonym": "en fazla hasta bakan -> en fazla hastası olan"
+      },
+      {
+        "pattern": "en az hasta bakan",
+        "replacement": "en az hastasi olan",
+        "matched_synonym": "en az hasta bakan -> en az hastası olan"
+      }
+    ]
+  },
+  "operations": {
+    "LIST": ["goster", "listele", "getir", "bul", "cikar", "goruntule", "liste", "listesi", "gorebilir miyim"],
+    "COUNT": ["kac", "sayisi", "sayi", "adet"],
+    "SUM": ["toplam"],
+    "AVG": ["ortalama"]
+  },
+  "ambiguous": [
     {
-      "pattern": "en yogun doktor",
-      "replacement": "en fazla randevusu olan doktor",
-      "matched_synonym": "yoğun -> en fazla randevu"
+      "pattern": "en basarili",
+      "question": "Başarı kriteri olarak neyi kullanmamı istersiniz?",
+      "options": ["Randevu sayısı", "Hasta sayısı", "Reçete sayısı", "Başka bir kriter"]
     },
     {
-      "pattern": "kalp",
-      "replacement": "kardiyoloji",
-      "followed_by": ["doktor", "hekim", "uzman", "bolum", "poliklinik", "klinik", "servis", "brans"],
-      "matched_synonym": "kalp -> kardiyoloji"
+      "pattern": "en iyi",
+      "question": "\"En iyi\" için hangi kriteri kullanmamı istersiniz?",
+      "options": ["Randevu sayısı", "Hasta sayısı", "Reçete sayısı", "Başka bir kriter"]
     },
     {
-      "pattern": "cocuk",
-      "replacement": "cocuk sagligi",
-      "followed_by": ["doktor", "hekim", "uzman", "bolum", "poliklinik", "klinik", "servis", "brans"],
-      "matched_synonym": "çocuk -> çocuk sağlığı"
+      "pattern": "en kotu",
+      "question": "\"En kötü\" için hangi kriteri kullanmamı istersiniz?",
+      "options": ["Randevu sayısı", "Hasta sayısı", "Reçete sayısı", "Başka bir kriter"]
     },
     {
-      "pattern": "pediatri",
-      "replacement": "cocuk sagligi",
-      "matched_synonym": "pediatri -> çocuk sağlığı"
-    },
-    {
-      "pattern": "kbb doktorlari",
-      "replacement": "kulak burun bogaz bolumundeki doktorlar",
-      "matched_synonym": "kbb -> kulak burun bogaz"
-    },
-    {
-      "pattern": "kbb",
-      "replacement": "kulak burun bogaz",
-      "matched_synonym": "kbb -> kulak burun bogaz"
-    },
-    {
-      "pattern": "kadin dogum",
-      "replacement": "kadin hastaliklari ve dogum",
-      "matched_synonym": "kadın doğum -> kadın hastalıkları ve doğum"
-    },
-    {
-      "pattern": "hekim",
-      "replacement": "doktor",
-      "match_suffix": true,
-      "matched_synonym": "hekim -> doktor"
-    },
-    {
-      "pattern": "muayene",
-      "replacement": "randevu",
-      "match_suffix": true,
-      "matched_synonym": "muayene -> randevu"
-    },
-    {
-      "pattern": "kontrol",
-      "replacement": "kontrol randevusu",
-      "not_followed_by": ["randevu"],
-      "matched_synonym": "kontrol -> kontrol randevusu"
-    },
-    {
-      "pattern": "klinik",
-      "replacement": "poliklinik",
-      "match_suffix": true,
-      "matched_synonym": "klinik -> poliklinik"
+      "pattern": "en verimli",
+      "question": "Verimlilik kriteri olarak neyi kullanmamı istersiniz?",
+      "options": ["Randevu sayısı", "Hasta sayısı", "Reçete sayısı", "Başka bir kriter"]
     }
   ]
 }

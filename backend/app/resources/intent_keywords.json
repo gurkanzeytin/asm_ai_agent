@@ -24,7 +24,9 @@
       "department", "brans", "brani", "bolum", "clinic", "klinik", "busiest",
       "highest", "most", "lowest", "least", "count", "average", "many", "registered",
       "scheduled", "yesterday", "how many", "which", "show", "list", "find",
-      "en fazla", "en az", "kac", "kaç", "toplam", "ortalama", "tarih", "saat"
+      "en fazla", "en az", "kac", "kaç", "toplam", "ortalama", "tarih", "saat",
+      "listele", "göster", "goster", "getir", "bul", "hangisi", "kimler",
+      "bugün", "bugun", "dün", "dun", "yarın", "yarin", "hafta", "ay", "yıl", "yil"
     ],
     "base_confidence": 0.9,
     "priority": 3

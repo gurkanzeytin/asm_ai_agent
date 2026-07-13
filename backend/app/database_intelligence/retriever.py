@@ -373,7 +373,9 @@ class SchemaRetriever(ISchemaRetriever):
             return DatabaseContext(
                 tables=selected_tables,
                 views=selected_views,
-                normalized_query=query_analysis.normalized_query,
+                # final_query has relative dates resolved to explicit ISO ranges;
+                # it is the single source of truth handed to SQL generation.
+                normalized_query=query_analysis.final_query or query_analysis.normalized_query,
             )
 
         except Exception as e:
