@@ -1,4 +1,5 @@
 import logging
+import re
 
 import sqlglot
 import sqlglot.expressions as exp
@@ -63,11 +64,12 @@ class SQLService(ISQLService):
         """
         logger.info("SQLService SQL generation and validation sequence started.")
         try:
-            # 1. First Attempt
+            # 1. First Attempt. 400 tokens: monthly-aggregation queries legitimately
+            # exceed 200 and truncation yields corrupt identifiers (e.g. 'test_son').
             llm_response = await self.llm_provider.generate(
                 prompt,
                 think=False,
-                options={"num_predict": 200},
+                options={"num_predict": 400},
             )
 
             # Log raw output immediately in debug mode
@@ -83,6 +85,8 @@ class SQLService(ISQLService):
             cleaned_sql, is_sql, validation_result, schema_issues = self._parse_and_validate(
                 llm_response.content, question, database_context
             )
+            trend_issue = self._trend_aggregation_issue(question, cleaned_sql) if is_sql else None
+            truncated = llm_response.finish_reason == "max_tokens"
 
             # Determine if a repair is needed
             repair_attempt_used = False
@@ -91,6 +95,8 @@ class SQLService(ISQLService):
                 or not validation_result
                 or not validation_result.valid
                 or bool(schema_issues)
+                or bool(trend_issue)
+                or truncated
             )
 
             if first_attempt_failed:
@@ -101,11 +107,31 @@ class SQLService(ISQLService):
                     f"  - Bounded raw output preview: {raw_preview!r}\n"
                     f"  - Validation Result: {validation_result.valid if validation_result else False}\n"
                     f"  - Schema identifier issues: {schema_issues or 'none'}\n"
+                    f"  - Trend aggregation issue: {trend_issue or 'none'}\n"
+                    f"  - Truncated (max_tokens): {truncated}\n"
                     "Executing single repair attempt."
                 )
 
                 # Build repair prompt combining original prompt, failed response, and correction
-                if schema_issues:
+                if truncated:
+                    repair_instruction = (
+                        "The previous response was cut off before completion. "
+                        "Generate ONE complete but SIMPLE SQL statement: a single SELECT "
+                        "with only the columns and JOINs strictly needed to answer the "
+                        "question. Do not explain. Return only SQL."
+                    )
+                elif trend_issue and is_sql and validation_result and validation_result.valid and not schema_issues:
+                    repair_instruction = (
+                        "The question asks for an analysis/trend over a time period, but the "
+                        "previous SQL returns raw rows without time aggregation. Rewrite it as "
+                        "a monthly aggregation: SELECT strftime('%Y-%m', <date column>) AS ay, "
+                        "COUNT(*) AS adet FROM <table> WHERE <date filter> "
+                        "GROUP BY ay ORDER BY ay. "
+                        "Use only the tables and columns listed in the Schema section. "
+                        "Generate ONE executable SQL statement only. "
+                        "Do not explain. Return only SQL."
+                    )
+                elif schema_issues:
                     repair_instruction = (
                         "The previous SQL references identifiers that do not exist in the "
                         f"schema: {'; '.join(schema_issues)}. "
@@ -132,7 +158,7 @@ class SQLService(ISQLService):
                 llm_response = await self.llm_provider.generate(
                     repair_prompt,
                     think=False,
-                    options={"num_predict": 200},
+                    options={"num_predict": 400},
                 )
 
                 if settings.DEBUG:
@@ -270,6 +296,28 @@ class SQLService(ISQLService):
                     cleaned_sql, database_context
                 )
         return cleaned_sql, is_sql, validation_result, schema_issues
+
+    def _trend_aggregation_issue(self, question: str | None, sql: str) -> str | None:
+        """Detects trend/analysis questions whose SQL lacks time-bucketed aggregation.
+
+        The question arrives with relative dates already resolved to explicit ISO
+        ranges ("... tarihleri arasinda ..."), so a period-analysis question is one
+        that contains an analysis marker AND a date range. Such questions must
+        aggregate (GROUP BY a time bucket), never dump raw rows: unaggregated
+        results produce meaningless analytics and oversized report prompts.
+        """
+        if not question:
+            return None
+        folded = question.translate(_TURKISH_FOLD_TABLE).lower()
+        has_analysis_marker = bool(re.search(r"\b(analiz|trend|egilim)\w*", folded))
+        has_date_range = bool(
+            re.search(r"tarihleri arasinda|\d{4}-\d{2}-\d{2}", folded)
+        )
+        if not (has_analysis_marker and has_date_range):
+            return None
+        if re.search(r"\bgroup\s+by\b", sql, re.IGNORECASE):
+            return None
+        return "period-analysis question without GROUP BY time aggregation"
 
     def _canonicalize_string_literals(self, sql: str, question: str | None) -> str:
         """Restores normalized-question vocabulary inside generated string literals.

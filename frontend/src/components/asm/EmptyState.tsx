@@ -1,27 +1,28 @@
 import { motion } from "motion/react";
 import { Activity, Building2, Stethoscope, FileBarChart } from "lucide-react";
 import { MedAgentLogo } from "./MedAgentLogo";
+import { tr } from "@/locales/tr";
 
 const suggestions = [
   {
     icon: Activity,
-    title: "Today's patient statistics",
-    prompt: "Show today's patient statistics across all family health centers.",
+    title: tr.suggestions.patientStatistics.title,
+    prompt: tr.suggestions.patientStatistics.description,
   },
   {
     icon: Building2,
-    title: "Center performance",
-    prompt: "Analyze family health center performance for the last 30 days.",
+    title: tr.suggestions.centerPerformance.title,
+    prompt: tr.suggestions.centerPerformance.description,
   },
   {
     icon: Stethoscope,
-    title: "Busiest doctor",
-    prompt: "Find the busiest doctor this week and their patient load.",
+    title: tr.suggestions.busiestDoctor.title,
+    prompt: tr.suggestions.busiestDoctor.description,
   },
   {
     icon: FileBarChart,
-    title: "Monthly report",
-    prompt: "Generate a monthly performance report with key KPIs.",
+    title: tr.suggestions.monthlyReport.title,
+    prompt: tr.suggestions.monthlyReport.description,
   },
 ];
 
@@ -42,7 +43,7 @@ export function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
         transition={{ delay: 0.1 }}
         className="text-center text-3xl font-semibold tracking-tight sm:text-4xl"
       >
-        How can I help you <span className="gradient-text">today</span>?
+        {tr.welcome.titleBefore} <span className="gradient-text">{tr.welcome.titleHighlight}</span>?
       </motion.h1>
       <motion.p
         initial={{ opacity: 0, y: 10 }}
@@ -50,8 +51,7 @@ export function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
         transition={{ delay: 0.15 }}
         className="mt-3 max-w-lg text-center text-sm text-muted-foreground"
       >
-        Ask questions about your organization, run SQL against the knowledge base, analyze
-        documents or generate reports — all in natural language.
+        {tr.welcome.description}
       </motion.p>
 
       <div className="mt-10 grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2">

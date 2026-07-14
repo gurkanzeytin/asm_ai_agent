@@ -10,11 +10,16 @@ import {
   Database,
   ChevronLeft,
   ChevronRight,
+  BarChart3,
+  Sigma,
 } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { SqlRowDrawer } from "./SqlRowDrawer";
+import { SqlSummaryStats } from "./SqlSummaryStats";
+import { SqlChartPanel } from "./SqlChartPanel";
+import { tr } from "@/locales/tr";
 
 export interface SqlResult {
   columns: string[];
@@ -52,6 +57,8 @@ export function SqlResultsTable({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [focusedRow, setFocusedRow] = useState<number | null>(null);
+  const [showStats, setShowStats] = useState(false);
+  const [showChart, setShowChart] = useState(false);
 
   const tableId = useId();
   const searchId = useId();
@@ -62,7 +69,11 @@ export function SqlResultsTable({
     const q = query.trim().toLowerCase();
     if (!q) return data.rows;
     return data.rows.filter((r) =>
-      data.columns.some((c) => String(r[c] ?? "").toLowerCase().includes(q))
+      data.columns.some((c) =>
+        String(r[c] ?? "")
+          .toLowerCase()
+          .includes(q),
+      ),
     );
   }, [data, query]);
 
@@ -83,7 +94,9 @@ export function SqlResultsTable({
   const isVirtualized = sorted.length > virtualizeThreshold;
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const pageRows = isVirtualized ? sorted : sorted.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const pageRows = isVirtualized
+    ? sorted
+    : sorted.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const virtualizer = useVirtualizer({
     count: isVirtualized ? sorted.length : 0,
@@ -107,9 +120,7 @@ export function SqlResultsTable({
     setSortKey(nextKey);
     setSortDir(nextDir);
     setAnnouncement(
-      nextKey && nextDir
-        ? `Sorted by ${col} ${nextDir === "asc" ? "ascending" : "descending"}`
-        : "Sort cleared"
+      nextKey && nextDir ? tr.sqlTable.sortedBy(col, nextDir) : tr.sqlTable.sortCleared,
     );
   };
 
@@ -137,8 +148,8 @@ export function SqlResultsTable({
     a.download = `sql-results-${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success("CSV exported", { description: `${sorted.length} rows` });
-    setAnnouncement(`Exported ${sorted.length} rows as CSV`);
+    toast.success(tr.sqlTable.csvExported, { description: `${sorted.length} ${tr.sqlTable.rows}` });
+    setAnnouncement(tr.sqlTable.exportedRows(sorted.length));
   };
 
   const copyTable = async () => {
@@ -150,11 +161,11 @@ export function SqlResultsTable({
       await navigator.clipboard.writeText(tsv);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-      toast.success("Table copied", { description: "Paste into a spreadsheet or doc." });
-      setAnnouncement("Table copied to clipboard");
+      toast.success(tr.sqlTable.tableCopied, { description: tr.sqlTable.tableCopiedDescription });
+      setAnnouncement(tr.sqlTable.copiedToClipboard);
     } catch {
-      toast.error("Copy failed");
-      setAnnouncement("Copy failed");
+      toast.error(tr.common.copyFailed);
+      setAnnouncement(tr.common.copyFailed);
     }
   };
 
@@ -182,7 +193,7 @@ export function SqlResultsTable({
   const onRowKeyDown = (
     e: KeyboardEvent<HTMLTableRowElement>,
     localIdx: number,
-    absIdx: number
+    absIdx: number,
   ) => {
     switch (e.key) {
       case "Enter":
@@ -224,43 +235,46 @@ export function SqlResultsTable({
   const goPrev = () => {
     if (safePage > 1) {
       setPage((p) => Math.max(1, p - 1));
-      setAnnouncement(`Page ${safePage - 1} of ${totalPages}`);
+      setAnnouncement(tr.sqlTable.pageAnnouncement(safePage - 1, totalPages));
     }
   };
   const goNext = () => {
     if (safePage < totalPages) {
       setPage((p) => Math.min(totalPages, p + 1));
-      setAnnouncement(`Page ${safePage + 1} of ${totalPages}`);
+      setAnnouncement(tr.sqlTable.pageAnnouncement(safePage + 1, totalPages));
     }
   };
 
-  const selectedRow = selectedIndex != null ? sorted[selectedIndex] ?? null : null;
+  const selectedRow = selectedIndex != null ? (sorted[selectedIndex] ?? null) : null;
 
   // Shared cell renderer to keep classic + virtual rows visually identical.
-  const renderCells = (r: Record<string, string | number | null>) =>
-    data.columns.map((c) => (
+  const renderCells = (r: Record<string, string | number | null>, absIdx: number) => (
+    <>
       <td
-        key={c}
-        className="border-b border-border/40 px-3 py-2 font-mono text-[11.5px] text-foreground/90"
+        aria-hidden="true"
+        className="sticky left-0 z-[1] w-10 min-w-[2.5rem] border-b border-border/40 bg-background/95 px-2 py-2 text-right font-mono text-[10.5px] text-muted-foreground/70 backdrop-blur"
       >
-        {r[c] == null ? (
-          <span className="text-muted-foreground/60">NULL</span>
-        ) : (
-          String(r[c])
-        )}
+        {absIdx + 1}
       </td>
-    ));
+      {data.columns.map((c, colIdx) => (
+        <td
+          key={c}
+          className={cn(
+            "border-b border-border/40 px-3 py-2 font-mono text-[11.5px] text-foreground/90",
+            colIdx === 0 && "sticky left-10 z-[1] bg-background/95 backdrop-blur",
+          )}
+        >
+          {r[c] == null ? <span className="text-muted-foreground/60">NULL</span> : String(r[c])}
+        </td>
+      ))}
+    </>
+  );
 
   const headerRow = (
     <tr className="bg-background/30">
       {data.columns.map((col) => {
         const isActive = sortKey === col;
         const Icon = !isActive ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
-        const nextLabel = !isActive
-          ? "ascending"
-          : sortDir === "asc"
-          ? "descending"
-          : "clear sort";
         return (
           <th
             key={col}
@@ -271,9 +285,7 @@ export function SqlResultsTable({
             <button
               type="button"
               onClick={() => toggleSort(col)}
-              aria-label={`Sort by ${col}, ${
-                isActive ? `currently ${sortDir === "asc" ? "ascending" : "descending"}, ` : ""
-              }activate to sort ${nextLabel}`}
+              aria-label={tr.sqlTable.sortBy(col)}
               className="inline-flex w-full items-center gap-1.5 px-3 py-2.5 text-left transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60"
             >
               {col}
@@ -281,7 +293,7 @@ export function SqlResultsTable({
                 aria-hidden="true"
                 className={cn(
                   "h-3 w-3 transition",
-                  isActive ? "text-primary" : "text-muted-foreground/50"
+                  isActive ? "text-primary" : "text-muted-foreground/50",
                 )}
               />
             </button>
@@ -301,16 +313,16 @@ export function SqlResultsTable({
       <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2.5">
         <div className="flex items-center gap-2 pr-2 text-xs font-semibold text-muted-foreground">
           <Database className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-          <span>SQL Result</span>
+          <span>{tr.sqlTable.title}</span>
           <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
-            {sorted.length} rows
+            {sorted.length} {tr.sqlTable.rows}
           </span>
           {isVirtualized && (
             <span
               className="rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground"
-              title="Row virtualization is active for fast scrolling"
+              title={tr.sqlTable.virtualizedTooltip}
             >
-              virtualized
+              {tr.sqlTable.virtualized}
             </span>
           )}
           {data.durationMs != null && (
@@ -321,7 +333,7 @@ export function SqlResultsTable({
         </div>
         <div className="relative ml-auto">
           <label htmlFor={searchId} className="sr-only">
-            Search rows
+            {tr.sqlTable.searchRows}
           </label>
           <Search
             className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
@@ -335,7 +347,7 @@ export function SqlResultsTable({
               setQuery(e.target.value);
               setPage(1);
             }}
-            placeholder="Search rows"
+            placeholder={tr.sqlTable.searchRows}
             aria-controls={tableId}
             className="h-8 w-40 rounded-lg border border-border bg-background/50 pl-8 pr-2 text-xs placeholder:text-muted-foreground/70 focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
           />
@@ -343,7 +355,7 @@ export function SqlResultsTable({
         <button
           type="button"
           onClick={copyTable}
-          aria-label="Copy table to clipboard"
+          aria-label={tr.sqlTable.copyTable}
           className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background/50 px-2.5 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
         >
           {copied ? (
@@ -351,25 +363,58 @@ export function SqlResultsTable({
           ) : (
             <Copy className="h-3.5 w-3.5" aria-hidden="true" />
           )}
-          Copy
+          {tr.common.copy}
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowStats((v) => !v)}
+          aria-pressed={showStats}
+          aria-label={tr.sqlTable.toggleStats}
+          className={cn(
+            "flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+            showStats
+              ? "bg-primary/15 text-primary"
+              : "bg-background/50 text-muted-foreground hover:bg-accent hover:text-foreground",
+          )}
+        >
+          <Sigma className="h-3.5 w-3.5" aria-hidden="true" />
+          {tr.sqlTable.stats}
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowChart((v) => !v)}
+          aria-pressed={showChart}
+          aria-label={tr.sqlTable.toggleChart}
+          className={cn(
+            "flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+            showChart
+              ? "bg-primary/15 text-primary"
+              : "bg-background/50 text-muted-foreground hover:bg-accent hover:text-foreground",
+          )}
+        >
+          <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" />
+          {tr.sqlTable.chart}
         </button>
         <button
           type="button"
           onClick={exportCsv}
-          aria-label="Export results as CSV"
+          aria-label={tr.sqlTable.exportCsvLabel}
           className="flex h-8 items-center gap-1.5 rounded-lg bg-primary/15 px-2.5 text-xs font-medium text-primary transition hover:bg-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
         >
           <Download className="h-3.5 w-3.5" aria-hidden="true" />
-          Export CSV
+          {tr.sqlTable.exportCsv}
         </button>
       </div>
+
+      {showStats && <SqlSummaryStats columns={data.columns} rows={sorted} />}
+      {showChart && <SqlChartPanel columns={data.columns} rows={sorted} />}
 
       {/* Table */}
       {isVirtualized ? (
         <div
           ref={scrollRef}
           role="region"
-          aria-label="Scrollable results"
+          aria-label={tr.sqlTable.scrollableResults}
           tabIndex={-1}
           className="overflow-auto"
           style={{ maxHeight: virtualHeight }}
@@ -382,12 +427,9 @@ export function SqlResultsTable({
             aria-colcount={data.columns.length}
           >
             <caption className="sr-only">
-              SQL results table with {sorted.length} rows and {data.columns.length} columns.
-              Virtualized. Use arrow keys, PageUp/PageDown, Home/End to move; Enter opens details.
+              {tr.sqlTable.captionVirtual(sorted.length, data.columns.length)}
             </caption>
-            <thead className="sticky top-0 z-10 bg-background/80 backdrop-blur">
-              {headerRow}
-            </thead>
+            <thead className="sticky top-0 z-10 bg-background/80 backdrop-blur">{headerRow}</thead>
             <tbody
               style={{
                 display: "block",
@@ -406,7 +448,7 @@ export function SqlResultsTable({
                     role="button"
                     tabIndex={0}
                     aria-rowindex={v.index + 1}
-                    aria-label={`View details for row ${v.index + 1}`}
+                    aria-label={tr.sqlTable.viewRowDetails(v.index + 1)}
                     onClick={() => openRow(v.index)}
                     onFocus={() => setFocusedRow(v.index)}
                     onKeyDown={(e) => onRowKeyDown(e, v.index, v.index)}
@@ -422,10 +464,10 @@ export function SqlResultsTable({
                     }}
                     className={cn(
                       "cursor-pointer transition hover:bg-primary/5 focus-visible:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60",
-                      isFocused && "bg-primary/5"
+                      isFocused && "bg-primary/5",
                     )}
                   >
-                    {renderCells(r)}
+                    {renderCells(r, v.index)}
                   </tr>
                 );
               })}
@@ -442,18 +484,17 @@ export function SqlResultsTable({
             aria-colcount={data.columns.length}
           >
             <caption className="sr-only">
-              SQL results table with {sorted.length} rows and {data.columns.length} columns. Use
-              arrow keys to move between rows. Press Enter to view full row details.
+              {tr.sqlTable.caption(sorted.length, data.columns.length)}
             </caption>
             <thead>{headerRow}</thead>
             <tbody>
               {pageRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={data.columns.length}
+                    colSpan={data.columns.length + 1}
                     className="px-3 py-8 text-center text-xs text-muted-foreground"
                   >
-                    No matching rows
+                    {tr.sqlTable.noMatchingRows}
                   </td>
                 </tr>
               ) : (
@@ -467,12 +508,12 @@ export function SqlResultsTable({
                       }}
                       role="button"
                       tabIndex={0}
-                      aria-label={`View details for row ${absIdx + 1}`}
+                      aria-label={tr.sqlTable.viewRowDetails(absIdx + 1)}
                       onClick={() => openRow(absIdx)}
                       onKeyDown={(e) => onRowKeyDown(e, i, absIdx)}
                       className="cursor-pointer transition hover:bg-primary/5 focus-visible:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60"
                     >
-                      {renderCells(r)}
+                      {renderCells(r, absIdx)}
                     </tr>
                   );
                 })
@@ -487,38 +528,38 @@ export function SqlResultsTable({
         <div className="flex items-center justify-between gap-2 border-t border-border/60 px-3 py-2 text-[11px] text-muted-foreground">
           <div>
             <span className="font-medium text-foreground">{sorted.length.toLocaleString()}</span>{" "}
-            rows · scroll to load more
+            {tr.sqlTable.scrollToLoadMore}
           </div>
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
-            Virtualized rendering
+            {tr.sqlTable.virtualizedRendering}
           </div>
         </div>
       ) : (
         <nav
-          aria-label="Table pagination"
+          aria-label={tr.sqlTable.pagination}
           className="flex items-center justify-between gap-2 border-t border-border/60 px-3 py-2 text-[11px] text-muted-foreground"
         >
           <div>
-            Showing{" "}
+            {tr.sqlTable.showing}{" "}
             <span className="font-medium text-foreground">
-              {sorted.length === 0 ? 0 : (safePage - 1) * pageSize + 1}
-              –{Math.min(safePage * pageSize, sorted.length)}
+              {sorted.length === 0 ? 0 : (safePage - 1) * pageSize + 1}–
+              {Math.min(safePage * pageSize, sorted.length)}
             </span>{" "}
-            of <span className="font-medium text-foreground">{sorted.length}</span>
+            {tr.sqlTable.of} <span className="font-medium text-foreground">{sorted.length}</span>
           </div>
           <div className="flex items-center gap-1">
             <button
               type="button"
               disabled={safePage <= 1}
               aria-disabled={safePage <= 1}
-              aria-label="Previous page"
+              aria-label={tr.sqlTable.previousPage}
               onClick={goPrev}
               className="grid h-7 w-7 place-items-center rounded-md border border-border bg-background/50 text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
             <div className="px-2 text-foreground" aria-live="polite">
-              <span className="sr-only">Page </span>
+              <span className="sr-only">{tr.sqlTable.page} </span>
               {safePage}
               <span aria-hidden="true"> / </span>
               <span className="sr-only"> of </span>
@@ -528,7 +569,7 @@ export function SqlResultsTable({
               type="button"
               disabled={safePage >= totalPages}
               aria-disabled={safePage >= totalPages}
-              aria-label="Next page"
+              aria-label={tr.sqlTable.nextPage}
               onClick={goNext}
               className="grid h-7 w-7 place-items-center rounded-md border border-border bg-background/50 text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-40"
             >

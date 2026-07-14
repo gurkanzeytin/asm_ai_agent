@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import type { Conversation } from "./types";
 import { Input } from "@/components/ui/input";
 import { MedAgentLogo } from "./MedAgentLogo";
+import { tr } from "@/locales/tr";
 
 interface Props {
   conversations: Conversation[];
@@ -40,9 +41,7 @@ export function Sidebar({
 }: Props) {
   const [query, setQuery] = useState("");
 
-  const filtered = conversations.filter((c) =>
-    c.title.toLowerCase().includes(query.toLowerCase())
-  );
+  const filtered = conversations.filter((c) => c.title.toLowerCase().includes(query.toLowerCase()));
   const favorites = filtered.filter((c) => c.favorite);
   const recents = filtered.filter((c) => !c.favorite);
 
@@ -67,7 +66,7 @@ export function Sidebar({
             >
               <div className="truncate text-sm font-semibold">ASM AI Agent</div>
               <div className="truncate text-[11px] text-muted-foreground">
-                Healthcare Intelligence
+                {tr.sidebar.appTagline}
               </div>
             </motion.div>
           )}
@@ -80,11 +79,11 @@ export function Sidebar({
           onClick={onNew}
           className={cn(
             "flex w-full items-center gap-2 rounded-xl bg-primary/10 px-3 py-2.5 text-sm font-medium text-primary transition-all hover:bg-primary/20 hover:shadow-[var(--shadow-glow)]",
-            collapsed && "justify-center px-0"
+            collapsed && "justify-center px-0",
           )}
         >
           <Plus className="h-4 w-4 shrink-0" />
-          {!collapsed && <span>New chat</span>}
+          {!collapsed && <span>{tr.sidebar.newChat}</span>}
         </button>
       </div>
 
@@ -96,7 +95,7 @@ export function Sidebar({
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search conversations"
+              placeholder={tr.sidebar.searchConversations}
               className="h-9 rounded-lg border-border bg-background/40 pl-9 text-sm placeholder:text-muted-foreground/70"
             />
           </div>
@@ -106,7 +105,7 @@ export function Sidebar({
       {/* Lists */}
       <div className="mt-3 flex-1 overflow-y-auto px-2 pb-2">
         {!collapsed && favorites.length > 0 && (
-          <Section title="Favorites">
+          <Section title={tr.sidebar.favorites}>
             {favorites.map((c) => (
               <ConvItem
                 key={c.id}
@@ -120,9 +119,11 @@ export function Sidebar({
           </Section>
         )}
         {!collapsed && (
-          <Section title="Recent">
+          <Section title={tr.sidebar.recent}>
             {recents.length === 0 && (
-              <div className="px-3 py-2 text-xs text-muted-foreground">No conversations yet</div>
+              <div className="px-3 py-2 text-xs text-muted-foreground">
+                {tr.sidebar.noConversations}
+              </div>
             )}
             {recents.map((c) => (
               <ConvItem
@@ -143,7 +144,7 @@ export function Sidebar({
               onClick={() => onSelect(c.id)}
               className={cn(
                 "mx-auto my-1 grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-accent hover:text-foreground",
-                c.id === activeId && "bg-primary/15 text-primary"
+                c.id === activeId && "bg-primary/15 text-primary",
               )}
               title={c.title}
             >
@@ -158,35 +159,19 @@ export function Sidebar({
           onClick={onOpenSettings}
           className={cn(
             "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-muted-foreground transition hover:bg-accent hover:text-foreground",
-            collapsed && "justify-center"
+            collapsed && "justify-center",
           )}
         >
           <Settings className="h-4 w-4 shrink-0" />
-          {!collapsed && <span>Settings</span>}
+          {!collapsed && <span>{tr.common.settings}</span>}
         </button>
-        <div
-          className={cn(
-            "mt-2 flex items-center gap-2 rounded-lg px-2 py-2",
-            collapsed && "justify-center"
-          )}
-        >
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-primary to-cyan text-xs font-semibold text-primary-foreground">
-            DR
-          </div>
-          {!collapsed && (
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium">Dr. Rania Adel</div>
-              <div className="truncate text-[11px] text-muted-foreground">Administrator</div>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Collapse toggle */}
       <button
         onClick={onToggleCollapse}
         className="absolute -right-3 top-6 z-30 grid h-6 w-6 place-items-center rounded-full border border-border bg-card text-muted-foreground shadow-md transition hover:text-foreground"
-        aria-label="Toggle sidebar"
+        aria-label={tr.sidebar.toggleSidebar}
       >
         {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
       </button>
@@ -224,7 +209,7 @@ function ConvItem({
         "group relative flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition cursor-pointer",
         active
           ? "bg-primary/15 text-foreground"
-          : "text-muted-foreground hover:bg-accent hover:text-foreground"
+          : "text-muted-foreground hover:bg-accent hover:text-foreground",
       )}
       onClick={() => onSelect(conv.id)}
     >
@@ -244,7 +229,7 @@ function ConvItem({
           <Star
             className={cn(
               "h-3 w-3",
-              conv.favorite ? "fill-warning text-warning" : "text-muted-foreground"
+              conv.favorite ? "fill-warning text-warning" : "text-muted-foreground",
             )}
           />
         </button>

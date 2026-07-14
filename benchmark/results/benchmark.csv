@@ -1,0 +1,61 @@
+﻿model,question_id,category,question,repeat_index,outcome,reason,generated_sql,execution_success,rows_returned,analytics_generated,insight_generated,report_generated,total_ms,sql_generation_ms,analytics_ms,insight_ms,report_ms,llm_calls,llm_timeouts,retry_count,prompt_tokens,completion_tokens,finish_reasons,errors,exception
+qwen3:8b,12,count,Kaç doktor var?,0,SUCCESS,ok,SELECT COUNT(*) AS doktor_sayisi FROM doktorlar;,True,1,True,True,True,5355.27450000518,1459.6163999958662,1.437300001271069,0.06079999729990959,0.3922000032616779,1,0,0,701,15,stop,,
+qwen3:8b,13,count,Toplam hasta sayısı nedir?,0,SUCCESS,ok,SELECT COUNT(*) AS toplam_hasta_sayisi FROM hastalar;,True,1,True,True,True,1851.1194000020623,1337.4118999927305,0.14649999502580613,0.046200002543628216,0.17240000306628644,1,0,0,693,17,stop,,
+qwen3:8b,14,count,Kaç bölüm var?,0,SUCCESS,ok,SELECT COUNT(*) FROM bolumler;,True,1,True,True,True,1547.351199988043,1030.2978999970946,0.12260000221431255,0.038300000596791506,0.0788000033935532,1,0,0,580,9,stop,,
+qwen3:8b,15,count,Bu ay kaç randevu alındı?,0,SUCCESS,ok,"SELECT COUNT(*) AS toplam_randevu
+FROM randevular
+WHERE randevu_tarihi BETWEEN '2026-07-01' AND '2026-07-31';",True,1,True,True,True,3764.9593999958597,3210.4005000001052,0.1728999923216179,0.03979999746661633,0.11589999485295266,1,0,0,738,50,stop,,
+qwen3:8b,16,count,Kardiyoloji bölümünde kaç doktor çalışıyor?,0,SUCCESS,ok,SELECT COUNT(DISTINCT doktorlar.id) AS doktor_sayisi FROM doktorlar JOIN bolumler ON doktorlar.bolum_id = bolumler.id WHERE bolumler.bolum_adi = 'kardiyoloji' COLLATE NOCASE;,True,1,True,True,True,4042.0438000001013,3550.4613000084646,0.145800004247576,0.037999998312443495,0.14069999451749027,1,0,0,650,56,stop,,
+qwen3:8b,17,count,Kaç oda var?,0,SUCCESS,ok,SELECT COUNT(*) AS oda_sayisi FROM odalar;,True,1,True,True,True,1556.066600009217,1080.0293999927817,0.09870000940281898,0.0320999970426783,0.0658999924780801,1,0,0,694,14,stop,,
+qwen3:8b,18,comparison,Kardiyoloji ile Psikiyatri'yi karşılaştır.,0,SUCCESS,ok,"SELECT 
+  bolumler.bolum_adi AS bolum_adi, 
+  COUNT(DISTINCT randevular.id) AS randevu_sayisi, 
+  COUNT(DISTINCT doktorlar.id) AS doktor_sayisi, 
+  COUNT(DISTINCT odalar.id) AS oda_sayisi
+FROM 
+  bolumler
+LEFT JOIN 
+  randevular ON bolumler.id = randevular.bolum_id
+LEFT JOIN 
+  doktorlar ON bolumler.id = doktorlar.bolum_id
+LEFT JOIN 
+  odalar ON bolumler.id = odalar.bolum_id
+WHERE 
+  bolumler.bolum_adi IN ('Kardiyoloji', 'Psikiyatri')
+GROUP BY 
+  bolumler.bolum_adi
+ORDER BY 
+  bolumler.bolum_adi;",True,2,True,True,True,21527.42440000293,12467.369400008465,0.22119999630376697,8577.012599998852,0.179000009666197,2,0,0,1051,305,stop|stop,,
+qwen3:8b,19,comparison,Dermatoloji ile Kardiyoloji bölümlerinin randevu sayılarını kıyasla.,0,PARTIAL,no_results,"SELECT bolum_adi, COUNT(DISTINCT randevular.id) AS randevu_sayisi
+FROM randevular
+JOIN bolumler ON randevular.bolum_id = bolumler.id
+WHERE bolum_adi IN ('dermatoloji', 'kardiyoloji')
+GROUP BY bolum_adi
+ORDER BY bolum_adi;",True,0,True,True,True,6024.368300000788,5532.1369000012055,0.10430000838823617,0.027000001864507794,0.1720000000204891,1,0,0,695,79,stop,,
+qwen3:8b,20,comparison,Hangi bölüm daha yoğun: Kardiyoloji mi Psikiyatri mi?,0,SUCCESS,ok,"SELECT bolumler.bolum_adi, COUNT(*) AS randevu_sayisi
+FROM randevular
+JOIN bolumler ON randevular.bolum_id = bolumler.id
+WHERE bolumler.bolum_adi IN ('Kardiyoloji', 'Psikiyatri')
+GROUP BY bolumler.bolum_adi
+ORDER BY randevu_sayisi DESC;",True,2,True,True,True,15796.656499995152,5795.257000005222,0.14279999595601112,9480.08409999602,0.16229999891947955,2,0,0,1121,225,stop|stop,,
+qwen3:8b,21,comparison,Bu ay ile geçen ayın randevu sayılarını karşılaştır.,0,SUCCESS,ok,"SELECT 
+  strftime('%Y-%m', randevu_tarihi) AS ay, 
+  COUNT(DISTINCT id) AS randevu_sayisi
+FROM 
+  randevular
+WHERE 
+  randevu_tarihi BETWEEN '2026-07-01' AND '2026-07-31'
+GROUP BY 
+  ay
+ORDER BY 
+  ay;",True,1,True,True,True,7374.691700009862,6875.832000005175,0.17810000281315297,0.03640000068116933,0.12679999053943902,1,0,0,744,90,stop,,
+qwen3:8b,22,comparison,Bölümlerin doktor sayılarını karşılaştır.,0,SUCCESS,ok,"SELECT bolumler.bolum_adi, COUNT(doktorlar.id) AS doktor_sayisi
+FROM bolumler
+LEFT JOIN doktorlar ON bolumler.id = doktorlar.bolum_id
+GROUP BY bolumler.id, bolumler.bolum_adi
+ORDER BY bolumler.bolum_adi;",True,12,True,True,True,18433.600799995475,5078.606499999296,0.15970000822562724,12865.53080000158,0.11760000779759139,2,0,0,1320,258,stop|stop,,
+qwen3:8b,45,ambiguous,En iyi doktor kim?,0,SUCCESS,ok,,False,0,False,False,True,4.24179999390617,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,46,ambiguous,En başarılı bölüm hangisi?,0,SUCCESS,ok,,False,0,False,False,True,3.030599997146055,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,47,ambiguous,En verimli doktoru söyle.,0,SUCCESS,ok,,False,0,False,False,True,2.7823999989777803,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,48,ambiguous,Durum nasıl?,0,SUCCESS,ok,SELECT durum FROM randevular;,True,5364,True,True,True,1888.3229999919422,1390.1637999952072,0.644800005829893,0.029799994081258774,1.3540999934775755,1,0,0,694,9,stop,,
+qwen3:8b,49,ambiguous,En kötü performans kimde?,0,SUCCESS,ok,,False,0,False,False,True,3.023800003575161,0.0,0.0,0.0,0.0,0,0,0,0,0,,,

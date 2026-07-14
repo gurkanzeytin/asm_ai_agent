@@ -1,135 +1,110 @@
-"""
-benchmark.py — Benchmark comparison between Ollama and Gemini providers.
+"""PERF-001 — Automated LLM benchmark CLI.
 
-Runs the analytical question:
-    "En çok randevusu olan doktor kim?"
+Runs the benchmark dataset (benchmark/questions.json) against one or more
+Ollama models through the full production workflow and generates:
 
-Compares:
-- SQL generation latency
-- report latency
-- completion tokens
-- finish reason
-- raw SQL
-- parsed SQL
-- final SQL executed
+    benchmark/results/benchmark_summary.md
+    benchmark/results/benchmark.csv
+    benchmark/results/benchmark.json
+    benchmark/charts/*.png
+
+Usage:
+    python benchmark.py --model qwen3:8b
+    python benchmark.py --all-models --repeat 3
+    python benchmark.py --model qwen3:8b --limit 10 --output benchmark/results
+
+The tool never modifies the production application; it wires its own pipeline
+per model via dependency injection (backend/tools/benchmark/).
 """
+
+import argparse
 import asyncio
 import logging
 import os
 import sys
 import time
-from typing import Any
+from pathlib import Path
 
-# Change working directory to backend so database path resolves correctly
-if os.path.exists("backend"):
-    os.chdir("backend")
-sys.path.insert(0, ".")
+REPO_ROOT = Path(__file__).resolve().parent
+BACKEND_DIR = REPO_ROOT / "backend"
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+# The production app resolves its SQLite path relative to backend/.
+os.chdir(BACKEND_DIR)
+sys.path.insert(0, str(BACKEND_DIR))
 
-logger = logging.getLogger("benchmark")
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("tools.benchmark").setLevel(logging.INFO)
 
 
-async def run_benchmark_for_provider(provider_type: str) -> dict[str, Any]:
-    from app.core.config import settings
-    from app.llm.provider import LLMFactory
-    from app.bootstrap import AppContainer
-
-    # Temporarily set the active provider
-    settings.LLM_PROVIDER = provider_type
-    LLMFactory._instances.clear()
-
-    # Verify key if gemini
-    if provider_type == "gemini" and not settings.GEMINI_API_KEY:
-        return {"error": "GEMINI_API_KEY is not configured in backend/.env"}
-
-    logger.info(f"\n================ Running Benchmark for: {provider_type.upper()} ================")
-
-    # Initialize a new container to resolve dependencies with the updated LLM provider
-    container = AppContainer()
-    
-    # Check health/connectivity first
-    is_healthy = await container.llm_provider.health_check()
-    if not is_healthy:
-        return {"error": f"Provider {provider_type} is not healthy or unreachable."}
-
-    # Benchmark timings
-    t0 = time.perf_counter()
-    # Invoke reporting service directly
-    result = await container.reporting_service.run_workflow("En çok randevusu olan doktor kim?")
-    total_elapsed = time.perf_counter() - t0
-
-    # Extract metrics from WorkflowResult
-    if result.errors:
-        return {"error": f"Workflow failed to complete. Errors: {result.errors}"}
-
-    # Find the execution nodes for metrics:
-    # Since we mapped them, generated_sql and generated_report are returned in result.
-    generated_sql_sql = result.generated_sql
-    # Wait, in WorkflowResult, generated_sql is just a string, and generated_report is a GeneratedReport DTO.
-    # But wait, how do we get the latency/tokens for SQL generation?
-    # Let's inspect ReportingService timings mapping.
-    # In compile_report, the WorkflowResult.metrics holds:
-    # analyze_intent_ms, retrieve_context_ms, generate_sql_ms, validate_sql_ms, execute_sql_ms, generate_report_ms, total_ms, llm_total_ms
-    metrics = result.metrics
-
-    return {
-        "provider": provider_type,
-        "total_latency_s": total_elapsed,
-        "sql_latency_ms": metrics.generate_sql_ms,
-        "report_latency_ms": metrics.generate_report_ms,
-        "completion_tokens": result.generated_report.completion_tokens if result.generated_report else None,
-        "finish_reason": getattr(result.generated_report, "finish_reason", "N/A"),
-        "final_sql": result.generated_sql,
-        "report": result.generated_report.markdown if result.generated_report else None,
-    }
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="ASM AI Agent SQL-generation LLM benchmark")
+    parser.add_argument("--model", action="append", default=None,
+                        help="Model to benchmark (repeatable). Example: --model qwen3:8b")
+    parser.add_argument("--all-models", action="store_true",
+                        help="Benchmark every model in the default candidate list")
+    parser.add_argument("--output", default=None,
+                        help="Results directory (default: benchmark/results)")
+    parser.add_argument("--repeat", type=int, default=1, help="Repetitions per question")
+    parser.add_argument("--limit", type=int, default=None, help="Limit number of questions")
+    parser.add_argument("--categories", default=None,
+                        help="Comma-separated category filter (e.g. trend,count)")
+    return parser.parse_args(argv)
 
 
-async def main() -> None:
-    results = {}
-    
-    # 1. Run Ollama
-    try:
-        results["ollama"] = await run_benchmark_for_provider("ollama")
-    except Exception as e:
-        results["ollama"] = {"error": f"Failed with exception: {e}"}
+async def main_async(args: argparse.Namespace) -> int:
+    from tools.benchmark.config import DEFAULT_MODELS, BenchmarkConfig
+    from tools.benchmark.charts import generate_charts
+    from tools.benchmark.report import (
+        build_markdown, summarize_all, write_csv, write_json, write_markdown,
+    )
+    from tools.benchmark.runner import run_benchmark
 
-    # 2. Run Gemini
-    try:
-        results["gemini"] = await run_benchmark_for_provider("gemini")
-    except Exception as e:
-        results["gemini"] = {"error": f"Failed with exception: {e}"}
+    if args.model:
+        models = args.model
+    elif args.all_models:
+        models = list(DEFAULT_MODELS)
+    else:
+        models = list(DEFAULT_MODELS)
+        print("No --model given; defaulting to --all-models candidate list.")
 
-    # Print comparison summary table
-    print("\n\n" + "=" * 80)
-    print("                    BENCHMARK COMPARISON SUMMARY")
-    print("=" * 80)
-    print(f"{'Metric':<25} | {'Ollama':<25} | {'Gemini':<25}")
-    print("-" * 80)
+    config = BenchmarkConfig(
+        models=models,
+        repeat=max(1, args.repeat),
+        limit=args.limit,
+        categories=args.categories.split(",") if args.categories else None,
+    )
+    if args.output:
+        config.results_dir = (REPO_ROOT / args.output).resolve() \
+            if not Path(args.output).is_absolute() else Path(args.output)
 
-    def display_metric(name: str, key: str) -> None:
-        val_o = results["ollama"].get(key, "N/A") if "error" not in results["ollama"] else "ERROR"
-        val_g = results["gemini"].get(key, "N/A") if "error" not in results["gemini"] else "ERROR"
-        
-        # If there's an error, print the error details
-        if key == "error":
-            val_o = results["ollama"].get("error", "None")
-            val_g = results["gemini"].get("error", "None")
-            
-        print(f"{name:<25} | {str(val_o):<25} | {str(val_g):<25}")
+    started = time.perf_counter()
+    runs, skipped = await run_benchmark(config)
+    duration_s = time.perf_counter() - started
 
-    display_metric("Errors / Status", "error")
-    display_metric("Total Latency (s)", "total_latency_s")
-    display_metric("SQL Latency (ms)", "sql_latency_ms")
-    display_metric("Report Latency (ms)", "report_latency_ms")
-    display_metric("Completion Tokens", "completion_tokens")
-    display_metric("Finish Reason", "finish_reason")
-    display_metric("Final SQL Executed", "final_sql")
-    print("=" * 80)
+    summaries = summarize_all(runs)
+    results_dir = config.results_dir
+    write_json(runs, summaries, results_dir / "benchmark.json")
+    write_csv(runs, results_dir / "benchmark.csv")
+    charts = generate_charts(runs, summaries, config.charts_dir)
+    markdown = build_markdown(summaries, skipped, duration_s)
+    write_markdown(markdown, results_dir / "benchmark_summary.md")
+
+    fastest = min(summaries, key=lambda s: s.avg_latency_ms)
+    most_accurate = max(summaries, key=lambda s: s.success_rate)
+    print("\n================ BENCHMARK SUMMARY ================")
+    print(f"Total duration : {duration_s:.0f}s ({len(runs)} runs)")
+    print(f"Fastest model  : {fastest.model} ({fastest.avg_latency_ms / 1000:.1f}s avg)")
+    print(f"Highest accuracy: {most_accurate.model} ({most_accurate.success_rate}%)")
+    print(f"Best overall   : {summaries[0].model} (score {summaries[0].overall_score:.3f})")
+    print(f"Results        : {results_dir}")
+    print(f"Charts         : {len(charts)} PNGs in {config.charts_dir}")
+    print("===================================================")
+    return 0
+
+
+def main() -> int:
+    return asyncio.run(main_async(parse_args()))
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    raise SystemExit(main())

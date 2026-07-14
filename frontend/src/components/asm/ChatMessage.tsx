@@ -1,11 +1,13 @@
 import { motion } from "motion/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Sparkles, User, Copy, Check } from "lucide-react";
+import { User, Copy, Check } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { Message } from "./types";
 import { SqlResultsTable } from "./SqlResultsTable";
+import { tr } from "@/locales/tr";
+import { MedAgentLogo } from "./MedAgentLogo";
 
 export function ChatMessage({ message }: { message: Message }) {
   const isUser = message.role === "user";
@@ -26,22 +28,34 @@ export function ChatMessage({ message }: { message: Message }) {
     >
       <div
         className={cn(
-          "grid h-8 w-8 shrink-0 place-items-center rounded-lg",
+          "grid h-8 w-8 shrink-0 place-items-center",
           isUser
-            ? "bg-primary/20 text-primary"
-            : "bg-gradient-to-br from-primary to-cyan text-primary-foreground shadow-[var(--shadow-glow)]"
+            ? "rounded-lg bg-primary/20 text-primary"
+            : "rounded-full border border-cyan/25 bg-primary/10 shadow-[0_0_18px_rgba(14,165,233,0.12)]",
         )}
       >
-        {isUser ? <User className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+        {isUser ? (
+          <User className="h-4 w-4" />
+        ) : (
+          <span aria-hidden="true">
+            <MedAgentLogo size={23} noIntro className="[&_svg]:!block" />
+          </span>
+        )}
       </div>
 
-      <div className={cn("flex min-w-0 flex-col gap-1.5", message.sqlResult ? "max-w-full flex-1" : "max-w-[80%]", isUser && "items-end")}>
+      <div
+        className={cn(
+          "flex min-w-0 flex-col gap-1.5",
+          message.sqlResult ? "max-w-full flex-1" : "max-w-[80%]",
+          isUser && "items-end",
+        )}
+      >
         <div
           className={cn(
             "rounded-2xl px-4 py-3 text-sm leading-relaxed",
             isUser
               ? "bg-primary text-primary-foreground rounded-tr-sm"
-              : "glass rounded-tl-sm text-foreground"
+              : "glass rounded-tl-sm text-foreground",
           )}
         >
           {isUser ? (
@@ -103,7 +117,9 @@ export function ChatMessage({ message }: { message: Message }) {
                     return <p className="my-1.5 first:mt-0 last:mb-0">{children}</p>;
                   },
                   h1: ({ children }) => <h1 className="mt-3 text-lg font-semibold">{children}</h1>,
-                  h2: ({ children }) => <h2 className="mt-3 text-base font-semibold">{children}</h2>,
+                  h2: ({ children }) => (
+                    <h2 className="mt-3 text-base font-semibold">{children}</h2>
+                  ),
                   h3: ({ children }) => <h3 className="mt-2 text-sm font-semibold">{children}</h3>,
                 }}
               >
@@ -124,7 +140,7 @@ export function ChatMessage({ message }: { message: Message }) {
               className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              {copied ? "Copied" : "Copy"}
+              {copied ? tr.common.copied : tr.common.copy}
             </button>
           </div>
         )}
@@ -140,14 +156,16 @@ export function TypingIndicator() {
       animate={{ opacity: 1, y: 0 }}
       className="flex gap-3"
     >
-      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary to-cyan shadow-[var(--shadow-glow)]">
-        <Sparkles className="h-4 w-4 text-primary-foreground" />
+      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-cyan/25 bg-primary/10 shadow-[0_0_18px_rgba(14,165,233,0.12)]">
+        <span aria-hidden="true">
+          <MedAgentLogo size={23} noIntro className="[&_svg]:!block" />
+        </span>
       </div>
       <div className="glass flex items-center gap-1.5 rounded-2xl rounded-tl-sm px-4 py-3.5">
         <span className="typing-dot h-1.5 w-1.5 rounded-full bg-primary" />
         <span className="typing-dot h-1.5 w-1.5 rounded-full bg-primary" />
         <span className="typing-dot h-1.5 w-1.5 rounded-full bg-primary" />
-        <span className="ml-2 text-xs text-muted-foreground">Thinking…</span>
+        <span className="ml-2 text-xs text-muted-foreground">{tr.chat.thinking}</span>
       </div>
     </motion.div>
   );

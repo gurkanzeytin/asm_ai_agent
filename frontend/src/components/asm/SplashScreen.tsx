@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from "motion/react";
 import { MedAgentLogo } from "./MedAgentLogo";
+import { tr } from "@/locales/tr";
 
 interface Props {
   visible: boolean;
@@ -23,7 +24,7 @@ export function SplashScreen({ visible, onFinish }: Props) {
             transition={{ delay: 0.6, duration: 0.5 }}
             className="mt-6 text-sm font-medium text-muted-foreground/80"
           >
-            Loading MedAgent Intelligence
+            {tr.splash.loading}
           </motion.p>
           <motion.div
             initial={{ scaleX: 0 }}

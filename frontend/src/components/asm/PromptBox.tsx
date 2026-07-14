@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Send, Paperclip, Mic, X, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { tr } from "@/locales/tr";
 
 interface Props {
   value: string;
@@ -37,25 +38,29 @@ export function PromptBox({ value, onChange, onSend, onStop, isGenerating }: Pro
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
           rows={1}
-          placeholder="Ask anything..."
+          placeholder={tr.chat.placeholder}
           className="max-h-[200px] w-full resize-none bg-transparent px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
         />
         <div className="flex items-center justify-between gap-2 px-1">
           <div className="flex items-center gap-1">
             <IconBtn
-              title="Upload file"
-              onClick={() => toast.info("File upload", { description: "Attach documents, images or PDFs." })}
+              title={tr.chat.uploadFile}
+              onClick={() =>
+                toast.info(tr.chat.uploadFile, { description: tr.chat.uploadFileDescription })
+              }
             >
               <Paperclip className="h-4 w-4" />
             </IconBtn>
             <IconBtn
-              title="Voice input"
-              onClick={() => toast.info("Voice input", { description: "Recording will start when microphone is enabled." })}
+              title={tr.chat.voiceInput}
+              onClick={() =>
+                toast.info(tr.chat.voiceInput, { description: tr.chat.voiceInputDescription })
+              }
             >
               <Mic className="h-4 w-4" />
             </IconBtn>
             {value && (
-              <IconBtn title="Clear" onClick={() => onChange("")}>
+              <IconBtn title={tr.common.clear} onClick={() => onChange("")}>
                 <X className="h-4 w-4" />
               </IconBtn>
             )}
@@ -65,11 +70,11 @@ export function PromptBox({ value, onChange, onSend, onStop, isGenerating }: Pro
               <kbd className="rounded border border-border bg-background/40 px-1.5 py-0.5 text-[10px]">
                 ↵
               </kbd>{" "}
-              send ·{" "}
+              {tr.common.send} ·{" "}
               <kbd className="rounded border border-border bg-background/40 px-1.5 py-0.5 text-[10px]">
                 ⇧↵
               </kbd>{" "}
-              new line
+              {tr.common.newLine}
             </span>
             {isGenerating ? (
               <button
@@ -77,7 +82,7 @@ export function PromptBox({ value, onChange, onSend, onStop, isGenerating }: Pro
                 className="flex h-9 items-center gap-1.5 rounded-xl bg-destructive/90 px-3 text-xs font-medium text-destructive-foreground transition hover:bg-destructive"
               >
                 <Square className="h-3 w-3 fill-current" />
-                Stop
+                {tr.common.stop}
               </button>
             ) : (
               <button
@@ -87,9 +92,9 @@ export function PromptBox({ value, onChange, onSend, onStop, isGenerating }: Pro
                   "grid h-9 w-9 place-items-center rounded-xl transition",
                   value.trim()
                     ? "bg-gradient-to-br from-primary to-cyan text-primary-foreground shadow-[var(--shadow-glow)] hover:opacity-90"
-                    : "bg-muted text-muted-foreground"
+                    : "bg-muted text-muted-foreground",
                 )}
-                aria-label="Send"
+                aria-label={tr.chat.sendLabel}
               >
                 <Send className="h-4 w-4" />
               </button>
@@ -97,9 +102,7 @@ export function PromptBox({ value, onChange, onSend, onStop, isGenerating }: Pro
           </div>
         </div>
       </div>
-      <p className="mt-2 text-center text-[11px] text-muted-foreground/70">
-        ASM AI can make mistakes. Verify important healthcare information.
-      </p>
+      <p className="mt-2 text-center text-[11px] text-muted-foreground/70">{tr.chat.warning}</p>
     </div>
   );
 }

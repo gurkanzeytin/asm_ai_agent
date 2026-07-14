@@ -1,28 +1,17 @@
 import { motion, AnimatePresence } from "motion/react";
-import {
-  Zap,
-  Clock,
-  Cpu,
-  FileText,
-  Database,
-  Wrench,
-  Brain,
-  ChevronRight,
-  X,
-} from "lucide-react";
+import { Clock, Database, Wrench, Brain, ChevronRight, X } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { tr } from "@/locales/tr";
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  tokens: number;
   responseMs: number;
-  model: string;
   isThinking: boolean;
 }
 
-export function InfoPanel({ open, onClose, tokens, responseMs, model, isThinking }: Props) {
+export function InfoPanel({ open, onClose, responseMs, isThinking }: Props) {
   return (
     <AnimatePresence>
       {open && (
@@ -34,49 +23,41 @@ export function InfoPanel({ open, onClose, tokens, responseMs, model, isThinking
           className="hidden h-full w-[340px] shrink-0 border-l border-border bg-sidebar/40 lg:block"
         >
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <div className="text-sm font-semibold">Details</div>
+            <div className="text-sm font-semibold">{tr.details.title}</div>
             <button
               onClick={onClose}
+              aria-label={tr.details.close}
               className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
           <div className="flex flex-col gap-3 overflow-y-auto p-4">
-            <Card title="Conversation">
-              <Row icon={Cpu} label="Model" value={model} />
-              <Row icon={Zap} label="Tokens used" value={tokens.toLocaleString()} />
-              <Row icon={Clock} label="Response time" value={`${(responseMs / 1000).toFixed(2)}s`} />
+            <Card title={tr.details.conversation}>
+              <Row
+                icon={Clock}
+                label={tr.details.responseTime}
+                value={`${(responseMs / 1000).toFixed(2)}s`}
+              />
             </Card>
 
-            <Card title="Agent status">
+            <Card title={tr.details.agentStatus}>
               <div className="flex items-center gap-2 text-sm">
                 <span
                   className={cn(
                     "h-2 w-2 rounded-full",
-                    isThinking ? "bg-warning pulse-ring" : "bg-success"
+                    isThinking ? "bg-warning pulse-ring" : "bg-success",
                   )}
                 />
                 <span className="text-muted-foreground">
-                  {isThinking ? "Reasoning through query…" : "Idle — ready for next task"}
+                  {isThinking ? tr.details.thinking : tr.details.idle}
                 </span>
               </div>
             </Card>
 
-            <Expandable
-              icon={FileText}
-              title="Retrieved documents"
-              badge="3"
-              defaultOpen
-            >
-              <DocRow name="Q3-financial-report.pdf" score={0.94} />
-              <DocRow name="Patient-flow-guidelines.md" score={0.88} />
-              <DocRow name="Center-performance-2024.xlsx" score={0.81} />
-            </Expandable>
-
-            <Expandable icon={Database} title="SQL query">
+            <Expandable icon={Database} title={tr.details.sqlQuery}>
               <pre className="overflow-x-auto rounded-lg bg-background/60 p-3 text-[11px] leading-relaxed text-cyan">
-{`SELECT c.name, COUNT(v.id) AS visits
+                {`SELECT c.name, COUNT(v.id) AS visits
 FROM centers c
 LEFT JOIN visits v
   ON v.center_id = c.id
@@ -86,15 +67,14 @@ ORDER BY visits DESC;`}
               </pre>
             </Expandable>
 
-            <Expandable icon={Wrench} title="Tool calls" badge="2">
+            <Expandable icon={Wrench} title={tr.details.toolCalls} badge="2">
               <ToolRow name="query_database" status="success" ms={412} />
               <ToolRow name="format_table" status="success" ms={38} />
             </Expandable>
 
-            <Card title="Reasoning" icon={Brain}>
+            <Card title={tr.details.processSummary} icon={Brain}>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                Interpreted request, selected knowledge sources, generated SQL, validated results,
-                composed final answer.
+                {tr.details.processSummaryDescription}
               </p>
             </Card>
           </div>
@@ -191,31 +171,13 @@ function Expandable({
   );
 }
 
-function DocRow({ name, score }: { name: string; score: number }) {
-  return (
-    <div className="flex items-center gap-2 rounded-lg bg-background/40 px-3 py-2 text-xs">
-      <FileText className="h-3.5 w-3.5 shrink-0 text-primary" />
-      <span className="min-w-0 flex-1 truncate">{name}</span>
-      <span className="shrink-0 text-muted-foreground">{score.toFixed(2)}</span>
-    </div>
-  );
-}
-
-function ToolRow({
-  name,
-  status,
-  ms,
-}: {
-  name: string;
-  status: "success" | "error";
-  ms: number;
-}) {
+function ToolRow({ name, status, ms }: { name: string; status: "success" | "error"; ms: number }) {
   return (
     <div className="flex items-center gap-2 rounded-lg bg-background/40 px-3 py-2 text-xs">
       <span
         className={cn(
           "h-1.5 w-1.5 rounded-full",
-          status === "success" ? "bg-success" : "bg-destructive"
+          status === "success" ? "bg-success" : "bg-destructive",
         )}
       />
       <span className="flex-1 font-mono text-[11px]">{name}</span>

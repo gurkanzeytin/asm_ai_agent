@@ -8,6 +8,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { toast } from "sonner";
+import { tr } from "@/locales/tr";
 
 type RowValue = string | number | null;
 
@@ -45,9 +46,9 @@ export function SqlRowDrawer({ open, onOpenChange, columns, row, rowIndex, total
       await navigator.clipboard.writeText(value);
       setCopiedKey(key);
       setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1200);
-      toast.success("Copied", { description: key });
+      toast.success(tr.common.copied, { description: key });
     } catch {
-      toast.error("Copy failed");
+      toast.error(tr.common.copyFailed);
     }
   };
 
@@ -65,26 +66,26 @@ export function SqlRowDrawer({ open, onOpenChange, columns, row, rowIndex, total
       >
         <SheetHeader className="space-y-1">
           <SheetTitle className="text-base font-semibold">
-            Row {rowIndex != null ? rowIndex + 1 : ""} details
+            {tr.sqlDrawer.rowDetails(rowIndex != null ? rowIndex + 1 : "")}
           </SheetTitle>
           <SheetDescription>
             {rowIndex != null
-              ? `Viewing row ${rowIndex + 1} of ${totalRows}. Press Escape to close.`
-              : "No row selected."}
+              ? tr.sqlDrawer.viewingRow(rowIndex + 1, totalRows)
+              : tr.sqlDrawer.noRowSelected}
           </SheetDescription>
           <div className="pt-2">
             <button
               type="button"
               onClick={copyRowJson}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background/50 px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-              aria-label="Copy entire row as JSON"
+              aria-label={tr.sqlDrawer.copyRowJson}
             >
               {copiedKey === "__row__" ? (
                 <Check className="h-3.5 w-3.5 text-success" />
               ) : (
                 <ClipboardList className="h-3.5 w-3.5" />
               )}
-              Copy row as JSON
+              {tr.sqlDrawer.copyRowJson}
             </button>
           </div>
         </SheetHeader>
@@ -94,10 +95,7 @@ export function SqlRowDrawer({ open, onOpenChange, columns, row, rowIndex, total
             columns.map((col) => {
               const { display, isJson, isNull } = formatValue(row[col]);
               return (
-                <div
-                  key={col}
-                  className="rounded-xl border border-border/60 bg-background/40 p-3"
-                >
+                <div key={col} className="rounded-xl border border-border/60 bg-background/40 p-3">
                   <div className="mb-1.5 flex items-center justify-between gap-2">
                     <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                       {col}
@@ -105,7 +103,7 @@ export function SqlRowDrawer({ open, onOpenChange, columns, row, rowIndex, total
                     <button
                       type="button"
                       onClick={() => copy(col, display)}
-                      aria-label={`Copy value of ${col}`}
+                      aria-label={tr.sqlDrawer.copyValueOf(col)}
                       className="inline-flex items-center gap-1 rounded-md border border-border bg-background/50 px-2 py-1 text-[10.5px] font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                     >
                       {copiedKey === col ? (
@@ -113,7 +111,7 @@ export function SqlRowDrawer({ open, onOpenChange, columns, row, rowIndex, total
                       ) : (
                         <Copy className="h-3 w-3" />
                       )}
-                      Copy
+                      {tr.common.copy}
                     </button>
                   </div>
                   {isNull ? (

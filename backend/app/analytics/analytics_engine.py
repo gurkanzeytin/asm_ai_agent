@@ -49,7 +49,9 @@ class AnalyticsEngine:
         start_time = time.perf_counter()
 
         intents = self.intent_detector.detect(question)
-        metric_column, label_column, temporal_column = self._profile_columns(query_result)
+        metric_column, label_column, temporal_column = self._profile_columns(
+            query_result, question
+        )
         data_shape = self._classify_shape(query_result, metric_column, temporal_column)
 
         values = self._numeric_values(query_result, metric_column)
@@ -86,7 +88,7 @@ class AnalyticsEngine:
     # ── Result profiling ───────────────────────────────────────────────────────
 
     def _profile_columns(
-        self, query_result: QueryResult
+        self, query_result: QueryResult, question: str = ""
     ) -> tuple[str | None, str | None, str | None]:
         """Identifies the metric (numeric), label (categorical), and temporal columns."""
         numeric_columns: list[str] = []
@@ -107,16 +109,45 @@ class AnalyticsEngine:
             else:
                 label_columns.append(column)
 
-        # Aggregates ("COUNT(*) AS n") are conventionally the last column; id-like
-        # numeric columns are only used when nothing better exists.
+        # Aggregates ("COUNT(*) AS n") are conventionally the last column. Id-like
+        # numeric columns are never metrics: computing trends or rankings over
+        # entity identifiers produces meaningless analytics. When several metric
+        # columns exist, one whose name echoes the question's subject wins
+        # ("randevularını analiz et" -> toplam_randevu, not iptal_edildi).
         metric_candidates = [c for c in numeric_columns if not _ID_NAME_PATTERN.search(c)]
-        metric_column = (metric_candidates or numeric_columns or [None])[-1]
+        metric_column = self._question_preferred_column(question, metric_candidates) or (
+            (metric_candidates or [None])[-1]
+        )
         label_column = next(
             (c for c in label_columns if not _ID_NAME_PATTERN.search(c)),
             label_columns[0] if label_columns else None,
         )
         temporal_column = temporal_columns[0] if temporal_columns else None
         return metric_column, label_column, temporal_column
+
+    def _question_preferred_column(
+        self, question: str, candidates: list[str]
+    ) -> str | None:
+        """Picks the candidate column whose name shares a word stem with the question."""
+        if not question or len(candidates) < 2:
+            return None
+        folded_question = self.intent_detector._fold(question)
+        question_tokens = {
+            token for token in re.findall(r"[^\W_]+", folded_question) if len(token) >= 4
+        }
+        for column in candidates:
+            folded_column = self.intent_detector._fold(column)
+            column_tokens = {
+                token for token in re.findall(r"[^\W_]+", folded_column) if len(token) >= 4
+            }
+            if any(
+                question_token.startswith(column_token)
+                or column_token.startswith(question_token)
+                for column_token in column_tokens
+                for question_token in question_tokens
+            ):
+                return column
+        return None
 
     def _is_temporal(self, column: str, values: list[Any]) -> bool:
         if _TEMPORAL_NAME_PATTERN.search(column):

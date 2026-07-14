@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from app.application_models.generated_report import GeneratedReport
 from app.application_models.workflow_models import QueryResult
+from app.insights.models import InsightConfidence, InsightResult
 from app.llm.interfaces import ILLMProvider
 from app.reporting.report_classifier import ReportClassifier, ReportType
 from app.reporting.template_renderer import TemplateReportRenderer
@@ -32,14 +33,30 @@ class ReportService(IReportService):
         self.template_renderer = template_renderer or TemplateReportRenderer()
 
     async def generate_report(
-        self, question: str, sql: str, query_result: QueryResult, execution_id: str | None = None
+        self,
+        question: str,
+        sql: str,
+        query_result: QueryResult,
+        execution_id: str | None = None,
+        insights: InsightResult | None = None,
     ) -> GeneratedReport:
-        """Classifies results, renders templates first, and falls back to LLM analytics."""
+        """Classifies results, renders templates first, and falls back to LLM analytics.
+
+        Analytical reports reuse the Insight Engine narrative when one is available:
+        the insight LLM has already produced the executive summary, highlights, and
+        observations for the same analytics, so invoking a second LLM to re-derive
+        them from raw rows only duplicates work.
+        """
         logger.info("ReportService report generation sequence started.")
         start_time = time.perf_counter()
         try:
             query_result = self._normalize_query_result(query_result)
             report_type = self.classifier.classify(query_result, question=question, sql=sql)
+
+            if report_type == ReportType.ANALYTICAL and self._insights_usable(insights):
+                return self._render_insight_report(
+                    insights, query_result, execution_id, start_time
+                )
             template_result = self.template_renderer.render(report_type, query_result)
             if template_result is not None:
                 latency_ms = (time.perf_counter() - start_time) * 1000
@@ -71,7 +88,18 @@ class ReportService(IReportService):
                 question=question, sql=sql, query_result=query_result
             )
 
-            llm_response = await self.generator.generate(full_prompt, self.llm_provider)
+            try:
+                llm_response = await self.generator.generate(full_prompt, self.llm_provider)
+            except Exception as llm_error:
+                # The report is the last user-facing stage: an LLM failure (timeout,
+                # connection, parsing) must degrade to a deterministic template, never
+                # surface as a generic workflow error.
+                logger.warning(
+                    f"Report LLM generation failed; falling back to template table: {llm_error}"
+                )
+                return self._render_fallback_report(
+                    report_type, query_result, execution_id, start_time
+                )
 
             # Try to extract a title header from the generated markdown text
             title = None
@@ -127,6 +155,119 @@ class ReportService(IReportService):
         except Exception as e:
             logger.error(f"ReportService failed during report generation sequence: {e}")
             raise ReportServiceException(f"Failed during report generation sequence: {e}") from e
+
+    def _insights_usable(self, insights: InsightResult | None) -> bool:
+        """An insight narrative can replace the report LLM only when it carries evidence."""
+        return (
+            insights is not None
+            and insights.confidence != InsightConfidence.LOW
+            and bool(insights.summary)
+        )
+
+    def _render_insight_report(
+        self,
+        insights: InsightResult,
+        query_result: QueryResult,
+        execution_id: str | None,
+        start_time: float,
+    ) -> GeneratedReport:
+        """Assembles the analytical report from the existing insight narrative + data table."""
+        from app.core.config import settings
+
+        max_rows = getattr(settings, "REPORT_MAX_ROWS", 100)
+        capped = query_result
+        if len(query_result.rows) > max_rows:
+            capped = query_result.model_copy(update={"rows": query_result.rows[:max_rows]})
+        table_result = self.template_renderer.render(ReportType.TABLE, capped)
+
+        lines: list[str] = [f"# {insights.title}", ""]
+        lines += ["## Yönetici Özeti", insights.summary, ""]
+        if insights.highlights:
+            lines.append("## Öne Çıkanlar")
+            lines += [f"- {item}" for item in insights.highlights]
+            lines.append("")
+        if insights.observations:
+            lines.append("## Gözlemler")
+            lines += [f"- {item}" for item in insights.observations]
+            lines.append("")
+        if insights.considerations:
+            lines.append("## Dikkat Edilecekler")
+            lines += [f"- {item}" for item in insights.considerations]
+            lines.append("")
+        if table_result is not None:
+            lines.append("## Veri")
+            table_body = table_result.markdown.split("\n", 2)[-1].lstrip("\n")
+            lines.append(table_body)
+
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        self._log_report_telemetry(
+            report_type=ReportType.ANALYTICAL,
+            renderer="InsightReuse",
+            template_name="insight_narrative",
+            latency_ms=latency_ms,
+            llm_invoked=False,
+        )
+        return GeneratedReport(
+            title=insights.title,
+            summary=insights.summary,
+            markdown="\n".join(lines).strip(),
+            insights=None,
+            recommendations=None,
+            tables=None,
+            charts=None,
+            provider="insight_reuse",
+            model=insights.model,
+            latency_ms=latency_ms,
+            prompt_tokens=None,
+            completion_tokens=None,
+            generated_at=datetime.now(UTC),
+            execution_id=execution_id,
+        )
+
+    def _render_fallback_report(
+        self,
+        report_type: ReportType,
+        query_result: QueryResult,
+        execution_id: str | None,
+        start_time: float,
+    ) -> GeneratedReport:
+        """Renders a deterministic table report when the LLM path fails.
+
+        Rows are capped to REPORT_MAX_ROWS so an unaggregated result cannot
+        produce an unbounded markdown table.
+        """
+        from app.core.config import settings
+
+        max_rows = getattr(settings, "REPORT_MAX_ROWS", 100)
+        capped = query_result
+        if len(query_result.rows) > max_rows:
+            capped = query_result.model_copy(update={"rows": query_result.rows[:max_rows]})
+
+        template_result = self.template_renderer.render(ReportType.TABLE, capped)
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        self._log_report_telemetry(
+            report_type=report_type,
+            renderer="TemplateFallback",
+            template_name=template_result.template_name if template_result else "table",
+            latency_ms=latency_ms,
+            llm_invoked=True,
+        )
+        return GeneratedReport(
+            title=template_result.title if template_result else "Sorgu Sonucu",
+            summary=None,
+            markdown=template_result.markdown if template_result else "",
+            insights=None,
+            recommendations=None,
+            tables=None,
+            charts=None,
+            provider="template",
+            model="fallback_table",
+            latency_ms=latency_ms,
+            prompt_tokens=None,
+            completion_tokens=None,
+            generated_at=datetime.now(UTC),
+            execution_id=execution_id,
+        )
 
     def _normalize_query_result(self, query_result: QueryResult | list[dict]) -> QueryResult:
         if isinstance(query_result, QueryResult):

@@ -3,9 +3,6 @@ Summarize the SQL result as a concise markdown report.
 Question:
 {question}
 
-SQL:
-{query}
-
 Results:
 {results}
 

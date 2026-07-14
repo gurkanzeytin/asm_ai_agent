@@ -262,6 +262,16 @@
         "pattern": "en az hasta bakan",
         "replacement": "en az hastasi olan",
         "matched_synonym": "en az hasta bakan -> en az hastası olan"
+      },
+      {
+        "pattern": "ayi analiz et",
+        "replacement": "ayi randevulari analiz et",
+        "matched_synonym": "dönem analizi -> randevu analizi"
+      },
+      {
+        "pattern": "yili analiz et",
+        "replacement": "yili randevulari analiz et",
+        "matched_synonym": "dönem analizi -> randevu analizi"
       }
     ]
   },

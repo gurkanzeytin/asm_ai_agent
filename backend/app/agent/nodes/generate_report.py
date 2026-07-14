@@ -60,6 +60,8 @@ class GenerateReportNode(IAgentNode):
                 sql=state.generated_sql.sql,
                 query_result=state.query_result,
                 execution_id=state.workflow_id,
+                # Analytical reports reuse the insight narrative instead of a second LLM call.
+                insights=state.insights,
             )
 
             logger.info("GenerateReportNode execution completed successfully.")

@@ -3,6 +3,7 @@ from typing import Optional
 
 from app.application_models.generated_report import GeneratedReport
 from app.database_intelligence.models import DatabaseContext
+from app.insights.models import InsightResult
 from app.application_models.generated_sql import GeneratedSQL
 from app.application_models.workflow_models import QueryResult
 from app.services.exceptions import WorkflowServiceException
@@ -54,13 +55,18 @@ class WorkflowService(IWorkflowService):
 
 
     async def execute_report_generation(
-        self, question: str, sql: str, query_result: QueryResult, execution_id: Optional[str] = None
+        self,
+        question: str,
+        sql: str,
+        query_result: QueryResult,
+        execution_id: Optional[str] = None,
+        insights: Optional["InsightResult"] = None,
     ) -> GeneratedReport:
         """Coordinates narrative report generation delegation."""
         logger.info("WorkflowService execute_report_generation started.")
         try:
             report_dto = await self.report_service.generate_report(
-                question, sql, query_result, execution_id
+                question, sql, query_result, execution_id, insights=insights
             )
             logger.info("WorkflowService execute_report_generation completed successfully.")
             return report_dto

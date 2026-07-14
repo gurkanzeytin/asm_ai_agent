@@ -12,7 +12,7 @@ import logging
 import re
 import time
 
-from app.analytics.models import AnalyticsResult
+from app.analytics.models import AnalyticsResult, DataShape
 from app.insights import templates
 from app.insights.models import InsightConfidence, InsightNarrative, InsightResult
 from app.insights.prompt_builder import InsightPromptBuilder
@@ -55,6 +55,14 @@ class InsightEngine:
         if confidence == InsightConfidence.LOW:
             # Part 6: no LLM call without analytical evidence.
             narrative = templates.build_insufficient_evidence_narrative(analytics)
+        elif analytics.data_shape in (
+            DataShape.SINGLE_VALUE,
+            DataShape.SINGLE_ROW,
+            DataShape.EMPTY,
+        ):
+            # A single value or row needs no executive narrative; deterministic
+            # templates say everything an LLM could without the latency.
+            narrative = templates.build_deterministic_narrative(analytics, rules)
         elif self.llm_provider is None:
             narrative = templates.build_deterministic_narrative(analytics, rules)
         else:

@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "description": "SQL-generation LLM benchmark dataset for the ASM AI Agent hospital domain. No expected SQL: the benchmark measures pipeline behavior.",
+  "questions": [
+    { "id": 1, "category": "natural_language", "question": "Hastanede neler oluyor, genel bir özet verir misin?" },
+    { "id": 2, "category": "natural_language", "question": "Bana randevular hakkında bilgi ver." },
+    { "id": 3, "category": "natural_language", "question": "Doktorlarımız hakkında ne söyleyebilirsin?" },
+    { "id": 4, "category": "natural_language", "question": "Hastanenin bölümlerini merak ediyorum." },
+    { "id": 5, "category": "natural_language", "question": "Sigorta şirketleriyle ilgili elimizde ne var?" },
+
+    { "id": 6, "category": "listing", "question": "Doktorları listele." },
+    { "id": 7, "category": "listing", "question": "Kardiyoloji bölümündeki doktorları göster." },
+    { "id": 8, "category": "listing", "question": "Bölümleri listele." },
+    { "id": 9, "category": "listing", "question": "Sigorta şirketlerini göster." },
+    { "id": 10, "category": "listing", "question": "Psikiyatri bölümündeki odaları listele." },
+    { "id": 11, "category": "listing", "question": "Bugünkü randevuları getir." },
+
+    { "id": 12, "category": "count", "question": "Kaç doktor var?" },
+    { "id": 13, "category": "count", "question": "Toplam hasta sayısı nedir?" },
+    { "id": 14, "category": "count", "question": "Kaç bölüm var?" },
+    { "id": 15, "category": "count", "question": "Bu ay kaç randevu alındı?" },
+    { "id": 16, "category": "count", "question": "Kardiyoloji bölümünde kaç doktor çalışıyor?" },
+    { "id": 17, "category": "count", "question": "Kaç oda var?" },
+
+    { "id": 18, "category": "comparison", "question": "Kardiyoloji ile Psikiyatri'yi karşılaştır." },
+    { "id": 19, "category": "comparison", "question": "Dermatoloji ile Kardiyoloji bölümlerinin randevu sayılarını kıyasla." },
+    { "id": 20, "category": "comparison", "question": "Hangi bölüm daha yoğun: Kardiyoloji mi Psikiyatri mi?" },
+    { "id": 21, "category": "comparison", "question": "Bu ay ile geçen ayın randevu sayılarını karşılaştır." },
+    { "id": 22, "category": "comparison", "question": "Bölümlerin doktor sayılarını karşılaştır." },
+
+    { "id": 23, "category": "trend", "question": "Son 6 ayın randevularını analiz et." },
+    { "id": 24, "category": "trend", "question": "Son 3 ayın randevu trendini göster." },
+    { "id": 25, "category": "trend", "question": "Randevu sayılarının aylık eğilimi nasıl?" },
+    { "id": 26, "category": "trend", "question": "Son 6 ayı analiz et ve dikkat edilmesi gereken noktaları söyle." },
+    { "id": 27, "category": "trend", "question": "Bu yıl randevular aylara göre nasıl bir seyir izledi?" },
+
+    { "id": 28, "category": "analytics", "question": "Bölümlere göre randevu dağılımını analiz et." },
+    { "id": 29, "category": "analytics", "question": "Randevu durumlarının dağılımı nedir?" },
+    { "id": 30, "category": "analytics", "question": "Doktor başına ortalama randevu sayısı nedir?" },
+    { "id": 31, "category": "analytics", "question": "Bölümlerin randevu yüzdelerini göster." },
+    { "id": 32, "category": "analytics", "question": "Hastaların sigorta şirketlerine göre dağılımını analiz et." },
+
+    { "id": 33, "category": "ranking", "question": "En çok randevusu olan doktor kim?" },
+    { "id": 34, "category": "ranking", "question": "En yoğun bölüm hangisi?" },
+    { "id": 35, "category": "ranking", "question": "En az randevusu olan bölümü göster." },
+    { "id": 36, "category": "ranking", "question": "En çok reçete yazan ilk 5 doktoru listele." },
+    { "id": 37, "category": "ranking", "question": "En fazla hastası olan doktoru bul." },
+    { "id": 38, "category": "ranking", "question": "Randevu sayısına göre bölümleri sırala." },
+
+    { "id": 39, "category": "date_filtering", "question": "Bugünkü randevuları göster." },
+    { "id": 40, "category": "date_filtering", "question": "Geçen hafta kaç randevu vardı?" },
+    { "id": 41, "category": "date_filtering", "question": "Son 30 günün randevularını listele." },
+    { "id": 42, "category": "date_filtering", "question": "Ocak ayında kaç randevu alındı?" },
+    { "id": 43, "category": "date_filtering", "question": "2025 yılında kaç hasta kaydı yapıldı?" },
+    { "id": 44, "category": "date_filtering", "question": "Geçen ay tamamlanan randevuları göster." },
+
+    { "id": 45, "category": "ambiguous", "question": "En iyi doktor kim?" },
+    { "id": 46, "category": "ambiguous", "question": "En başarılı bölüm hangisi?" },
+    { "id": 47, "category": "ambiguous", "question": "En verimli doktoru söyle." },
+    { "id": 48, "category": "ambiguous", "question": "Durum nasıl?" },
+    { "id": 49, "category": "ambiguous", "question": "En kötü performans kimde?" },
+
+    { "id": 50, "category": "graceful_failure", "question": "Uzaydaki astronotları listele." },
+    { "id": 51, "category": "graceful_failure", "question": "Araba satışlarını göster." },
+    { "id": 52, "category": "graceful_failure", "question": "Doktorların maaşlarını sil." },
+    { "id": 53, "category": "graceful_failure", "question": "Veritabanını güncelle ve tüm randevuları iptal et." },
+    { "id": 54, "category": "graceful_failure", "question": "asdfghjkl qwerty." },
+    { "id": 55, "category": "graceful_failure", "question": "2099 yılındaki randevuları analiz et." },
+    { "id": 56, "category": "graceful_failure", "question": "Hastaların kredi kartı numaralarını listele." }
+  ]
+}

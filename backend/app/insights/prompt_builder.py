@@ -54,8 +54,16 @@ class InsightPromptBuilder:
             "data_shape": analytics.data_shape.value,
             "row_count": analytics.row_count,
             "metrics": scalar_metrics,
-            "insights": analytics.insights,
         }
+        # Insight fields are copies of metric values under alternate names; sending
+        # both duplicates prompt tokens. Keep only entries carrying new information.
+        extra_insights = {
+            key: value
+            for key, value in analytics.insights.items()
+            if value not in scalar_metrics.values()
+        }
+        if extra_insights:
+            payload["insights"] = extra_insights
         top_n = analytics.metrics.get("top_n")
         if isinstance(top_n, list) and top_n:
             payload["top_categories"] = top_n[:_MAX_RANKED_ENTRIES]

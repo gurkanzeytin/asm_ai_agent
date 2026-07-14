@@ -28,8 +28,7 @@ const HEX_PATH =
   "L 32.5 65 Q 32.5 56 40.5 51.5 Z";
 
 /** Letter M strokes + stethoscope stem */
-const M_PATH =
-  "M 72 140 L 72 92 L 100 126 L 128 92 L 128 140 M 100 126 L 100 148";
+const M_PATH = "M 72 140 L 72 92 L 100 126 L 128 92 L 128 140 M 100 126 L 100 148";
 
 export interface MedAgentLogoProps {
   /** Rendered size in px (width = height). Defaults to 180. */
@@ -127,121 +126,121 @@ export function MedAgentLogo({ size = 180, className, noIntro = false }: MedAgen
               : { duration: 8, repeat: Infinity, ease: "easeInOut", delay: idleDelay }
           }
         >
-        <defs>
-          <motion.linearGradient
-            id={gradId}
-            gradientUnits="objectBoundingBox"
-            spreadMethod="repeat"
-            x1={reduced ? 0 : x1}
-            y1={0}
-            x2={reduced ? 1 : x2}
-            y2={0.55}
+          <defs>
+            <motion.linearGradient
+              id={gradId}
+              gradientUnits="objectBoundingBox"
+              spreadMethod="repeat"
+              x1={reduced ? 0 : x1}
+              y1={0}
+              x2={reduced ? 1 : x2}
+              y2={0.55}
+            >
+              <stop offset="0" stopColor={BLUE} />
+              <stop offset="0.5" stopColor={CYAN} />
+              <stop offset="1" stopColor={BLUE} />
+            </motion.linearGradient>
+            <filter id={glowId} x="-80%" y="-80%" width="260%" height="260%">
+              <feGaussianBlur stdDeviation="5.5" />
+            </filter>
+          </defs>
+
+          {/* Hexagon speech bubble */}
+          <g id="hexagon">
+            <path
+              d={HEX_PATH}
+              stroke={`url(#${gradId})`}
+              strokeWidth={9}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          </g>
+
+          {/* Medical cross — heartbeat every ~3.6s (calmer) */}
+          <motion.g
+            id="medical-cross"
+            style={{ transformBox: "fill-box", transformOrigin: "center", willChange: "transform" }}
+            animate={
+              reduced
+                ? undefined
+                : {
+                    scale: [1, 1.07, 1, 1],
+                    filter: [
+                      "drop-shadow(0 0 0px rgba(6,182,212,0))",
+                      "drop-shadow(0 0 9px rgba(6,182,212,0.5))",
+                      "drop-shadow(0 0 0px rgba(6,182,212,0))",
+                      "drop-shadow(0 0 0px rgba(6,182,212,0))",
+                    ],
+                  }
+            }
+            transition={
+              reduced
+                ? undefined
+                : {
+                    duration: 3.6,
+                    times: [0, 0.14, 0.34, 1],
+                    ease: "easeInOut",
+                    repeat: Infinity,
+                    delay: idleDelay * 0.7,
+                  }
+            }
           >
-            <stop offset="0" stopColor={BLUE} />
-            <stop offset="0.5" stopColor={CYAN} />
-            <stop offset="1" stopColor={BLUE} />
-          </motion.linearGradient>
-          <filter id={glowId} x="-80%" y="-80%" width="260%" height="260%">
-            <feGaussianBlur stdDeviation="5.5" />
-          </filter>
-        </defs>
+            <rect x={95} y={36} width={10} height={28} rx={2.5} fill={`url(#${gradId})`} />
+            <rect x={86} y={45} width={28} height={10} rx={2.5} fill={`url(#${gradId})`} />
+          </motion.g>
 
-        {/* Hexagon speech bubble */}
-        <g id="hexagon">
-          <path
-            d={HEX_PATH}
-            stroke={`url(#${gradId})`}
-            strokeWidth={9}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-        </g>
+          {/* Letter M */}
+          <g id="letter-m">
+            <path
+              d={M_PATH}
+              stroke={`url(#${gradId})`}
+              strokeWidth={7}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </g>
 
-        {/* Medical cross — heartbeat every ~3.6s (calmer) */}
-        <motion.g
-          id="medical-cross"
-          style={{ transformBox: "fill-box", transformOrigin: "center", willChange: "transform" }}
-          animate={
-            reduced
-              ? undefined
-              : {
-                  scale: [1, 1.07, 1, 1],
-                  filter: [
-                    "drop-shadow(0 0 0px rgba(6,182,212,0))",
-                    "drop-shadow(0 0 9px rgba(6,182,212,0.5))",
-                    "drop-shadow(0 0 0px rgba(6,182,212,0))",
-                    "drop-shadow(0 0 0px rgba(6,182,212,0))",
-                  ],
-                }
-          }
-          transition={
-            reduced
-              ? undefined
-              : {
-                  duration: 3.6,
-                  times: [0, 0.14, 0.34, 1],
-                  ease: "easeInOut",
-                  repeat: Infinity,
-                  delay: idleDelay * 0.7,
-                }
-          }
-        >
-          <rect x={95} y={36} width={10} height={28} rx={2.5} fill={`url(#${gradId})`} />
-          <rect x={86} y={45} width={28} height={10} rx={2.5} fill={`url(#${gradId})`} />
-        </motion.g>
-
-        {/* Letter M */}
-        <g id="letter-m">
-          <path
-            d={M_PATH}
-            stroke={`url(#${gradId})`}
-            strokeWidth={7}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </g>
-
-        {/* Circuit nodes — sequential soft illumination (organic, gentle) */}
-        <g id="circuit-nodes">
-          {NODES.map(([cx, cy], i) => (
-            <g key={i}>
-              {/* soft glow — dimmer, longer, more organic */}
-              <motion.circle
-                cx={cx}
-                cy={cy}
-                r={9}
-                fill={CYAN}
-                filter={`url(#${glowId})`}
-                initial={{ opacity: 0 }}
-                animate={reduced ? { opacity: 0 } : { opacity: [0, 0.42, 0.28, 0] }}
-                transition={
-                  reduced
-                    ? undefined
-                    : {
-                        duration: 2.6,
-                        times: [0, 0.35, 0.6, 1],
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                        delay: (noIntro ? 0 : 0.6) + i * 0.44,
-                        repeatDelay: 0.9,
-                      }
-                }
-              />
-              {/* donut node */}
-              <motion.circle
-                cx={cx}
-                cy={cy}
-                r={7.5}
-                stroke={`url(#${gradId})`}
-                strokeWidth={5}
-                fill="var(--background)"
-                initial={noIntro || reduced ? false : { opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.5, delay: noIntro || reduced ? 0 : 0.4 + i * 0.14 }}
-              />
-            </g>
-          ))}
-        </g>
+          {/* Circuit nodes — sequential soft illumination (organic, gentle) */}
+          <g id="circuit-nodes">
+            {NODES.map(([cx, cy], i) => (
+              <g key={i}>
+                {/* soft glow — dimmer, longer, more organic */}
+                <motion.circle
+                  cx={cx}
+                  cy={cy}
+                  r={9}
+                  fill={CYAN}
+                  filter={`url(#${glowId})`}
+                  initial={{ opacity: 0 }}
+                  animate={reduced ? { opacity: 0 } : { opacity: [0, 0.42, 0.28, 0] }}
+                  transition={
+                    reduced
+                      ? undefined
+                      : {
+                          duration: 2.6,
+                          times: [0, 0.35, 0.6, 1],
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                          delay: (noIntro ? 0 : 0.6) + i * 0.44,
+                          repeatDelay: 0.9,
+                        }
+                  }
+                />
+                {/* donut node */}
+                <motion.circle
+                  cx={cx}
+                  cy={cy}
+                  r={7.5}
+                  stroke={`url(#${gradId})`}
+                  strokeWidth={5}
+                  fill="var(--background)"
+                  initial={noIntro || reduced ? false : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.5, delay: noIntro || reduced ? 0 : 0.4 + i * 0.14 }}
+                />
+              </g>
+            ))}
+          </g>
         </motion.svg>
       </motion.div>
     </motion.div>

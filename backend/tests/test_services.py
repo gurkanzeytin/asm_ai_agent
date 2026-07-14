@@ -178,7 +178,7 @@ async def test_sql_service_orchestration():
     assert res.provider == "ollama"
     assert res.model == "qwen3:8b"
     assert res.latency_ms == 120.0
-    llm_provider.generate.assert_called_once_with("Prompt context", think=False, options={"num_predict": 200})
+    llm_provider.generate.assert_called_once_with("Prompt context", think=False, options={"num_predict": 400})
 
 
 @pytest.mark.asyncio

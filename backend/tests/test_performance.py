@@ -26,8 +26,9 @@ def test_sql_prompt_template_is_compact():
     prompt_path = Path("app/prompts/sql_generation.md")
     prompt_text = prompt_path.read_text(encoding="utf-8")
 
-    # Budget raised from 900 for BUG-003A/B schema-identifier and literal-value rules.
-    assert len(prompt_text) < 1000
+    # Budget raised from 900 for BUG-003A/B schema-identifier and literal-value rules,
+    # and from 1000 for the QA-001A period-analysis aggregation rule.
+    assert len(prompt_text) < 1200
     assert "BAD OUTPUT" not in prompt_text
     assert "GOOD OUTPUT" not in prompt_text
 

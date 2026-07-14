@@ -237,6 +237,14 @@ class OllamaProvider(ILLMProvider):
                 break  # Successful response, exit retry loop
             except (httpx.ConnectError, httpx.ConnectTimeout, httpx.TimeoutException) as e:
                 last_exception = e
+                # A read timeout means the model did not finish generating within the
+                # window; the same deterministic prompt (temperature 0) will time out
+                # again, so retrying only multiplies the latency. Fail fast instead.
+                if isinstance(e, httpx.ReadTimeout):
+                    logger.error(
+                        f"Ollama read timeout after {self.timeout}s; not retrying (deterministic prompt)."
+                    )
+                    break
                 if attempt == retries:
                     break
                 logger.warning(

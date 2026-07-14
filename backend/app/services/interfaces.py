@@ -6,6 +6,7 @@ from app.application_models.generated_sql import GeneratedSQL
 from app.application_models.intent import IntentResult
 from app.application_models.workflow_models import QueryResult
 from app.database_intelligence.models import DatabaseContext
+from app.insights.models import InsightResult
 
 
 class IPromptService(ABC):
@@ -95,7 +96,12 @@ class IReportService(ABC):
 
     @abstractmethod
     async def generate_report(
-        self, question: str, sql: str, query_result: QueryResult, execution_id: Optional[str] = None
+        self,
+        question: str,
+        sql: str,
+        query_result: QueryResult,
+        execution_id: Optional[str] = None,
+        insights: Optional[InsightResult] = None,
     ) -> GeneratedReport:
         """Invokes prompt services and LLM provider to synthesize a narrative report DTO.
 
@@ -104,6 +110,8 @@ class IReportService(ABC):
             sql: Executed SQL query.
             query_result: Structured QueryResult database output DTO.
             execution_id: Optional workflow run identifier.
+            insights: Optional pre-computed insight narrative; analytical reports
+                reuse it instead of invoking another LLM.
 
         Returns:
             GeneratedReport: Narrative report DTO.
@@ -129,7 +137,12 @@ class IWorkflowService(ABC):
 
     @abstractmethod
     async def execute_report_generation(
-        self, question: str, sql: str, query_result: QueryResult, execution_id: Optional[str] = None
+        self,
+        question: str,
+        sql: str,
+        query_result: QueryResult,
+        execution_id: Optional[str] = None,
+        insights: Optional[InsightResult] = None,
     ) -> GeneratedReport:
         """Coordinates narrative report generation.
 
@@ -138,6 +151,7 @@ class IWorkflowService(ABC):
             sql: Executed SQL.
             query_result: Structured QueryResult database output DTO.
             execution_id: Optional workflow run identifier.
+            insights: Optional pre-computed insight narrative reused by analytical reports.
 
         Returns:
             GeneratedReport: Final narrative report DTO.

@@ -2,6 +2,7 @@ import { Trash2, PanelRight, Sun, Moon } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { MedAgentLogo } from "./MedAgentLogo";
+import { tr } from "@/locales/tr";
 
 interface Props {
   title: string;
@@ -31,18 +32,18 @@ export function ChatHeader({ title, onClear, onToggleInfo, infoOpen }: Props) {
           <div className="truncate text-sm font-semibold">{title}</div>
           <div className="mt-0.5 flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-success pulse-ring" />
-            <span className="text-[11px] text-muted-foreground">AI · Online</span>
+            <span className="text-[11px] text-muted-foreground">{tr.header.online}</span>
           </div>
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        <IconBtn onClick={toggleTheme} title="Toggle theme">
+        <IconBtn onClick={toggleTheme} title={tr.header.toggleTheme}>
           {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </IconBtn>
-        <IconBtn onClick={onClear} title="Clear chat">
+        <IconBtn onClick={onClear} title={tr.header.clearChat}>
           <Trash2 className="h-4 w-4" />
         </IconBtn>
-        <IconBtn onClick={onToggleInfo} title="Details panel" active={infoOpen}>
+        <IconBtn onClick={onToggleInfo} title={tr.header.detailsPanel} active={infoOpen}>
           <PanelRight className="h-4 w-4" />
         </IconBtn>
       </div>
@@ -67,7 +68,7 @@ function IconBtn({
       title={title}
       className={cn(
         "grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-accent hover:text-foreground",
-        active && "bg-primary/15 text-primary"
+        active && "bg-primary/15 text-primary",
       )}
     >
       {children}
