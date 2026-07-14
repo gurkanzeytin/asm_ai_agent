@@ -4,6 +4,7 @@ import time
 from app.agent.nodes.node_interface import IAgentNode
 from app.agent.state import AgentState
 from app.application_models.generated_report import GeneratedReport
+from app.application_models.outcome import AgentOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ class GenerateClarificationNode(IAgentNode):
             return state.model_copy(
                 update={
                     "generated_report": report_dto,
+                    "outcome": AgentOutcome.ASK_CLARIFICATION.value,
                     "current_node": "generate_clarification",
                     "completed_nodes": state.completed_nodes + ["generate_clarification"],
                     "duration_ms": state.duration_ms + duration,

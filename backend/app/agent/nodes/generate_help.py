@@ -4,6 +4,7 @@ import time
 from app.agent.nodes.node_interface import IAgentNode
 from app.agent.state import AgentState
 from app.application_models.generated_report import GeneratedReport
+from app.application_models.outcome import AgentOutcome
 from app.services.interfaces import IHelpService
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ class GenerateHelpNode(IAgentNode):
             return state.model_copy(
                 update={
                     "generated_report": report_dto,
+                    "outcome": AgentOutcome.RETURN_HELP.value,
                     "current_node": "generate_help",
                     "completed_nodes": state.completed_nodes + ["generate_help"],
                     "duration_ms": state.duration_ms + duration,

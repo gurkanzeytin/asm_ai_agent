@@ -1,12 +1,32 @@
 import logging
 import uuid
-from typing import Any
+from typing import Any, Optional
 
 from app.agent.state import AgentState
+from app.application_models.generated_report import GeneratedReport
+from app.application_models.outcome import AgentOutcome
+from app.application_models.query_analysis import AmbiguityResult
 from app.application_models.workflow_metrics import WorkflowMetrics
 from app.application_models.workflow_result import WorkflowResult
+from app.context import ContextManager
 
 logger = logging.getLogger(__name__)
+
+# AG-022 SAFE_ERROR: friendly, non-technical guidance shown when the pipeline
+# could not produce any report. Guarantees the user never sees an empty or
+# generic failure response.
+_SAFE_ERROR_MARKDOWN = """# Yanıt Oluşturulamadı
+
+Sorunuzu işlerken beklenmedik bir sorunla karşılaştım. Bu sizin hatanız değil.
+
+## Ne yapabilirsiniz?
+
+- Soruyu birkaç saniye sonra tekrar gönderin.
+- Soruyu daha kısa ve tek bir konu üzerinde olacak şekilde yeniden ifade edin.
+- Örnek bir kalıp deneyin: "Bugün kaç randevu oluşturuldu?", "Kardiyoloji doktorlarını göster."
+
+Sorun devam ederse sistem yöneticinize başvurabilirsiniz.
+"""
 
 
 class ReportingService:
@@ -16,19 +36,30 @@ class ReportingService:
     a typed WorkflowResult before returning; no internal model is leaked to the transport layer.
     """
 
-    def __init__(self, agent_graph: Any) -> None:
+    def __init__(
+        self,
+        agent_graph: Any,
+        context_manager: Optional[ContextManager] = None,
+    ) -> None:
         """Initializes the service with the pre-compiled LangGraph state machine.
 
         Args:
             agent_graph: Compiled LangGraph CompiledStateGraph instance.
+            context_manager: Conversational context engine (PRODUCT-001). A
+                default instance is created when omitted.
         """
         self._agent_graph = agent_graph
+        self._context_manager = context_manager or ContextManager()
 
-    async def run_workflow(self, question: str) -> WorkflowResult:
+    async def run_workflow(
+        self, question: str, session_id: Optional[str] = "default"
+    ) -> WorkflowResult:
         """Runs the full agent graph pipeline and returns a typed WorkflowResult.
 
         Args:
             question: Natural-language question submitted by the user.
+            session_id: Conversational session key for follow-up resolution.
+                Pass None to bypass the context engine entirely (e.g. benchmarks).
 
         Returns:
             WorkflowResult: Typed DTO containing all workflow outputs including metrics.
@@ -40,10 +71,33 @@ class ReportingService:
         workflow_id = str(uuid.uuid4())
         logger.info(f"ReportingService: Starting workflow run [{workflow_id}] for question: {question!r}")
 
-        initial_state = AgentState(question=question, workflow_id=workflow_id)
+        # Conversational context resolution (PRODUCT-001): rewrite follow-up
+        # questions using session context before the NLU pipeline runs.
+        resolution = None
+        pipeline_question = question
+        seeded_ambiguity = None
+        if session_id is not None:
+            resolution = self._context_manager.resolve(question, session_id)
+            if resolution.clarification_needed:
+                seeded_ambiguity = AmbiguityResult(
+                    matched_phrase=question,
+                    question=resolution.clarification_question or "",
+                    options=resolution.clarification_options,
+                )
+            else:
+                pipeline_question = resolution.resolved_question
+
+        initial_state = AgentState(
+            question=pipeline_question,
+            workflow_id=workflow_id,
+            ambiguity=seeded_ambiguity,
+        )
 
         # Run compiled LangGraph workflow pipeline — domain exceptions propagate upward
         final_state = await self._agent_graph.ainvoke(initial_state)
+
+        if resolution is not None and session_id is not None:
+            self._context_manager.update(resolution, session_id)
 
         generated_sql_dto = final_state.get("generated_sql")
         query_result_dto = final_state.get("query_result")
@@ -54,6 +108,25 @@ class ReportingService:
         observations_dto = final_state.get("observations")
         errors = final_state.get("errors", [])
         node_timings: dict[str, float] = final_state.get("node_timings") or {}
+        outcome = final_state.get("outcome")
+
+        # AG-022 SAFE_ERROR: the workflow must never end without a user-facing
+        # response. If no node produced a report, synthesize friendly guidance.
+        if generated_report_dto is None:
+            logger.warning(
+                "ReportingService: Workflow [%s] produced no report "
+                "(errors: %s) — returning SAFE_ERROR guidance.",
+                workflow_id,
+                errors or "none",
+            )
+            generated_report_dto = GeneratedReport(
+                title="Yanıt Oluşturulamadı",
+                markdown=_SAFE_ERROR_MARKDOWN,
+                provider="static",
+                model="safe_error_fallback",
+                latency_ms=0.0,
+            )
+            outcome = AgentOutcome.SAFE_ERROR.value
 
         # Build typed WorkflowMetrics from per-node timing accumulator
         sql_latency = generated_sql_dto.latency_ms if generated_sql_dto else 0.0
@@ -145,6 +218,7 @@ class ReportingService:
             analytics=analytics_dto,
             insights=insights_dto,
             observations=observations_dto,
+            outcome=outcome,
         )
 
 

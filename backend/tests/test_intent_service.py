@@ -320,8 +320,9 @@ async def test_workflow_routing_unknown_low_confidence(temp_keywords_file):
     )
     graph = builder.build()
 
-    # Query matching no keywords (low confidence UNKNOWN)
-    state = AgentState(question="Who visited hospital yesterday?")
+    # Query matching no intent keywords (low confidence UNKNOWN) but carrying
+    # a domain entity ("randevu") so the answerability guard keeps it on SQL.
+    state = AgentState(question="Dün kaç randevu oldu?")
     final_state = await graph.ainvoke(state)
 
     # UNKNOWN with confidence 0.0 -> routes to database_query workflow!

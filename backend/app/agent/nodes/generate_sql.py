@@ -38,9 +38,14 @@ class GenerateSQLNode(IAgentNode):
                         },
                     )
 
-            # Prompt is rendered once inside WorkflowService and attached to the DTO
+            # Prompt is rendered once inside WorkflowService and attached to the DTO.
+            # On a rewrite-and-retry pass the previous database error is fed back
+            # so regeneration can correct the failing identifiers (AG-022).
             generated_sql = await self.workflow_service.execute_sql_generation(
-                question, database_context=state.database_context
+                question,
+                database_context=state.database_context,
+                error_feedback=state.last_execution_error,
+                query_plan=state.query_plan,
             )
 
             logger.info("GenerateSQLNode execution completed successfully.")

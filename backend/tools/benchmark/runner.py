@@ -63,7 +63,9 @@ async def run_question(
     start = time.perf_counter()
     try:
         result = await asyncio.wait_for(
-            pipeline.reporting_service.run_workflow(question.question),
+            # session_id=None bypasses the conversational context engine so
+            # benchmark questions stay independent of each other.
+            pipeline.reporting_service.run_workflow(question.question, session_id=None),
             timeout=timeout_s,
         )
     except asyncio.TimeoutError:

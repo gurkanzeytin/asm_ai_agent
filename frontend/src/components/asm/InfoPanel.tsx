@@ -9,9 +9,11 @@ interface Props {
   onClose: () => void;
   responseMs: number;
   isThinking: boolean;
+  /** Exact SQL generated/executed by the backend for the last request. */
+  sql?: string | null;
 }
 
-export function InfoPanel({ open, onClose, responseMs, isThinking }: Props) {
+export function InfoPanel({ open, onClose, responseMs, isThinking, sql }: Props) {
   return (
     <AnimatePresence>
       {open && (
@@ -56,15 +58,15 @@ export function InfoPanel({ open, onClose, responseMs, isThinking }: Props) {
             </Card>
 
             <Expandable icon={Database} title={tr.details.sqlQuery}>
-              <pre className="overflow-x-auto rounded-lg bg-background/60 p-3 text-[11px] leading-relaxed text-cyan">
-                {`SELECT c.name, COUNT(v.id) AS visits
-FROM centers c
-LEFT JOIN visits v
-  ON v.center_id = c.id
- AND v.date = CURRENT_DATE
-GROUP BY c.name
-ORDER BY visits DESC;`}
-              </pre>
+              {sql ? (
+                <pre className="max-h-72 overflow-auto whitespace-pre rounded-lg bg-background/60 p-3 text-[11px] leading-relaxed text-cyan">
+                  {sql}
+                </pre>
+              ) : (
+                <p className="rounded-lg bg-background/60 p-3 text-[11px] leading-relaxed text-muted-foreground">
+                  {tr.details.noSqlGenerated}
+                </p>
+              )}
             </Expandable>
 
             <Expandable icon={Wrench} title={tr.details.toolCalls} badge="2">

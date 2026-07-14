@@ -390,14 +390,18 @@ class QueryAnalyzer:
         query_ascii = self._strip_diacritics(query)
         ranges: list[DateRange] = []
 
-        exact_days = {
-            "bugun": (today, today, "day"),
-            "yarin": (today + timedelta(days=1), today + timedelta(days=1), "day"),
-            "dun": (today - timedelta(days=1), today - timedelta(days=1), "day"),
-        }
-        for expression, (start, end, granularity) in exact_days.items():
-            if re.search(rf"\b{expression}\b", query_ascii):
-                ranges.append(self._date_range(expression, start, end, granularity))
+        # Suffixed forms ("bugunku", "yarinki", "dunku") must also match; the
+        # actual matched text is stored so date resolution can replace it.
+        # "dun" stays anchored to avoid false positives like "dunya".
+        exact_days = [
+            (r"\bbugun\w*", today, today, "day"),
+            (r"\byarin\w*", today + timedelta(days=1), today + timedelta(days=1), "day"),
+            (r"\bdun(ku|den)?\b", today - timedelta(days=1), today - timedelta(days=1), "day"),
+        ]
+        for pattern, start, end, granularity in exact_days:
+            match = re.search(pattern, query_ascii)
+            if match:
+                ranges.append(self._date_range(match.group(0), start, end, granularity))
 
         if "bu hafta" in query_ascii:
             start = today - timedelta(days=today.weekday())

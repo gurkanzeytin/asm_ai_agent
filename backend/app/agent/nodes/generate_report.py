@@ -3,6 +3,7 @@ import time
 
 from app.agent.nodes.node_interface import IAgentNode
 from app.agent.state import AgentState
+from app.application_models.outcome import AgentOutcome
 from app.services.interfaces import IWorkflowService
 
 logger = logging.getLogger(__name__)
@@ -67,9 +68,17 @@ class GenerateReportNode(IAgentNode):
             logger.info("GenerateReportNode execution completed successfully.")
             duration = (time.perf_counter() - start_time) * 1000
 
+            # AG-022 outcome resolution: empty result sets resolve as guided
+            # NO_RESULT_GUIDANCE; a rewrite-retry success keeps REWRITE_AND_RETRY.
+            if state.query_result.row_count == 0:
+                outcome = AgentOutcome.NO_RESULT_GUIDANCE.value
+            else:
+                outcome = state.outcome or AgentOutcome.EXECUTE_SQL.value
+
             return state.model_copy(
                 update={
                     "generated_report": report_dto,
+                    "outcome": outcome,
                     "current_node": "generate_report",
                     "completed_nodes": state.completed_nodes + ["generate_report"],
                     "duration_ms": state.duration_ms + duration,

@@ -57,6 +57,7 @@ export const tr = {
     thinking: "Sorgu üzerinde çalışılıyor…",
     idle: "Hazır — yeni görev bekleniyor",
     sqlQuery: "SQL sorgusu",
+    noSqlGenerated: "No SQL was generated.",
     toolCalls: "Araç çağrıları",
     processSummary: "İşlem özeti",
     processSummaryDescription:

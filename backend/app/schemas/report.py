@@ -18,6 +18,13 @@ class ReportRequest(BaseModel):
             "example": "Which doctor has the highest number of appointments?"
         },
     )
+    session_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional conversational session key for follow-up resolution. "
+            "Omitted clients share the default in-memory session."
+        ),
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -160,6 +167,13 @@ class ReportResponse(BaseModel):
     visualization: Optional[VisualizationSchema] = Field(
         default=None,
         description="Layer 5: recommended visualization metadata (mirrors analytics.visualization).",
+    )
+    outcome: Optional[str] = Field(
+        default=None,
+        description=(
+            "Controlled outcome of the run (AG-022): EXECUTE_SQL, ASK_CLARIFICATION, "
+            "RETURN_HELP, OUT_OF_SCOPE, REWRITE_AND_RETRY, NO_RESULT_GUIDANCE, SAFE_ERROR."
+        ),
     )
 
     model_config = {

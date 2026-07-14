@@ -7,6 +7,7 @@ from app.application_models.intent import IntentResult
 from app.application_models.workflow_models import QueryResult
 from app.database_intelligence.models import DatabaseContext
 from app.insights.models import InsightResult
+from app.planning.models import QueryPlan
 
 
 class IPromptService(ABC):
@@ -75,6 +76,7 @@ class ISQLService(ABC):
         prompt: str,
         question: str | None = None,
         database_context: Optional[DatabaseContext] = None,
+        query_plan: Optional["QueryPlan"] = None,
     ) -> GeneratedSQL:
         """Invokes LLM provider, extracts SQL syntax, performs safety validator checks, and returns metadata.
 
@@ -123,12 +125,20 @@ class IWorkflowService(ABC):
     """Abstract interface defining contract for workflow orchestration across sub-services."""
 
     @abstractmethod
-    async def execute_sql_generation(self, question: str, database_context: Optional[DatabaseContext] = None) -> GeneratedSQL:
+    async def execute_sql_generation(
+        self,
+        question: str,
+        database_context: Optional[DatabaseContext] = None,
+        error_feedback: Optional[str] = None,
+        query_plan: Optional["QueryPlan"] = None,
+    ) -> GeneratedSQL:
         """Coordinates prompt rendering, SQL generation, and validation.
 
         Args:
             question: User query context.
             database_context: Optional database context to pass to prompt rendering.
+            error_feedback: Optional database error from a failed execution,
+                appended to the prompt for a rewrite-and-retry pass (AG-022).
 
         Returns:
             GeneratedSQL: The validated generated SQL DTO.

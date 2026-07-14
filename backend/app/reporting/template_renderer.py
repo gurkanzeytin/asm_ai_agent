@@ -23,9 +23,21 @@ class TemplateReportRenderer:
         if report_type == ReportType.ANALYTICAL:
             return None
         if report_type == ReportType.EMPTY:
+            # AG-022 NO_RESULT_GUIDANCE: an empty result set is a valid answer,
+            # explained with actionable next steps instead of a bare "not found".
+            markdown = (
+                "# Sonuc Bulunamadi\n\n"
+                "Sorgu basariyla calisti ancak belirtilen kriterlere uygun kayit bulunamadi.\n\n"
+                "Bu genellikle su anlama gelir: sectiginiz tarih araliginda ya da filtrede "
+                "gercekten veri yok.\n\n"
+                "## Deneyebilecekleriniz\n\n"
+                "- Tarih araligini genisletin (ornegin \"bugun\" yerine \"bu ay\").\n"
+                "- Bolum veya doktor adinin yazimini kontrol edin.\n"
+                "- Filtreyi kaldirip genel bir soru sorun (ornegin \"Tum randevulari goster\").\n"
+            )
             return TemplateRenderResult(
                 title="Sonuc Bulunamadi",
-                markdown="# Sonuc Bulunamadi\n\nBelirtilen kriterlere uygun kayit bulunamadi.",
+                markdown=markdown,
                 template_name="empty",
             )
         if report_type == ReportType.SINGLE_VALUE:

@@ -10,6 +10,8 @@ from app.intelligence.models import ObservationResult
 from app.application_models.query_analysis import AmbiguityResult
 from app.application_models.workflow_models import QueryResult
 from app.database_intelligence.models import DatabaseContext
+from app.planning.models import QueryPlan
+from app.semantics.models import SemanticFrame
 
 
 class AgentState(BaseModel):
@@ -66,5 +68,32 @@ class AgentState(BaseModel):
     ambiguity: Optional[AmbiguityResult] = Field(
         default=None,
         description="Ambiguous ranking phrase detected in the question, requiring clarification.",
+    )
+
+    query_plan: Optional[QueryPlan] = Field(
+        default=None,
+        description="Deterministic query plan built between NLU and SQL generation (AG-022).",
+    )
+    semantic_frame: Optional[SemanticFrame] = Field(
+        default=None,
+        description="Structured semantic interpretation of the question (REASONING-001).",
+    )
+
+    # AG-022 — controlled outcome tracking and execution retry loop
+    outcome: Optional[str] = Field(
+        default=None,
+        description="Controlled AgentOutcome value describing how the run resolved.",
+    )
+    answerable: Optional[bool] = Field(
+        default=None,
+        description="Answerability guard verdict: whether the question maps onto the schema domain.",
+    )
+    sql_retry_count: int = Field(
+        default=0,
+        description="Number of execution-failure SQL rewrite retries already used.",
+    )
+    last_execution_error: Optional[str] = Field(
+        default=None,
+        description="Database error from the last failed execution, fed back to SQL regeneration.",
     )
 

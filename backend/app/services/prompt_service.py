@@ -44,6 +44,35 @@ class PromptService(IPromptService):
             logger.error(f"Failed to retrieve schema context: {e}")
             raise PromptServiceException(f"Failed to retrieve schema context: {e}") from e
 
+    async def extend_context_with_tables(
+        self,
+        context: DatabaseContext,
+        table_names: list[str],
+    ) -> DatabaseContext:
+        """Adds named schema tables missing from a retrieved context (AG-022).
+
+        The query planner may require tables (fact table, FK join hops) that the
+        semantic retriever did not select; without them the schema-identifier
+        guard would reject perfectly planned SQL. Unknown names are ignored.
+        """
+        try:
+            existing = {table.name for table in context.tables}
+            missing = [name for name in table_names if name and name not in existing]
+            if not missing:
+                return context
+            schema = await self.schema_cache.get_schema()
+            added = [schema.tables[name] for name in missing if name in schema.tables]
+            if not added:
+                return context
+            logger.info(
+                "Extending schema context with plan-required tables: %s",
+                [table.name for table in added],
+            )
+            return context.model_copy(update={"tables": list(context.tables) + added})
+        except Exception as error:  # degrade: planning must never break retrieval
+            logger.error(f"Failed to extend schema context: {error}")
+            return context
+
     async def render_prompt(
         self,
         template_name: str,

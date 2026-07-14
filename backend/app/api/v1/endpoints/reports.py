@@ -149,6 +149,7 @@ def _map_to_response(result: WorkflowResult) -> ReportResponse:
         insights=insight_schema,
         observations=observations_schema,
         visualization=visualization_schema,
+        outcome=result.outcome,
     )
 
 
@@ -174,5 +175,7 @@ async def generate_report(
     reporting_service: Annotated[ReportingService, Depends(get_reporting_service)],
 ) -> ReportResponse:
     """Runs the full AI reporting workflow for the provided natural-language question."""
-    result = await reporting_service.run_workflow(request.question)
+    result = await reporting_service.run_workflow(
+        request.question, session_id=request.session_id or "default"
+    )
     return _map_to_response(result)

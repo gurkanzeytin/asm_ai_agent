@@ -95,7 +95,9 @@ async def test_successful_workflow_execution():
     graph = builder.build()
 
     # Run graph execution
-    initial_state = AgentState(question="List all active users")
+    # Must carry a domain signal ("patients") so the AG-022 answerability
+    # guard keeps it on the SQL pipeline.
+    initial_state = AgentState(question="List all active patients")
     final_state_dict = await graph.ainvoke(initial_state)
 
     # Check state updates
@@ -147,7 +149,7 @@ async def test_workflow_validation_failure():
     graph = builder.build()
 
     # Run graph execution
-    initial_state = AgentState(question="Delete all users")
+    initial_state = AgentState(question="Delete all patients")
     final_state_dict = await graph.ainvoke(initial_state)
 
     assert len(final_state_dict["errors"]) > 0

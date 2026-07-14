@@ -350,7 +350,10 @@ async def test_generate_sql_node_receives_normalized_query():
     await GenerateSQLNode(workflow_service).execute(state)
 
     workflow_service.execute_sql_generation.assert_awaited_once_with(
-        "kardiyoloji doktorlarını listele", database_context=context
+        "kardiyoloji doktorlarını listele",
+        database_context=context,
+        error_feedback=None,
+        query_plan=None,
     )
 
 

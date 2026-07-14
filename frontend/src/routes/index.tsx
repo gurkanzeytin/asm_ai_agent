@@ -66,6 +66,7 @@ function Index() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const [lastResponseMs, setLastResponseMs] = useState(0);
+  const [lastSql, setLastSql] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -143,6 +144,10 @@ function Index() {
           };
         }
 
+        // Exact backend SQL (post-repair/validation) — shown in the info
+        // panel even when execution failed after generation.
+        setLastSql(result.generated_sql ?? null);
+
         const totalMs = result.timing?.total_ms ?? 0;
         if (totalMs > 0) {
           setLastResponseMs(Math.round(totalMs));
@@ -170,6 +175,7 @@ function Index() {
         if (error instanceof DOMException && error.name === "AbortError") {
           return; // user pressed stop — nothing to render
         }
+        setLastSql(null); // no response — don't show a previous question's SQL
         const description = error instanceof ApiError ? error.message : tr.chat.unexpectedError;
         toast.error(tr.chat.requestFailed, { description });
         updateConv(cid, (c) => ({
@@ -279,6 +285,7 @@ function Index() {
           onClose={() => setInfoOpen(false)}
           responseMs={lastResponseMs}
           isThinking={isGenerating}
+          sql={lastSql}
         />
 
         <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

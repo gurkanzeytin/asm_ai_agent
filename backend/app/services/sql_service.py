@@ -9,6 +9,8 @@ from app.core.config import settings
 from app.database_intelligence.models import DatabaseContext
 from app.llm.interfaces import ILLMProvider
 from app.parsers.interfaces import IOutputParser
+from app.planning.compliance import PlanComplianceValidator
+from app.planning.models import QueryPlan
 from app.services.exceptions import SQLServiceException
 from app.services.interfaces import ISQLService
 from app.sql_validator.interfaces import ISQLValidator
@@ -43,16 +45,19 @@ class SQLService(ISQLService):
         llm_provider: ILLMProvider,
         output_parser: IOutputParser,
         sql_validator: ISQLValidator,
+        compliance_validator: PlanComplianceValidator | None = None,
     ):
         self.llm_provider = llm_provider
         self.output_parser = output_parser
         self.sql_validator = sql_validator
+        self.compliance_validator = compliance_validator or PlanComplianceValidator()
 
     async def generate_sql(
         self,
         prompt: str,
         question: str | None = None,
         database_context: DatabaseContext | None = None,
+        query_plan: QueryPlan | None = None,
     ) -> GeneratedSQL:
         """Sends pre-rendered prompt to LLM provider, parses SQL, and verifies safety.
 
@@ -87,6 +92,9 @@ class SQLService(ISQLService):
             )
             trend_issue = self._trend_aggregation_issue(question, cleaned_sql) if is_sql else None
             truncated = llm_response.finish_reason == "max_tokens"
+            compliance_missing = self._compliance_missing(
+                cleaned_sql, query_plan, is_sql, validation_result, schema_issues
+            )
 
             # Determine if a repair is needed
             repair_attempt_used = False
@@ -97,6 +105,7 @@ class SQLService(ISQLService):
                 or bool(schema_issues)
                 or bool(trend_issue)
                 or truncated
+                or bool(compliance_missing)
             )
 
             if first_attempt_failed:
@@ -108,6 +117,7 @@ class SQLService(ISQLService):
                     f"  - Validation Result: {validation_result.valid if validation_result else False}\n"
                     f"  - Schema identifier issues: {schema_issues or 'none'}\n"
                     f"  - Trend aggregation issue: {trend_issue or 'none'}\n"
+                    f"  - Plan compliance missing: {compliance_missing or 'none'}\n"
                     f"  - Truncated (max_tokens): {truncated}\n"
                     "Executing single repair attempt."
                 )
@@ -137,6 +147,15 @@ class SQLService(ISQLService):
                         f"schema: {'; '.join(schema_issues)}. "
                         "Rewrite the SQL using ONLY the tables and columns listed in the "
                         "Schema section, spelled exactly as listed. "
+                        "Generate ONE executable SQL statement only. "
+                        "Do not explain. Return only SQL."
+                    )
+                elif compliance_missing:
+                    repair_instruction = (
+                        "The previous SQL does not implement all planned constraints. "
+                        f"Missing: {'; '.join(compliance_missing)}. "
+                        "Rewrite the SQL implementing EVERY item listed in the Plan "
+                        "section, without dropping any existing filter. "
                         "Generate ONE executable SQL statement only. "
                         "Do not explain. Return only SQL."
                     )
@@ -173,6 +192,17 @@ class SQLService(ISQLService):
                 cleaned_sql, is_sql, validation_result, schema_issues = self._parse_and_validate(
                     llm_response.content, question, database_context
                 )
+                # Post-repair compliance status is logged for observability; a
+                # still-missing constraint never blocks an otherwise valid SQL.
+                compliance_missing = self._compliance_missing(
+                    cleaned_sql, query_plan, is_sql, validation_result, schema_issues
+                )
+                if compliance_missing:
+                    logger.warning(
+                        "Plan compliance still incomplete after repair attempt: %s",
+                        "; ".join(compliance_missing),
+                        extra={"missing_constraints": compliance_missing},
+                    )
 
             # 2. Final check before completing flow:
             # If no SQL statement starting with SELECT/WITH can be extracted, fail immediately
@@ -271,6 +301,33 @@ class SQLService(ISQLService):
         except Exception as e:
             logger.error(f"SQLService failed during SQL generation sequence: {e}")
             raise SQLServiceException(f"Failed during SQL generation sequence: {e}") from e
+
+    def _compliance_missing(
+        self,
+        sql: str,
+        query_plan: QueryPlan | None,
+        is_sql: bool,
+        validation_result: object | None,
+        schema_issues: list[str],
+    ) -> list[str]:
+        """Runs the plan compliance check when the SQL is otherwise well-formed.
+
+        Skipped when the SQL already failed structural/safety/schema checks —
+        those failures drive their own, more specific repair instructions.
+        """
+        if (
+            query_plan is None
+            or not is_sql
+            or not validation_result
+            or not getattr(validation_result, "valid", False)
+            or schema_issues
+        ):
+            return []
+        try:
+            return self.compliance_validator.check(sql, query_plan).missing
+        except Exception as error:  # compliance must never break generation
+            logger.error(f"Plan compliance check failed open: {error}")
+            return []
 
     def _parse_and_validate(
         self,

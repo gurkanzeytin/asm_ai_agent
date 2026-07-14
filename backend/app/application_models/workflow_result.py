@@ -62,3 +62,7 @@ class WorkflowResult(BaseModel):
         default=None,
         description="Noteworthy evidence-based observations derived from analytics metadata.",
     )
+    outcome: Optional[str] = Field(
+        default=None,
+        description="Controlled AgentOutcome value describing how the run resolved (AG-022).",
+    )

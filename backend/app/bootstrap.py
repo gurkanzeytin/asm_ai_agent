@@ -1,6 +1,7 @@
 import logging
 
 from app.agent.graph import AgentGraphBuilder
+from app.context import ContextManager
 from app.database.session import SessionLocal, engine
 from app.database_intelligence.cache import SchemaCache
 from app.database_intelligence.inspector import DatabaseInspector
@@ -96,9 +97,14 @@ class AppContainer:
         )
         self.agent_graph = self.agent_graph_builder.build()
 
-        # 9. Reporting Service — top-level API entry point backed by compiled agent graph
+        # 10. Conversational Context Engine (PRODUCT-001) — short-term,
+        # in-memory session context for follow-up question resolution
+        self.context_manager = ContextManager()
+
+        # 11. Reporting Service — top-level API entry point backed by compiled agent graph
         self.reporting_service = ReportingService(
             agent_graph=self.agent_graph,
+            context_manager=self.context_manager,
         )
         logger.info("AppContainer initialized successfully.")
 

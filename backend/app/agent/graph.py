@@ -10,6 +10,7 @@ from app.agent.nodes.generate_observations import GenerateObservationsNode
 from app.agent.nodes.generate_chat_response import GenerateChatResponseNode
 from app.agent.nodes.generate_help import GenerateHelpNode
 from app.agent.nodes.generate_clarification import GenerateClarificationNode
+from app.agent.nodes.generate_out_of_scope import GenerateOutOfScopeNode
 from app.agent.nodes.execute_sql import ExecuteSQLNode
 from app.agent.nodes.generate_report import GenerateReportNode
 from app.agent.nodes.generate_sql import GenerateSQLNode
@@ -48,6 +49,12 @@ def route_by_intent(state: AgentState) -> str:
     if decision == "database_query" and state.ambiguity is not None:
         decision = "unknown"
 
+    # AG-022: database-bound questions with no schema-domain signal get
+    # guided OUT_OF_SCOPE help instead of hallucinated SQL. The guard fails
+    # open (answerable=None) so real questions are never blocked.
+    if decision == "database_query" and state.answerable is False:
+        decision = "out_of_scope"
+
     # Extract timing of analysis node
     elapsed_ms = state.node_timings.get("analyze_intent", 0.0)
 
@@ -63,6 +70,24 @@ def route_by_intent(state: AgentState) -> str:
         intent_res.matched_keywords,
     )
     return decision
+
+
+def route_after_execution(state: AgentState) -> str:
+    """Routes execute_sql output: one rewrite-and-retry on a retryable DB error (AG-022).
+
+    ExecuteSQLNode marks a retryable failure by setting last_execution_error
+    without appending to state.errors; everything else continues downstream,
+    where empty/error handling produces guided responses.
+    """
+    if state.last_execution_error and state.sql_retry_count == 1 and not state.errors:
+        logger.info(
+            "Execution Router Decision: retrying SQL generation after execution "
+            "failure. workflow_id=%s error=%s",
+            state.workflow_id or "unknown",
+            state.last_execution_error,
+        )
+        return "retry"
+    return "continue"
 
 
 from typing import Optional
@@ -105,6 +130,7 @@ class AgentGraphBuilder:
         chat_node = GenerateChatResponseNode(self.prompt_service, self.llm_provider)
         help_node = GenerateHelpNode(self.help_service)
         clarification_node = GenerateClarificationNode()
+        out_of_scope_node = GenerateOutOfScopeNode()
 
         retrieve_node = RetrieveContextNode(self.prompt_service)
         generate_node = GenerateSQLNode(self.workflow_service)
@@ -129,6 +155,7 @@ class AgentGraphBuilder:
         workflow.add_node("generate_chat_response", chat_node.execute)
         workflow.add_node("generate_help", help_node.execute)
         workflow.add_node("generate_clarification", clarification_node.execute)
+        workflow.add_node("generate_out_of_scope", out_of_scope_node.execute)
 
         workflow.add_node("retrieve_context", retrieve_node.execute)
         workflow.add_node("generate_sql", generate_node.execute)
@@ -150,6 +177,7 @@ class AgentGraphBuilder:
                 "general_chat": "generate_chat_response",
                 "help": "generate_help",
                 "unknown": "generate_clarification",
+                "out_of_scope": "generate_out_of_scope",
             }
         )
 
@@ -157,12 +185,23 @@ class AgentGraphBuilder:
         workflow.add_edge("generate_chat_response", END)
         workflow.add_edge("generate_help", END)
         workflow.add_edge("generate_clarification", END)
+        workflow.add_edge("generate_out_of_scope", END)
 
         # Standard SQL execution pipeline
         workflow.add_edge("retrieve_context", "generate_sql")
         workflow.add_edge("generate_sql", "validate_sql")
         workflow.add_edge("validate_sql", "execute_sql")
-        workflow.add_edge("execute_sql", "analyze_results")
+
+        # AG-022: a retryable execution failure loops back to SQL generation
+        # exactly once, feeding the database error into the regeneration prompt.
+        workflow.add_conditional_edges(
+            "execute_sql",
+            route_after_execution,
+            {
+                "retry": "generate_sql",
+                "continue": "analyze_results",
+            },
+        )
         workflow.add_edge("analyze_results", "generate_insights")
         workflow.add_edge("generate_insights", "generate_observations")
         workflow.add_edge("generate_observations", "generate_report")
