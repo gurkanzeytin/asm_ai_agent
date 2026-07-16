@@ -24,5 +24,5 @@ Output rules:
   keep only the name and aggregate in SELECT.
 - Do not add WHERE filters that are not requested by the question.
 - Period analysis/trend questions (analiz, trend, egilim) must return monthly
-  aggregation, never raw rows:
-  strftime('%Y-%m', <date_col>) AS ay ... GROUP BY ay ORDER BY ay.
+  aggregation, never raw rows: group rows by a year-month bucket and order by it.
+{dialect_rules}

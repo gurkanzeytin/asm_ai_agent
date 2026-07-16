@@ -1,20 +1,20 @@
 from typing import Annotated, Literal
 
 from pydantic import BeforeValidator, Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
-def parse_allowed_origins(v: str | list[str]) -> list[str]:
-    """Parses a comma-separated string or array of allowed origins for CORS.
+def parse_comma_separated_list(v: str | list[str]) -> list[str]:
+    """Parses a comma-separated string or JSON array environment value into a list.
 
     Args:
-        v: The environment variable value representing allowed origins.
+        v: The environment variable value (comma-separated string, JSON array, or list).
 
     Returns:
-        list[str]: Formatted list of origin host strings.
+        list[str]: Parsed list of stripped string items.
 
     Raises:
-        ValueError: If origin format cannot be parsed.
+        ValueError: If the value format cannot be parsed.
     """
     if isinstance(v, str):
         if not v.strip():
@@ -29,7 +29,11 @@ def parse_allowed_origins(v: str | list[str]) -> list[str]:
         return [item.strip() for item in v.split(",") if item.strip()]
     elif isinstance(v, list):
         return v
-    raise ValueError(f"Invalid allowed origins configuration format: {v}")
+    raise ValueError(f"Invalid comma-separated list configuration format: {v}")
+
+
+# Backwards-compatible alias retained for existing imports.
+parse_allowed_origins = parse_comma_separated_list
 
 
 class Settings(BaseSettings):
@@ -82,6 +86,27 @@ class Settings(BaseSettings):
     )
     DATABASE_ECHO: bool = Field(
         default=False, description="Log database queries to std log out streams when set."
+    )
+    DATABASE_SCHEMA: str = Field(
+        default="dbo",
+        description="Default database schema for schema-aware providers (e.g. SQL Server 'dbo'). "
+        "Ignored by SQLite.",
+    )
+    DATABASE_ALLOWED_OBJECTS: Annotated[
+        list[str], NoDecode, BeforeValidator(parse_comma_separated_list)
+    ] = Field(
+        default=[],
+        description="Comma-separated whitelist of queryable objects (e.g. 'dbo.vw_RandevuRaporu'). "
+        "Empty list disables object-level restriction (local SQLite development).",
+    )
+    DATABASE_CONNECT_TIMEOUT: int = Field(
+        default=15, description="Database connection/login timeout in seconds."
+    )
+    DATABASE_QUERY_TIMEOUT: int = Field(
+        default=30, description="Database query execution timeout in seconds where supported."
+    )
+    DATABASE_MAX_PAGE_SIZE: int = Field(
+        default=1000, description="Maximum allowed page size for paginated query execution."
     )
 
     # LLM configurations
@@ -148,7 +173,9 @@ class Settings(BaseSettings):
 
     # SQL safety configurations
     SQL_DIALECT: str = Field(
-        default="sqlite", description="Default SQL dialect parsed by safety validation layer."
+        default="sqlite",
+        description="SQL dialect parsed by the safety validation layer "
+        "('sqlite', 'postgres', or 'tsql' for SQL Server).",
     )
 
     # Report configurations

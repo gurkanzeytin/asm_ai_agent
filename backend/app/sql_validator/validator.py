@@ -9,16 +9,58 @@ from app.core.config import settings
 from app.sql_validator.exceptions import SQLParsingException, UnsafeSQLException
 from app.sql_validator.interfaces import ISQLValidator
 from app.sql_validator.models import SQLValidationResult
-from app.sql_validator.rules import ALLOWED_ROOT_NODES, FORBIDDEN_AST_NODES
+from app.sql_validator.rules import (
+    ALLOWED_ROOT_NODES,
+    FORBIDDEN_AST_NODES,
+    FORBIDDEN_FUNCTION_NAMES,
+    FORBIDDEN_KEYWORD_PATTERN,
+    strip_string_literals,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_object_name(name: str, default_schema: str) -> str:
+    """Normalizes an SQL object identifier to a canonical 'schema.name' lowercase form.
+
+    Strips SQL Server brackets and quote characters, then qualifies unqualified
+    names with the configured default schema.
+    """
+    cleaned = name.replace("[", "").replace("]", "").replace('"', "").replace("`", "").strip()
+    parts = [part.strip() for part in cleaned.split(".") if part.strip()]
+    if len(parts) == 1:
+        parts = [default_schema, parts[0]]
+    return ".".join(parts).lower()
 
 
 class SQLValidator(ISQLValidator):
     """AST-based SQL validator validating query safety and read-only status using sqlglot."""
 
-    def __init__(self, dialect: str | None = None):
+    def __init__(
+        self,
+        dialect: str | None = None,
+        allowed_objects: list[str] | None = None,
+        default_schema: str | None = None,
+    ):
         self.dialect = dialect or getattr(settings, "SQL_DIALECT", "sqlite")
+        self._allowed_objects = allowed_objects
+        self._default_schema = default_schema
+
+    @property
+    def default_schema(self) -> str:
+        if self._default_schema is not None:
+            return self._default_schema
+        return getattr(settings, "DATABASE_SCHEMA", "dbo") or "dbo"
+
+    @property
+    def allowed_objects(self) -> set[str]:
+        """Canonical 'schema.name' whitelist. Empty set disables object restriction."""
+        raw = (
+            self._allowed_objects
+            if self._allowed_objects is not None
+            else getattr(settings, "DATABASE_ALLOWED_OBJECTS", [])
+        )
+        return {normalize_object_name(item, self.default_schema) for item in raw if item}
 
     def validate(self, sql: str) -> SQLValidationResult:
         """Parses, inspects, and normalizes the SQL query to ensure read-only safety."""
@@ -108,6 +150,35 @@ class SQLValidator(ISQLValidator):
                     statement_type=statement_type,
                     reason=f"Unsafe command '{node_type}' detected inside the query.",
                 )
+            if isinstance(node, (exp.Anonymous, exp.Func)):
+                func_name = (node.name or "").lower()
+                if func_name in FORBIDDEN_FUNCTION_NAMES:
+                    logger.error(f"Forbidden function invocation detected: {func_name}.")
+                    return SQLValidationResult(
+                        valid=False,
+                        statement_type=statement_type,
+                        reason=f"Unsafe function '{func_name}' detected inside the query.",
+                    )
+
+        # Defense-in-depth keyword scan (AST validation above is the primary control)
+        keyword_match = FORBIDDEN_KEYWORD_PATTERN.search(strip_string_literals(cleaned_sql))
+        if keyword_match:
+            logger.error(f"Forbidden keyword detected in SQL text: {keyword_match.group(0)}.")
+            return SQLValidationResult(
+                valid=False,
+                statement_type=statement_type,
+                reason=f"Unsafe keyword '{keyword_match.group(0)}' detected inside the query.",
+            )
+
+        # Enforce the configured queryable-object whitelist (read-only boundary)
+        object_violation = self._check_allowed_objects(expression)
+        if object_violation:
+            logger.error(f"Object whitelist violation: {object_violation}")
+            return SQLValidationResult(
+                valid=False,
+                statement_type=statement_type,
+                reason=object_violation,
+            )
 
         # Normalize statement syntax
         try:
@@ -132,6 +203,42 @@ class SQLValidator(ISQLValidator):
             statement_type=statement_type,
         )
 
+    def _check_allowed_objects(self, expression: exp.Expression) -> str | None:
+        """Verifies that every referenced table/view is inside the configured whitelist.
+
+        Returns a rejection reason string, or None when the query is acceptable.
+        An empty whitelist (local development) disables the restriction.
+        """
+        allowed = self.allowed_objects
+        if not allowed:
+            return None
+
+        cte_names = {
+            cte.alias_or_name.lower()
+            for cte in expression.find_all(exp.CTE)
+            if cte.alias_or_name
+        }
+
+        for table in expression.find_all(exp.Table):
+            # CTE references are derived sources, not physical objects.
+            if not table.db and table.name.lower() in cte_names:
+                continue
+            if table.catalog:
+                return (
+                    f"Cross-database or linked-server reference "
+                    f"'{table.catalog}.{table.db}.{table.name}' is not permitted."
+                )
+            qualified = normalize_object_name(
+                f"{table.db}.{table.name}" if table.db else table.name,
+                self.default_schema,
+            )
+            if qualified not in allowed:
+                return (
+                    f"Reference to object '{table.db + '.' if table.db else ''}{table.name}' "
+                    f"is outside the allowed object list."
+                )
+        return None
+
     def validate_schema_identifiers(self, sql: str, database_context) -> list[str]:
         """Compares SQL identifiers against the retrieved schema context.
 
@@ -149,13 +256,16 @@ class SQLValidator(ISQLValidator):
         if expression is None:
             return []
 
-        known_columns: dict[str, set[str] | None] = {
-            table.name.lower(): {column.name.lower() for column in table.columns}
-            for table in database_context.tables
-        }
+        known_columns: dict[str, set[str] | None] = {}
+        for table in database_context.tables:
+            columns = {column.name.lower() for column in table.columns}
+            known_columns[table.name.lower()] = columns
+            # Register the unqualified name too when metadata is schema-qualified.
+            known_columns.setdefault(table.name.split(".")[-1].lower(), columns)
         for view in database_context.views:
-            # ViewMetadata carries no column list; accept the view, skip column checks.
-            known_columns.setdefault(view.name.lower(), None)
+            view_columns = {column.name.lower() for column in view.columns} or None
+            known_columns.setdefault(view.name.lower(), view_columns)
+            known_columns.setdefault(view.name.split(".")[-1].lower(), view_columns)
 
         derived_sources = {
             cte.alias_or_name.lower()

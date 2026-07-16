@@ -2,13 +2,58 @@ import logging
 import time
 from typing import Any
 
+import sqlglot
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.config import settings
 from app.repositories.exceptions import RepositoryError
 from app.repositories.interfaces import IAnalyticalRepository
 
 logger = logging.getLogger(__name__)
+
+
+def _database_provider() -> str:
+    """Derives the active database provider family from the configured URL."""
+    url = settings.DATABASE_URL or ""
+    if url.startswith("mssql"):
+        return "mssql"
+    if url.startswith("postgresql") or url.startswith("postgres"):
+        return "postgresql"
+    return "sqlite"
+
+
+def build_paged_query(query: str, provider: str) -> str:
+    """Builds a dialect-correct paginated SQL statement with bound :skip and :limit params.
+
+    SQL Server does not support LIMIT/OFFSET; it requires ORDER BY ... OFFSET ... FETCH.
+    When the query has no ORDER BY, the deterministic-neutral 'ORDER BY (SELECT NULL)'
+    bounded strategy is used. Queries already bounded by TOP are wrapped in a subquery
+    because TOP cannot be combined with OFFSET/FETCH at the same query level.
+    """
+    query_clean = query.strip().rstrip(";")
+    if provider != "mssql":
+        return f"{query_clean} LIMIT :limit OFFSET :skip;"
+
+    has_order_by = False
+    has_top = False
+    try:
+        expression = sqlglot.parse_one(query_clean, read="tsql")
+        if expression is not None:
+            has_order_by = expression.args.get("order") is not None
+            has_top = expression.args.get("limit") is not None
+    except Exception:
+        logger.warning("Pagination could not parse query AST; using bounded wrapper strategy.")
+        has_top = True  # Fall through to the safe subquery wrapper
+
+    if has_top:
+        return (
+            f"SELECT * FROM ({query_clean}) AS paged_query "
+            f"ORDER BY (SELECT NULL) OFFSET :skip ROWS FETCH NEXT :limit ROWS ONLY;"
+        )
+    if has_order_by:
+        return f"{query_clean} OFFSET :skip ROWS FETCH NEXT :limit ROWS ONLY;"
+    return f"{query_clean} ORDER BY (SELECT NULL) OFFSET :skip ROWS FETCH NEXT :limit ROWS ONLY;"
 
 
 class AnalyticalRepository(IAnalyticalRepository):
@@ -68,12 +113,17 @@ class AnalyticalRepository(IAnalyticalRepository):
     async def fetch_paged_query(
         self, query: str, *, skip: int = 0, limit: int = 100, params: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
-        """Executes a query returning a paginated offset block."""
+        """Executes a query returning a paginated offset block using dialect-correct SQL."""
         logger.info(f"AnalyticalRepository fetching paged query (skip={skip}, limit={limit})...")
-        # Simple SQL formatting. In advanced productions, utilize AST parsers (e.g. sqlglot)
-        query_clean = query.strip().rstrip(";")
-        paged_query = f"{query_clean} LIMIT {limit} OFFSET {skip};"
-        return await self.execute_query(paged_query, params)
+        if skip < 0:
+            raise RepositoryError("Pagination 'skip' must be greater than or equal to 0.")
+        max_limit = settings.DATABASE_MAX_PAGE_SIZE
+        if limit < 1 or limit > max_limit:
+            raise RepositoryError(f"Pagination 'limit' must be between 1 and {max_limit}.")
+
+        paged_query = build_paged_query(query, _database_provider())
+        merged_params = {**(params or {}), "skip": skip, "limit": limit}
+        return await self.execute_query(paged_query, merged_params)
 
 
 class ScopedAnalyticalRepository(IAnalyticalRepository):

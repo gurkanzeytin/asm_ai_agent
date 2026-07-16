@@ -19,6 +19,39 @@ from app.services.interfaces import IPromptService
 
 logger = logging.getLogger(__name__)
 
+# Dialect-specific SQL generation guidance rendered into sql_generation.md.
+_DIALECT_RULES: dict[str, str] = {
+    "sqlite": (
+        "SQLite dialect rules:\n"
+        "- Limit result size with LIMIT (e.g. LIMIT 100).\n"
+        "- Use strftime('%Y-%m', <date_col>) AS ay ... GROUP BY ay ORDER BY ay for\n"
+        "  monthly aggregation, and date('now') for the current date."
+    ),
+    "tsql": (
+        "SQL Server (T-SQL) dialect rules:\n"
+        "- Limit result size with SELECT TOP (100) ... — NEVER use LIMIT or OFFSET-less\n"
+        "  SQLite syntax.\n"
+        "- Use GETDATE() for the current date, never date('now') or strftime.\n"
+        "- Use DATEADD, DATEDIFF, CAST, and CONVERT for date and type operations.\n"
+        "- Use FORMAT(<date_col>, 'yyyy-MM') AS ay ... GROUP BY FORMAT(<date_col>, 'yyyy-MM')\n"
+        "  ORDER BY ay for monthly aggregation.\n"
+        "- Query ONLY the allowed view listed in Schema (e.g. dbo.vw_RandevuRaporu);\n"
+        "  never reference any other table, view, procedure, or database.\n"
+        "- Always schema-qualify the view name (dbo.vw_RandevuRaporu)."
+    ),
+    "postgres": (
+        "PostgreSQL dialect rules:\n"
+        "- Limit result size with LIMIT (e.g. LIMIT 100).\n"
+        "- Use to_char(<date_col>, 'YYYY-MM') AS ay ... GROUP BY ay ORDER BY ay for\n"
+        "  monthly aggregation, and CURRENT_DATE for the current date."
+    ),
+}
+
+
+def get_dialect_rules(dialect: str) -> str:
+    """Returns the prompt guidance block for the configured SQL dialect."""
+    return _DIALECT_RULES.get(dialect, _DIALECT_RULES["sqlite"])
+
 
 class PromptService(IPromptService):
     """Orchestrates schema context loading, template retrieval, and rendering of prompts."""
@@ -132,8 +165,10 @@ class PromptService(IPromptService):
             t0 = time.perf_counter()
             system_prompt = await self.render_prompt("system_prompt.md", question, {})
 
+            dialect = getattr(settings, "SQL_DIALECT", "sqlite")
             variables = {
-                "dialect": getattr(settings, "SQL_DIALECT", "sqlite"),
+                "dialect": dialect,
+                "dialect_rules": get_dialect_rules(dialect),
                 "current_date": date.today().isoformat(),
             }
             if database_context is not None:

@@ -36,14 +36,14 @@ class ExecutionService(IExecutionService):
             logger.error(f"Read-only safety assertion validation failed: {reason}")
             raise QueryExecutionException(f"Read-only safety assertion failed: {reason}")
 
-        # 2. Extract database engine provider dynamically
+        # 2. Extract database engine provider dynamically (never expose the URL itself)
         provider = "unknown"
         url = settings.DATABASE_URL or ""
-        if "sqlite" in url:
+        if url.startswith("sqlite"):
             provider = "sqlite"
-        elif "postgresql" in url or "postgres" in url:
+        elif url.startswith("postgresql") or url.startswith("postgres"):
             provider = "postgresql"
-        elif "mssql" in url:
+        elif url.startswith("mssql"):
             provider = "mssql"
 
         # 3. Trigger execution on the repository

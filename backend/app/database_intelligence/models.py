@@ -46,6 +46,9 @@ class ViewMetadata(BaseModel):
 
     name: str = Field(..., description="The view name.")
     comment: Optional[str] = Field(default=None, description="Optional view description comment.")
+    columns: list[ColumnMetadata] = Field(
+        default_factory=list, description="Optional list of columns exposed by the view."
+    )
 
 
 class SchemaStatistics(BaseModel):

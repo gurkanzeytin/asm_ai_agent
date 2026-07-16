@@ -11,17 +11,51 @@ logger = logging.getLogger(__name__)
 # Database errors worth one SQL regeneration attempt: the SQL itself is wrong
 # in a way the LLM can plausibly fix when shown the error (AG-022).
 _RETRYABLE_ERROR_MARKERS = (
+    # SQLite
     "no such column",
     "no such table",
     "syntax error",
     "ambiguous column",
     "misuse of aggregate",
     "no such function",
+    # SQL Server (T-SQL)
+    "invalid column name",
+    "invalid object name",
+    "ambiguous column name",
+    "incorrect syntax near",
+    "is invalid in the select list because it is not contained in either "
+    "an aggregate function or the group by clause",
+    "order by items must appear in the select list",
+    "multi-part identifier",
+)
+
+# Errors that must never trigger an SQL rewrite: authentication, authorization,
+# network, timeout, or server availability problems are not fixable by the LLM.
+_NON_RETRYABLE_ERROR_MARKERS = (
+    "login failed",
+    "login timeout",
+    "permission was denied",
+    "permission denied",
+    "the server was not found",
+    "server is not found or not accessible",
+    "network-related",
+    "communication link failure",
+    "connection is broken",
+    "connection refused",
+    "connection reset",
+    "timeout expired",
+    "query timeout",
+    "ssl provider",
+    "certificate verify",
+    "not currently available",
+    "database is locked",
 )
 
 
 def _retryable_error(error_text: str) -> bool:
     lowered = error_text.lower()
+    if any(marker in lowered for marker in _NON_RETRYABLE_ERROR_MARKERS):
+        return False
     return any(marker in lowered for marker in _RETRYABLE_ERROR_MARKERS)
 
 

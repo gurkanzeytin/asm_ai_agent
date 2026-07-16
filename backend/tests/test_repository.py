@@ -68,10 +68,11 @@ async def test_repository_fetch_paged_query():
 
     await repo.fetch_paged_query("SELECT * FROM events", skip=10, limit=20)
 
-    # Assert limit/offset suffix formatting
+    # Assert limit/offset pagination uses safely bound parameters
     called_arg = mock_session.execute.call_args[0][0]
-    # Check that text() compiles to containing expected SQL string
-    assert "LIMIT 20 OFFSET 10;" in str(called_arg)
+    called_params = mock_session.execute.call_args[0][1]
+    assert "LIMIT :limit OFFSET :skip;" in str(called_arg)
+    assert called_params == {"skip": 10, "limit": 20}
 
 
 @pytest.mark.asyncio

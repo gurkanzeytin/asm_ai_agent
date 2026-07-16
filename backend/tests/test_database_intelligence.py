@@ -33,12 +33,14 @@ async def test_database_inspection_success():
     mock_inspector = MagicMock()
     mock_inspector.get_table_names.return_value = ["appointments", "patients"]
     mock_inspector.get_view_names.return_value = ["appointment_summary"]
-    mock_inspector.get_columns.side_effect = lambda table: [
+    mock_inspector.get_columns.side_effect = lambda table, schema=None: [
         {"name": "id", "type": "INTEGER", "nullable": False, "default": "1", "comment": "ID Col"},
         {"name": "name", "type": "VARCHAR(255)", "nullable": True, "default": None, "comment": None},
     ]
-    mock_inspector.get_pk_constraint.side_effect = lambda table: {"constrained_columns": ["id"]}
-    mock_inspector.get_foreign_keys.side_effect = lambda table: (
+    mock_inspector.get_pk_constraint.side_effect = lambda table, schema=None: {
+        "constrained_columns": ["id"]
+    }
+    mock_inspector.get_foreign_keys.side_effect = lambda table, schema=None: (
         [
             {
                 "constrained_columns": ["patient_id"],
@@ -51,8 +53,12 @@ async def test_database_inspection_success():
         else []
     )
 
-    mock_inspector.get_table_comment.side_effect = lambda table: {"text": f"{table} description"}
-    mock_inspector.get_view_comment.side_effect = lambda view: {"text": f"{view} view comment"}
+    mock_inspector.get_table_comment.side_effect = lambda table, schema=None: {
+        "text": f"{table} description"
+    }
+    mock_inspector.get_view_comment.side_effect = lambda view, schema=None: {
+        "text": f"{view} view comment"
+    }
 
     # Helper context executor runner mock
     async def run_sync_mock(func, *args, **kwargs):
@@ -71,7 +77,8 @@ async def test_database_inspection_success():
     assert "appointments" in schema.tables
     assert "patients" in schema.tables
     assert schema.statistics.table_count == 2
-    assert schema.statistics.column_count == 4
+    # Two tables and one view, each exposing two columns (views now carry column metadata)
+    assert schema.statistics.column_count == 6
     assert schema.statistics.view_count == 1
     assert schema.statistics.foreign_key_count == 1
 

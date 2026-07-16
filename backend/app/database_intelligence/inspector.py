@@ -1,10 +1,10 @@
 import logging
 import time
-from typing import Dict
 
 from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.core.config import settings
 from app.database_intelligence.exceptions import DatabaseInspectionError
 from app.database_intelligence.interfaces import IDatabaseInspector
 from app.database_intelligence.models import (
@@ -16,6 +16,7 @@ from app.database_intelligence.models import (
     ViewMetadata,
     calculate_fingerprint,
 )
+from app.sql_validator.validator import normalize_object_name
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ class DatabaseInspector(IDatabaseInspector):
             async with self.engine.connect() as conn:
                 schema = await conn.run_sync(self._inspect_sync)
             duration = (time.perf_counter() - start_time) * 1000
-            
+
             logger.info(
                 "Completed database schema inspection successfully.",
                 extra={
@@ -48,50 +49,110 @@ class DatabaseInspector(IDatabaseInspector):
                 },
             )
             return schema
+        except DatabaseInspectionError:
+            raise
         except Exception as e:
             logger.error(f"Critical error during database metadata inspection: {e}")
             raise DatabaseInspectionError(f"Database inspection failed: {e}") from e
 
+    def _inspection_schema_name(self, connection) -> str | None:
+        """Returns the explicit schema to inspect for schema-aware providers."""
+        if connection.dialect.name == "mssql":
+            return getattr(settings, "DATABASE_SCHEMA", "dbo") or "dbo"
+        return None
+
+    def _allowed_object_names(self, schema: str | None) -> set[str]:
+        """Canonical allowed object set ('schema.name' lowercase). Empty means unrestricted."""
+        default_schema = schema or getattr(settings, "DATABASE_SCHEMA", "dbo") or "dbo"
+        return {
+            normalize_object_name(item, default_schema)
+            for item in getattr(settings, "DATABASE_ALLOWED_OBJECTS", [])
+            if item
+        }
+
+    def _filter_allowed(
+        self, names: list[str], schema: str | None, allowed: set[str]
+    ) -> list[str]:
+        """Filters object names to the allowed whitelist (no-op when unrestricted)."""
+        if not allowed:
+            return names
+        effective_schema = schema or getattr(settings, "DATABASE_SCHEMA", "dbo") or "dbo"
+        return [
+            name
+            for name in names
+            if normalize_object_name(f"{effective_schema}.{name}", effective_schema) in allowed
+        ]
+
+    def _read_columns(
+        self, inspector, object_name: str, schema: str | None
+    ) -> list[ColumnMetadata]:
+        """Reads column metadata for a table or view."""
+        columns_data = inspector.get_columns(object_name, schema=schema)
+        pks: list[str] = []
+        try:
+            pk_constraint = inspector.get_pk_constraint(object_name, schema=schema)
+            pks = pk_constraint.get("constrained_columns", []) if pk_constraint else []
+        except Exception:
+            # Views and some dialects do not expose PK constraints.
+            pass
+
+        columns = []
+        for col in columns_data:
+            col_name = col["name"]
+            columns.append(
+                ColumnMetadata(
+                    name=col_name,
+                    type_name=str(col["type"]),
+                    nullable=col["nullable"],
+                    primary_key=(col_name in pks),
+                    default=str(col["default"]) if col.get("default") is not None else None,
+                    comment=col.get("comment"),
+                )
+            )
+        return columns
+
     def _inspect_sync(self, connection) -> DatabaseSchema:
         """Synchronous inspection logic executed inside the run_sync thread context."""
         inspector = inspect(connection)
+        schema_name = self._inspection_schema_name(connection)
+        allowed = self._allowed_object_names(schema_name)
 
-        # Retrieve structural lists
-        table_names = inspector.get_table_names()
-        view_names = inspector.get_view_names()
+        # Retrieve structural lists (restricted to the configured schema when applicable)
+        table_names = inspector.get_table_names(schema=schema_name)
+        view_names = inspector.get_view_names(schema=schema_name)
 
-        tables_metadata: Dict[str, TableMetadata] = {}
+        table_names = self._filter_allowed(table_names, schema_name, allowed)
+        view_names = self._filter_allowed(view_names, schema_name, allowed)
+
+        # Fail clearly when a configured allowed object cannot be found or accessed.
+        if allowed:
+            effective_schema = schema_name or getattr(settings, "DATABASE_SCHEMA", "dbo") or "dbo"
+            discovered = {
+                normalize_object_name(f"{effective_schema}.{name}", effective_schema)
+                for name in [*table_names, *view_names]
+            }
+            missing = sorted(allowed - discovered)
+            if missing:
+                raise DatabaseInspectionError(
+                    f"Configured allowed object(s) not found or not accessible: "
+                    f"{', '.join(missing)}. Verify DATABASE_ALLOWED_OBJECTS and database "
+                    f"permissions for the configured schema."
+                )
+
+        def qualified(name: str) -> str:
+            return f"{schema_name}.{name}" if schema_name else name
+
+        tables_metadata: dict[str, TableMetadata] = {}
         total_columns = 0
         total_fks = 0
 
         for table_name in table_names:
-            # Discover columns
-            columns_data = inspector.get_columns(table_name)
-            pk_constraint = inspector.get_pk_constraint(table_name)
-            pks = pk_constraint.get("constrained_columns", []) if pk_constraint else []
-
-            columns = []
-            for col in columns_data:
-                col_name = col["name"]
-                col_type = str(col["type"])
-                col_nullable = col["nullable"]
-                col_default = str(col["default"]) if col.get("default") is not None else None
-                col_comment = col.get("comment")
-
-                columns.append(
-                    ColumnMetadata(
-                        name=col_name,
-                        type_name=col_type,
-                        nullable=col_nullable,
-                        primary_key=(col_name in pks),
-                        default=col_default,
-                        comment=col_comment,
-                    )
-                )
+            columns = self._read_columns(inspector, table_name, schema_name)
             total_columns += len(columns)
+            pks = [col.name for col in columns if col.primary_key]
 
             # Discover foreign keys
-            fk_data = inspector.get_foreign_keys(table_name)
+            fk_data = inspector.get_foreign_keys(table_name, schema=schema_name)
             foreign_keys = []
             for fk in fk_data:
                 foreign_keys.append(
@@ -107,33 +168,48 @@ class DatabaseInspector(IDatabaseInspector):
             # Discover table comment
             table_comment = None
             try:
-                comment_dict = inspector.get_table_comment(table_name)
+                comment_dict = inspector.get_table_comment(table_name, schema=schema_name)
                 table_comment = comment_dict.get("text") if comment_dict else None
             except Exception:
                 # Dialect does not support get_table_comment
                 pass
 
-            tables_metadata[table_name] = TableMetadata(
-                name=table_name,
+            display_name = qualified(table_name)
+            tables_metadata[display_name] = TableMetadata(
+                name=display_name,
                 columns=columns,
                 primary_keys=pks,
                 foreign_keys=foreign_keys,
                 comment=table_comment,
             )
 
-        views_metadata: Dict[str, ViewMetadata] = {}
+        views_metadata: dict[str, ViewMetadata] = {}
         for view_name in view_names:
             view_comment = None
             try:
-                comment_dict = inspector.get_view_comment(view_name)
+                comment_dict = inspector.get_view_comment(view_name, schema=schema_name)
                 view_comment = comment_dict.get("text") if comment_dict else None
             except Exception:
                 # Dialect does not support get_view_comment
                 pass
 
-            views_metadata[view_name] = ViewMetadata(
-                name=view_name,
+            view_columns: list[ColumnMetadata] = []
+            try:
+                view_columns = self._read_columns(inspector, view_name, schema_name)
+                total_columns += len(view_columns)
+            except Exception:
+                if allowed:
+                    raise DatabaseInspectionError(
+                        f"Could not read column metadata for allowed view "
+                        f"'{qualified(view_name)}'. Verify view permissions."
+                    ) from None
+                # Best-effort for unrestricted (local development) inspection.
+
+            display_name = qualified(view_name)
+            views_metadata[display_name] = ViewMetadata(
+                name=display_name,
                 comment=view_comment,
+                columns=view_columns,
             )
 
         # Build schema statistics
