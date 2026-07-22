@@ -5,7 +5,9 @@ from app.agent.nodes.node_interface import IAgentNode
 from app.agent.state import AgentState
 from app.application_models.generated_report import GeneratedReport
 from app.application_models.outcome import AgentOutcome
+from app.reporting.presentation import get_metric_label
 from app.services.interfaces import IWorkflowService
+from app.shared.result_limits import OVERSIZED_ANALYTICAL_RESULT_MESSAGE
 
 logger = logging.getLogger(__name__)
 
@@ -42,21 +44,33 @@ class GenerateReportNode(IAgentNode):
                 state.analytics_blocked_reason,
             )
             duration = (time.perf_counter() - start_time) * 1000
-            report_dto = GeneratedReport(
-                title="Sonuç doğrulanamadı",
-                summary=(
-                    "Sorgu çalıştı ancak sonuç, planlanan analiz ile eşleşmedi; "
-                    "bu nedenle güvenilir bir yorum üretilemedi."
-                ),
-                markdown=(
-                    "## Sonuç doğrulanamadı\n\n"
-                    "Sorgu çalıştı ancak dönen sonucun yapısı planlanan analizle "
-                    "eşleşmedi, bu yüzden bir yorum üretilmedi. Lütfen soruyu "
-                    "daraltarak veya farklı bir şekilde ifade ederek tekrar deneyin."
-                ),
-                provider="deterministic",
-                model="none",
-            )
+            if state.analytics_blocked_reason == OVERSIZED_ANALYTICAL_RESULT_MESSAGE:
+                report_dto = GeneratedReport(
+                    title="Sonuçlar güvenli biçimde sınırlandırıldı",
+                    summary=OVERSIZED_ANALYTICAL_RESULT_MESSAGE,
+                    markdown=(
+                        "## Sonuçlar güvenli biçimde sınırlandırıldı\n\n"
+                        f"{OVERSIZED_ANALYTICAL_RESULT_MESSAGE}"
+                    ),
+                    provider="deterministic",
+                    model="result_size_guard",
+                )
+            else:
+                report_dto = GeneratedReport(
+                    title="Sonuç doğrulanamadı",
+                    summary=(
+                        "Sorgu çalıştı ancak sonuç, planlanan analiz ile eşleşmedi; "
+                        "bu nedenle güvenilir bir yorum üretilemedi."
+                    ),
+                    markdown=(
+                        "## Sonuç doğrulanamadı\n\n"
+                        "Sorgu çalıştı ancak dönen sonucun yapısı planlanan analizle "
+                        "eşleşmedi, bu yüzden bir yorum üretilmedi. Lütfen soruyu "
+                        "daraltarak veya farklı bir şekilde ifade ederek tekrar deneyin."
+                    ),
+                    provider="deterministic",
+                    model="none",
+                )
             return state.model_copy(
                 update={
                     "generated_report": report_dto,
@@ -155,6 +169,8 @@ class GenerateReportNode(IAgentNode):
                 metric_lines = []
                 for metric_id, summary in metric_summaries.items():
                     parts = []
+                    if summary.value is not None:
+                        parts.append(f"değer {summary.value:g}")
                     if summary.total is not None:
                         parts.append(f"toplam {summary.total:g}")
                     if summary.average is not None:
@@ -163,7 +179,9 @@ class GenerateReportNode(IAgentNode):
                         parts.append(f"en yüksek: {summary.top_dimension}")
                     if summary.bottom_dimension:
                         parts.append(f"en düşük: {summary.bottom_dimension}")
-                    metric_lines.append(f"- **{metric_id}**: {', '.join(parts)}")
+                    # AI-INTELLIGENCE-012: canonical metric_id stays internal;
+                    # only its Türkçe presentation label is ever shown to the user.
+                    metric_lines.append(f"- **{get_metric_label(metric_id)}**: {', '.join(parts)}")
                 sections.append(
                     "\n\n**Sorgulanan metrikler**\n" + "\n".join(metric_lines)
                 )

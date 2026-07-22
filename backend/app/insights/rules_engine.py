@@ -32,7 +32,11 @@ _CONSISTENCY_RULES: dict[str, InsightRule] = {
     "insufficient_data": InsightRule.INSUFFICIENT_COMPLETE_PERIODS,
     "consistent_upward": InsightRule.CONSISTENT_UPWARD_TREND,
     "consistent_downward": InsightRule.CONSISTENT_DOWNWARD_TREND,
-    "mixed": InsightRule.MIXED_TREND_SIGNAL,
+    # AI-INTELLIGENCE-018: "mixed" renamed "mixed_or_fluctuating" — consistency
+    # is now derived from adjacent-pair monotonicity (app.analytics.trend_analysis),
+    # not endpoint/slope agreement, so this branch now specifically means
+    # "the series fluctuated" rather than merely "the two summaries disagreed".
+    "mixed_or_fluctuating": InsightRule.MIXED_TREND_SIGNAL,
     "flat": InsightRule.FLAT_TREND,
 }
 
@@ -44,7 +48,14 @@ class InsightRulesEngine:
         metrics = analytics.metrics
         rules: list[InsightRule] = []
 
-        if analytics.row_count == 0 or not metrics or metrics.get("count", 0) == 0:
+        has_direct_aggregate_kpi = analytics.aggregate_result and bool(
+            analytics.displayable_kpis
+        )
+        if (
+            analytics.row_count == 0
+            or not metrics
+            or (not has_direct_aggregate_kpi and metrics.get("count", 0) == 0)
+        ):
             return [InsightRule.INSUFFICIENT_EVIDENCE]
 
         if analytics.data_shape == DataShape.TIME_SERIES and analytics.trend_metrics:
@@ -100,7 +111,10 @@ class InsightRulesEngine:
         if analytics.row_count == 0 or not analytics.metrics:
             return InsightConfidence.LOW
 
-        expected = _EXPECTED_METRICS.get(analytics.data_shape, ("count",))
+        if analytics.aggregate_result and analytics.displayable_kpis:
+            expected = tuple(item.key for item in analytics.displayable_kpis)
+        else:
+            expected = _EXPECTED_METRICS.get(analytics.data_shape, ("count",))
         missing = [name for name in expected if analytics.metrics.get(name) is None]
         if missing:
             logger.debug("Insight confidence downgraded to MEDIUM; missing metrics: %s", missing)

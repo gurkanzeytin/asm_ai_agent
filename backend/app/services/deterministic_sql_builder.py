@@ -11,6 +11,7 @@ the existing LLM fallback path.
 import re
 from dataclasses import dataclass, field
 
+from app.database_intelligence.value_catalog import FIELD_COLUMNS
 from app.planning.models import QueryPlan
 from app.semantics.catalog import load_metric_catalog
 
@@ -50,6 +51,15 @@ VERIFIED_STATUS_VALUES = {
     "waiting": "Beklemede",
 }
 DATE_COLUMN = "BaslangicTarihi"
+FILTER_COLUMNS = {
+    *(column for column, _tier in FIELD_COLUMNS.values()),
+    "DoktorId",
+}
+_SIMPLE_FILTER = re.compile(
+    r"^\s*\[?(?P<column>[A-Za-z_][A-Za-z0-9_]*)\]?\s*=\s*"
+    r"(?:(?:N)?'(?P<text>(?:''|[^'])*)'|(?P<number>-?\d+(?:\.\d+)?))\s*$",
+    re.IGNORECASE,
+)
 LAST_30 = f"{DATE_COLUMN} >= DATEADD(day, -30, CAST(GETDATE() AS date)) AND {DATE_COLUMN} < DATEADD(day, 1, CAST(GETDATE() AS date))"
 PREVIOUS_30 = f"{DATE_COLUMN} >= DATEADD(day, -60, CAST(GETDATE() AS date)) AND {DATE_COLUMN} < DATEADD(day, -30, CAST(GETDATE() AS date))"
 LAST_90 = f"{DATE_COLUMN} >= DATEADD(day, -90, CAST(GETDATE() AS date)) AND {DATE_COLUMN} < DATEADD(day, 1, CAST(GETDATE() AS date))"
@@ -415,10 +425,80 @@ class DeterministicSQLBuilder:
             clauses.append(
                 f"{column} >= '{date_filter.start_date}' AND {column} < DATEADD(day, 1, '{date_filter.end_date}')"
             )
-        for extra in plan.extra_filters:
-            if self._safe_filter(extra):
-                clauses.append(extra)
+        clauses.extend(self._render_structured_filters(plan))
         return f"WHERE {' AND '.join(clauses)}\n" if clauses else ""
+
+    def _render_structured_filters(self, plan: QueryPlan) -> list[str]:
+        """Render every grounded view filter through one escaped T-SQL path.
+
+        Dedicated branch/department fields, grounded ``resolved_filters``, and
+        simple allow-listed ``extra_filters`` all converge here. Values for the
+        same column are deduplicated before rendering, preventing the same
+        predicate from being applied twice when two compatible plan fields
+        carry the same grounded constraint.
+        """
+        values_by_column: dict[str, list[str]] = {}
+        residual_filters: list[str] = []
+
+        def add(column: str, literal: str) -> None:
+            if column not in FILTER_COLUMNS:
+                return
+            values = values_by_column.setdefault(column, [])
+            if literal not in values:
+                values.append(literal)
+
+        for value in plan.branch_filters:
+            add("SubeAdi", self._unicode_literal(value))
+        if plan.department_filter:
+            add("GenelRandevuBolumAdi", self._unicode_literal(plan.department_filter))
+
+        for field_name, resolved in plan.resolved_filters.items():
+            if not resolved.grounded or not resolved.values:
+                continue
+            column, _tier = FIELD_COLUMNS.get(field_name, (None, None))
+            if column is None:
+                continue
+            for value in resolved.values:
+                add(column, self._unicode_literal(value))
+
+        for extra in plan.extra_filters:
+            parsed = self._parse_simple_filter(extra)
+            if parsed is not None:
+                column, literal = parsed
+                add(column, literal)
+            elif self._safe_filter(extra):
+                # Preserve legacy non-structured constraints (for example the
+                # existing negation planner hint). They are not duplicated with
+                # canonical structured predicates because parsing failed.
+                residual_filters.append(extra)
+
+        rendered = []
+        for column, literals in values_by_column.items():
+            if len(literals) == 1:
+                rendered.append(f"{column} = {literals[0]}")
+            else:
+                rendered.append(f"{column} IN ({', '.join(literals)})")
+        return [*rendered, *residual_filters]
+
+    def _parse_simple_filter(self, expression: str) -> tuple[str, str] | None:
+        match = _SIMPLE_FILTER.fullmatch(expression)
+        if match is None:
+            return None
+        column = match.group("column")
+        canonical_column = next(
+            (candidate for candidate in FILTER_COLUMNS if candidate.lower() == column.lower()),
+            None,
+        )
+        if canonical_column is None:
+            return None
+        number = match.group("number")
+        if number is not None:
+            return canonical_column, number
+        text_value = (match.group("text") or "").replace("''", "'")
+        return canonical_column, self._unicode_literal(text_value)
+
+    def _unicode_literal(self, value: str) -> str:
+        return "N'" + value.replace("'", "''") + "'"
 
     def _order_by(self, plan: QueryPlan, analysis_type: str, metric_alias: str) -> str:
         if (

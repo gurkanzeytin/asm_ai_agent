@@ -12,6 +12,8 @@ from app.reporting.template_renderer import TemplateReportRenderer
 from app.services.exceptions import ReportServiceException
 from app.services.interfaces import IPromptService, IReportService
 from app.services.report_generator import IReportGenerator, NarrativeReportGenerator
+from app.services.result_safety import cap_query_result
+from app.shared.result_limits import DEFAULT_GROUPED_RESULT_LIMIT
 
 logger = logging.getLogger(__name__)
 
@@ -181,10 +183,11 @@ class ReportService(IReportService):
         """Assembles the analytical report from the existing insight narrative + data table."""
         from app.core.config import settings
 
-        max_rows = getattr(settings, "REPORT_MAX_ROWS", 100)
-        capped = query_result
-        if len(query_result.rows) > max_rows:
-            capped = query_result.model_copy(update={"rows": query_result.rows[:max_rows]})
+        max_rows = min(
+            getattr(settings, "REPORT_MAX_ROWS", DEFAULT_GROUPED_RESULT_LIMIT),
+            DEFAULT_GROUPED_RESULT_LIMIT,
+        )
+        capped = cap_query_result(query_result, max_rows)
         table_result = self.template_renderer.render(ReportType.TABLE, capped)
 
         # Section names per spec: Sorgu Sonucu (title+summary) / Öne Çıkan
@@ -250,10 +253,11 @@ class ReportService(IReportService):
         """
         from app.core.config import settings
 
-        max_rows = getattr(settings, "REPORT_MAX_ROWS", 100)
-        capped = query_result
-        if len(query_result.rows) > max_rows:
-            capped = query_result.model_copy(update={"rows": query_result.rows[:max_rows]})
+        max_rows = min(
+            getattr(settings, "REPORT_MAX_ROWS", DEFAULT_GROUPED_RESULT_LIMIT),
+            DEFAULT_GROUPED_RESULT_LIMIT,
+        )
+        capped = cap_query_result(query_result, max_rows)
 
         template_result = self.template_renderer.render(ReportType.TABLE, capped)
         latency_ms = (time.perf_counter() - start_time) * 1000

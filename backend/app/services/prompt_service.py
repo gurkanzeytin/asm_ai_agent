@@ -17,6 +17,8 @@ from app.prompts.renderer import IPromptRenderer
 from app.semantics import view_mapping
 from app.services.exceptions import PromptServiceException
 from app.services.interfaces import IPromptService
+from app.services.result_safety import llm_safe_rows, safe_result_shape
+from app.shared.result_limits import MAX_LLM_BOTTOM_ROWS, MAX_LLM_TOP_ROWS
 
 logger = logging.getLogger(__name__)
 
@@ -198,14 +200,16 @@ class PromptService(IPromptService):
                     database_provider="mssql",
                 )
 
-            # Truncate rows if necessary to protect against large datasets
-            original_row_count = query_result.row_count
-            rows = query_result.rows
-            truncated_row_count = None
-            max_rows = getattr(settings, "REPORT_MAX_ROWS", 100)
-            if len(rows) > max_rows:
-                rows = rows[:max_rows]
-                truncated_row_count = len(rows)
+            # The report LLM receives aggregate-safe top/bottom samples only.
+            # Identifier/PII-bearing detail rows are omitted entirely.
+            original_row_count = query_result.total_count or query_result.row_count
+            max_rows = min(
+                getattr(settings, "REPORT_MAX_ROWS", 100),
+                MAX_LLM_TOP_ROWS + MAX_LLM_BOTTOM_ROWS,
+            )
+            rows = llm_safe_rows(query_result)[:max_rows]
+            was_trimmed = len(rows) < len(query_result.rows)
+            truncated_row_count = len(rows) if was_trimmed else None
 
             # Build ReportPromptContext DTO
             context = ReportPromptContext(
@@ -214,6 +218,12 @@ class PromptService(IPromptService):
                 rows=rows,
                 original_row_count=original_row_count,
                 truncated_row_count=truncated_row_count,
+                result_truncated=query_result.result_truncated or was_trimmed,
+                has_more=query_result.has_more or was_trimmed,
+                total_count=query_result.total_count,
+                source_record_count=query_result.source_record_count,
+                result_group_count=query_result.result_group_count,
+                result_shape=safe_result_shape(query_result),
             )
 
             # Serialize context DTO to JSON format

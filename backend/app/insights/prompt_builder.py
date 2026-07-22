@@ -25,7 +25,8 @@ class InsightPromptBuilder:
         visualization = "NONE"
         if analytics.visualization:
             visualization = (
-                f"{analytics.visualization.type.value} ({analytics.visualization.reason})"
+                f"{analytics.visualization.type_label or analytics.visualization.type.value} "
+                f"({analytics.visualization.reason})"
             )
         return prompt_renderer.render(
             template,
@@ -51,6 +52,7 @@ class InsightPromptBuilder:
         }
         payload: dict[str, Any] = {
             "analytics_type": analytics.analytics_type,
+            "analytics_type_label": analytics.analytics_type_label,
             "data_shape": analytics.data_shape.value,
             "row_count": analytics.row_count,
             "metrics": scalar_metrics,
@@ -73,8 +75,12 @@ class InsightPromptBuilder:
         if analytics.metric_summaries:
             # Per-metric summaries only (total/average/min/max/top/bottom
             # dimension label) — never raw rows, never patient-level fields.
+            # Both metric_id (internal, stable) and metric_label (Türkçe
+            # display name) are sent; the prompt template instructs the model
+            # to narrate using metric_label only and never echo metric_id or
+            # any other snake_case identifier (AI-INTELLIGENCE-012).
             payload["metric_summaries"] = {
-                metric_id: summary.model_dump(exclude={"metric_id"})
+                metric_id: summary.model_dump()
                 for metric_id, summary in analytics.metric_summaries.items()
             }
         if analytics.trend_metrics is not None:

@@ -1,0 +1,336 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "01_basic_distribution",
+      "title": "Randevu Durumu Dağılımı",
+      "category": "Dağılım",
+      "question": "Randevu durumlarının dağılımını göster.",
+      "session_group": "basic_distribution",
+      "expected_outcome": "EXECUTE_SQL",
+      "expected_analysis_type": "distribution",
+      "expected_provider": "template|deterministic",
+      "expected_model_contains": null,
+      "expected_metrics": ["appointment_count"],
+      "expected_dimensions": ["status"],
+      "expected_context_applied": false,
+      "expected_sql_contains": ["GROUP BY RandevuDurumu"],
+      "forbidden_sql_contains": ["WHERE RandevuDurumu ="],
+      "expected_ui_text_contains": [],
+      "forbidden_ui_text_contains": ["Bu Soru Veri Kapsamı Dışında"],
+      "max_duration_seconds": 30,
+      "notes": "Filtre değil, durum boyutunda dağılım üretmelidir."
+    },
+    {
+      "id": "02_today_summary",
+      "title": "Bugünkü Özet",
+      "category": "Özet",
+      "question": "Bugünkü toplam randevu sayısını ve farklı hasta sayısını göster.",
+      "session_group": "today_summary",
+      "expected_outcome": "EXECUTE_SQL",
+      "expected_analysis_type": "summary|count",
+      "expected_provider": null,
+      "expected_model_contains": null,
+      "expected_metrics": ["appointment_count", "unique_patient_count"],
+      "expected_dimensions": [],
+      "expected_context_applied": false,
+      "expected_sql_contains": [">=", "<"],
+      "forbidden_sql_contains": ["DATEADD(day, -30", "DATEADD(day, -90"],
+      "expected_ui_text_contains": [],
+      "forbidden_ui_text_contains": ["Kayıt Sayısı: 1"],
+      "max_duration_seconds": 30,
+      "notes": "İki gerçek skaler metrik görünmeli; teknik satır sayısı KPI olmamalıdır.",
+      "assertions": [
+        {"kind": "result_shape_in", "expected": ["scalar_aggregate", "multi_metric_scalar_aggregate"], "severity": "MAJOR", "message": "Skaler sonuç şekli bekleniyor."},
+        {"kind": "sql_today_range", "expected": true, "severity": "CRITICAL", "message": "Bugünün yarı-açık tarih aralığı bulunamadı."}
+      ]
+    },
+    {
+      "id": "03_monthly_trend",
+      "title": "Aylık Eğilim",
+      "category": "Trend",
+      "question": "Son 6 aydaki randevu eğilimini kısaca yorumla.",
+      "session_group": "monthly_trend",
+      "expected_outcome": "EXECUTE_SQL",
+      "expected_analysis_type": "trend|time_series",
+      "expected_provider": "ollama|local_llm",
+      "expected_model_contains": "qwen",
+      "expected_metrics": ["monthly_appointment_count"],
+      "expected_dimensions": [],
+      "expected_context_applied": false,
+      "expected_sql_contains": ["GROUP BY"],
+      "forbidden_sql_contains": [],
+      "expected_ui_text_contains": [],
+      "forbidden_ui_text_contains": ["monthly_appointment_count"],
+      "max_duration_seconds": 45,
+      "notes": "Tamamlanmamış dönem varsa sınırlama görünmeli; trend kuralları çelişmemelidir.",
+      "assertions": [
+        {"kind": "equals_path", "path": "resolved_time_grain", "expected": "month", "severity": "MAJOR", "message": "Aylık zaman kırılımı bekleniyor."},
+        {"kind": "no_contradictory_trend_rules", "expected": true, "severity": "CRITICAL", "message": "Birbiriyle çelişen trend kuralları bulundu."},
+        {"kind": "trend_language_consistency", "expected": ["monthly_appointment_count", "appointment_count"], "severity": "CRITICAL", "message": "Raporun sürekli yükseliş iddiası dönem değerleriyle çelişiyor."},
+        {"kind": "partial_period_disclosed", "expected": true, "severity": "MINOR", "message": "Kısmi dönem sınırlaması raporda açıklanmadı."}
+      ]
+    },
+    {
+      "id": "04_complex_multi_metric",
+      "title": "Karma Çoklu Metrik",
+      "category": "Karşılaştırma",
+      "question": "Son 6 ayda şubelere göre randevu sayısı, gerçekleşme oranı ve ortalama randevu süresini karşılaştır; dikkat çeken farklılıkları ve olası nedenleri açıkla.",
+      "session_group": "complex_multi_metric",
+      "expected_outcome": "EXECUTE_SQL",
+      "expected_analysis_type": "comparison|distribution",
+      "expected_provider": "nvidia",
+      "expected_model_contains": "nemotron",
+      "expected_metrics": ["appointment_count", "completed_appointment_rate", "appointment_duration_average"],
+      "expected_dimensions": ["branch"],
+      "expected_context_applied": false,
+      "expected_sql_contains": ["GROUP BY SubeAdi"],
+      "forbidden_sql_contains": [],
+      "expected_ui_text_contains": [],
+      "forbidden_ui_text_contains": ["appointments_per_branch"],
+      "max_duration_seconds": 90,
+      "notes": "Uzak Nemotron rotası ve üç ayrı metrik beklenir.",
+      "assertions": [
+        {"kind": "nonempty_path", "path": "analytics.result_shape", "expected": true, "severity": "CRITICAL", "message": "Sonuç şekli doğrulanamadı."},
+        {"kind": "turkish_report_title", "expected": true, "severity": "MINOR", "message": "Rapor başlığı Türkçe görünmüyor."}
+      ]
+    },
+    {
+      "id": "05_grounded_branch",
+      "title": "Doğrulanmış Şube",
+      "category": "Filtre",
+      "question": "TEST ASM Gebze için son 30 günlük randevu sayılarını göster.",
+      "session_group": "grounded_branch",
+      "expected_outcome": "EXECUTE_SQL",
+      "expected_analysis_type": "count|summary|list|trend|time_series",
+      "expected_provider": "template|deterministic",
+      "expected_model_contains": null,
+      "expected_metrics": ["appointment_count"],
+      "expected_dimensions": [],
+      "expected_context_applied": false,
+      "expected_sql_contains": ["TEST ASM Gebze", ">=", "<"],
+      "forbidden_sql_contains": ["LIKE"],
+      "expected_ui_text_contains": [],
+      "forbidden_ui_text_contains": [],
+      "max_duration_seconds": 45,
+      "notes": "Şube değeri exact/normalize-exact biçimde doğrulanmalıdır.",
+      "assertions": [
+        {"kind": "sql_recent_day_window", "expected": 30, "severity": "CRITICAL", "message": "Son 30 günlük doğru tarih aralığı bulunamadı."}
+      ]
+    },
+    {
+      "id": "06_generic_all_scope",
+      "title": "Tüm Şubeler Kapsamı",
+      "category": "Kapsam",
+      "question": "Tüm şubelere göre bugünkü randevu sayılarını göster.",
+      "session_group": "generic_all_scope",
+      "expected_outcome": "EXECUTE_SQL",
+      "expected_analysis_type": "distribution|comparison|count",
+      "expected_provider": null,
+      "expected_model_contains": null,
+      "expected_metrics": ["appointment_count"],
+      "expected_dimensions": ["branch"],
+      "expected_context_applied": false,
+      "expected_sql_contains": ["GROUP BY SubeAdi", ">=", "<"],
+      "forbidden_sql_contains": ["WHERE SubeAdi =", "WHERE SubeAdi LIKE"],
+      "expected_ui_text_contains": [],
+      "forbidden_ui_text_contains": [],
+      "max_duration_seconds": 30,
+      "notes": "Genel kapsam bir şube değer filtresine dönüştürülmemelidir.",
+      "assertions": [
+        {"kind": "sql_today_range", "expected": true, "severity": "CRITICAL", "message": "Bugünün tarih aralığı bulunamadı."}
+      ]
+    },
+    {
+      "id": "07_additive_followup",
+      "title": "Eklemeli Takip Sorusu",
+      "category": "Bağlam",
+      "question": "Şubelere göre randevu sayılarını karşılaştır.",
+      "session_group": "additive_followup",
+      "expected_outcome": "EXECUTE_SQL",
+      "expected_analysis_type": "comparison|distribution",
+      "expected_provider": null,
+      "expected_model_contains": null,
+      "expected_metrics": ["appointment_count"],
+      "expected_dimensions": ["branch"],
+      "expected_context_applied": false,
+      "expected_sql_contains": ["GROUP BY SubeAdi"],
+      "forbidden_sql_contains": [],
+      "expected_ui_text_contains": [],
+      "forbidden_ui_text_contains": [],
+      "max_duration_seconds": 45,
+      "notes": "İkinci tur aynı oturumda gerçekleşme oranını ekler.",
+      "turns": [
+        {
+          "question": "Şubelere göre randevu sayılarını karşılaştır.",
+          "expected_outcome": "EXECUTE_SQL",
+          "expected_metrics": ["appointment_count"],
+          "expected_dimensions": ["branch"],
+          "expected_context_applied": false
+        },
+        {
+          "question": "Bir de gerçekleşme oranını ekle.",
+          "expected_outcome": "EXECUTE_SQL",
+          "expected_metrics": ["appointment_count", "completed_appointment_rate"],
+          "expected_dimensions": ["branch"],
+          "expected_context_applied": true,
+          "assertions": [
+            {"kind": "context_inheritance", "expected": {"families": ["dimensions", "metrics"], "outcomes": ["EXECUTE_SQL"]}, "severity": "CRITICAL", "message": "Şube ve önceki metrik bağlamı devralınmadı."}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "08_dimension_override",
+      "title": "Boyut Değiştirme",
+      "category": "Bağlam",
+      "question": "Son 6 ayda şubelere göre randevu sayılarını karşılaştır.",
+      "session_group": "dimension_override",
+      "expected_outcome": "EXECUTE_SQL",
+      "expected_analysis_type": "comparison|distribution",
+      "expected_provider": null,
+      "expected_model_contains": null,
+      "expected_metrics": ["appointment_count"],
+      "expected_dimensions": ["branch"],
+      "expected_context_applied": false,
+      "expected_sql_contains": [],
+      "forbidden_sql_contains": [],
+      "expected_ui_text_contains": [],
+      "forbidden_ui_text_contains": [],
+      "max_duration_seconds": 45,
+      "notes": "İkinci tur şube boyutunu kaldırıp doktor boyutunu ekler.",
+      "turns": [
+        {
+          "question": "Son 6 ayda şubelere göre randevu sayılarını karşılaştır.",
+          "expected_outcome": "EXECUTE_SQL",
+          "expected_metrics": ["appointment_count"],
+          "expected_dimensions": ["branch"],
+          "expected_context_applied": false
+        },
+        {
+          "question": "Doktor bazında?",
+          "expected_outcome": "EXECUTE_SQL",
+          "expected_metrics": ["appointment_count"],
+          "expected_dimensions": ["doctor"],
+          "expected_context_applied": true,
+          "assertions": [
+            {"kind": "not_contains_path", "path": "resolved_dimensions", "expected": "branch", "severity": "CRITICAL", "message": "Eski şube boyutu kaldırılmadı."},
+            {"kind": "contains_path", "path": "inherited_fields", "expected": "date", "severity": "MAJOR", "message": "Tarih bağlamı devralınmadı."}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "09_year_only_followup",
+      "title": "Yalnızca Yıl Takibi",
+      "category": "Bağlam",
+      "question": "2025 yılının ortalama randevu süresini göster.",
+      "session_group": "year_only_followup",
+      "expected_outcome": "EXECUTE_SQL",
+      "expected_analysis_type": "average|summary",
+      "expected_provider": null,
+      "expected_model_contains": null,
+      "expected_metrics": ["appointment_duration_average"],
+      "expected_dimensions": [],
+      "expected_context_applied": false,
+      "expected_sql_contains": [],
+      "forbidden_sql_contains": [],
+      "expected_ui_text_contains": [],
+      "forbidden_ui_text_contains": ["Kayıt Sayısı: 1"],
+      "max_duration_seconds": 45,
+      "notes": "Aktif hata düzeltmesi tamamlanana kadar açık ve teşhis edilebilir biçimde başarısız olabilir.",
+      "turns": [
+        {
+          "question": "2025 yılının ortalama randevu süresini göster.",
+          "expected_outcome": "EXECUTE_SQL",
+          "expected_metrics": ["appointment_duration_average"],
+          "expected_dimensions": [],
+          "expected_context_applied": false,
+          "assertions": [
+            {"kind": "sql_year_window", "expected": 2025, "severity": "CRITICAL", "message": "2025 yıllık tarih aralığı semantik olarak doğru değil."}
+          ]
+        },
+        {
+          "question": "2024 yılının?",
+          "expected_outcome": "EXECUTE_SQL",
+          "expected_metrics": ["appointment_duration_average"],
+          "expected_dimensions": [],
+          "expected_context_applied": true,
+          "expected_sql_contains": [],
+          "forbidden_ui_text_contains": ["Bu Soru Veri Kapsamı Dışında", "Kayıt Sayısı: 1"],
+          "assertions": [
+            {"kind": "contains_path", "path": "resolved_question", "expected": "2024", "severity": "CRITICAL", "message": "Çözümlenmiş soru 2024 yılını içermiyor."},
+            {"kind": "not_contains_path", "path": "resolved_question", "expected": "2025", "severity": "CRITICAL", "message": "Önceki yıl yeni tarihten çıkarılmadı."},
+            {"kind": "sql_year_window", "expected": 2024, "severity": "CRITICAL", "message": "2024 yıllık tarih aralığı semantik olarak doğru değil."}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "10_ambiguous_success_metric",
+      "title": "Belirsiz Başarı Metriği",
+      "category": "Netleştirme",
+      "question": "En başarılı doktorları göster.",
+      "session_group": "ambiguous_success_metric",
+      "expected_outcome": "ASK_CLARIFICATION",
+      "expected_analysis_type": null,
+      "expected_provider": "static|deterministic|template",
+      "expected_model_contains": null,
+      "expected_metrics": [],
+      "expected_dimensions": [],
+      "expected_context_applied": false,
+      "expected_sql_contains": [],
+      "forbidden_sql_contains": ["SELECT"],
+      "expected_ui_text_contains": ["metrik"],
+      "forbidden_ui_text_contains": ["Bu Soru Veri Kapsamı Dışında"],
+      "max_duration_seconds": 15,
+      "notes": "SQL çalıştırmadan metrik tercihi istemelidir."
+    },
+    {
+      "id": "11_unsupported_domain",
+      "title": "Desteklenmeyen Veri Alanı",
+      "category": "Kapsam",
+      "question": "Son 30 gündeki reçete sayılarını göster.",
+      "session_group": "unsupported_domain",
+      "expected_outcome": "ASK_CLARIFICATION|OUT_OF_SCOPE",
+      "expected_analysis_type": null,
+      "expected_provider": "static|deterministic|template",
+      "expected_model_contains": null,
+      "expected_metrics": [],
+      "expected_dimensions": [],
+      "expected_context_applied": false,
+      "expected_sql_contains": [],
+      "forbidden_sql_contains": ["SELECT"],
+      "expected_ui_text_contains": [],
+      "forbidden_ui_text_contains": ["reçete verilerini analiz edebilirim", "reçete desteği sunuyorum"],
+      "max_duration_seconds": 15,
+      "notes": "Reçete desteği varmış gibi davranmayan kısa Türkçe yönlendirme beklenir.",
+      "assertions": [
+        {"kind": "concise_turkish_guidance", "expected": 1000, "severity": "MAJOR", "message": "Kısa ve anlaşılır Türkçe kapsam yönlendirmesi bulunamadı."}
+      ]
+    },
+    {
+      "id": "12_no_match",
+      "title": "Eşleşme Bulunamadı",
+      "category": "Sonuç Yok",
+      "question": "TEST ASM Gebze için 2010 yılındaki randevuları göster.",
+      "session_group": "no_match",
+      "expected_outcome": "NO_RESULT_GUIDANCE|NO_MATCH",
+      "expected_analysis_type": "none|list",
+      "expected_provider": null,
+      "expected_model_contains": null,
+      "expected_metrics": [],
+      "expected_dimensions": [],
+      "expected_context_applied": false,
+      "expected_sql_contains": ["2010-01-01", "2010-12-31", "TEST ASM Gebze"],
+      "forbidden_sql_contains": ["LIKE"],
+      "expected_ui_text_contains": ["Sonuç Bulunamadı"],
+      "forbidden_ui_text_contains": ["veri kapsamı dışında"],
+      "max_duration_seconds": 30,
+      "notes": "Sıfır satır geçerli NO_MATCH sonucudur; desteklenmeyen alan değildir.",
+      "assertions": [
+        {"kind": "equals_path", "path": "query_result.row_count", "expected": 0, "severity": "CRITICAL", "message": "Sıfır satırlı sonuç bekleniyor."}
+      ]
+    }
+  ]
+}

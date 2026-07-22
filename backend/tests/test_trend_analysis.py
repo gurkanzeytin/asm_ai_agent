@@ -90,10 +90,24 @@ def test_consistent_downward_trend():
 
 
 def test_flat_trend():
+    # AI-INTELLIGENCE-018: "flat" now requires every adjacent change to be
+    # exactly zero (monotonicity-based) — a genuinely stationary series.
+    tm = compute_trend_metrics(
+        ["2026-01-01", "2026-02-01", "2026-03-01"], [100, 100, 100], "month", date(2026, 8, 1)
+    )
+    assert tm.trend_consistency == "flat"
+    assert tm.monotonicity == "flat"
+
+
+def test_small_real_fluctuation_is_not_flat():
+    # [100, 101, 100] has real (if small) up-then-down movement — under the
+    # stricter monotonicity-based definition this is fluctuation, not "flat"
+    # (which previously only meant "within the 5% endpoint/slope threshold").
     tm = compute_trend_metrics(
         ["2026-01-01", "2026-02-01", "2026-03-01"], [100, 101, 100], "month", date(2026, 8, 1)
     )
-    assert tm.trend_consistency == "flat"
+    assert tm.trend_consistency == "mixed_or_fluctuating"
+    assert tm.monotonicity == "non_monotonic"
 
 
 def test_mixed_signal_trend():
@@ -107,8 +121,9 @@ def test_mixed_signal_trend():
         "month",
         date(2026, 8, 1),
     )
-    assert tm.trend_consistency == "mixed"
+    assert tm.trend_consistency == "mixed_or_fluctuating"
     assert tm.endpoint_direction == "downward"
+    assert tm.monotonicity == "non_monotonic"
 
 
 def test_incomplete_trailing_month_excluded_from_trend():

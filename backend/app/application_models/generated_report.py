@@ -13,6 +13,12 @@ class ReportPromptContext(BaseModel):
     rows: List[Dict[str, Any]]
     original_row_count: int
     truncated_row_count: Optional[int] = None
+    result_truncated: bool = False
+    has_more: bool = False
+    total_count: Optional[int] = None
+    source_record_count: Optional[int] = None
+    result_group_count: Optional[int] = None
+    result_shape: str = "bounded_tabular_rows"
 
 
 class GeneratedReport(BaseModel):

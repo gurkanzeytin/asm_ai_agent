@@ -22,13 +22,37 @@ from app.context.analytical_signals import FILTER_FAMILIES, AnalyticalSignals
 # already active in context (folded forms: göre->gore, yerine unchanged).
 _METRIC_REPLACE_MARKERS = ("yerine", "gore yap")
 # Wording markers that force metric ADDITION (union) instead of the default
-# replace-on-new-metric behavior.
-_METRIC_ADD_MARKERS = ("bir de", "ayrica")
+# replace-on-new-metric behavior. Bigrams only (never a bare "de"/"da"/"olsun"
+# alone) — each of these is common/generic Turkish on its own and would
+# false-positive on unrelated independent sentences.
+_METRIC_ADD_MARKERS = ("bir de", "ayrica", "de ekle", "da ekle", "de olsun", "da olsun")
 _METRIC_ADD_CONJUNCTION = " ve "
 
 
 def _has_any(folded_question: str, markers: tuple[str, ...]) -> bool:
     return any(marker in folded_question for marker in markers)
+
+
+def has_strong_followup_marker(folded_question: str) -> bool:
+    """True only for an EXPLICIT add/replace marker ('bir de', 'ayrıca',
+    'yerine', '... göre yap') — deliberately excludes the bare ' ve '
+    conjunction, which is too common in ordinary, fully independent Turkish
+    sentences ("... sayısı ve oranı açısından karşılaştır.") to safely imply
+    "this is a follow-up" on its own (Part 6: no false-positive inheritance
+    from bare membership/wording overlap).
+
+    AI-INTELLIGENCE-018: a fully-worded additive/replacement follow-up
+    ("Bir de gerçekleşme oranını ekle.") has too many content tokens to
+    qualify as elliptical, but is still unambiguously a follow-up — used by
+    `app.context.resolver.ContextResolver` to recognize it as one so the
+    dimension/metric merge (and `context_applied`) reflect the real
+    inheritance `merge_metrics()` below already performs (via the separate,
+    intentionally broader `_METRIC_ADD_CONJUNCTION` check) regardless of the
+    `follow_up_detected` gate.
+    """
+    return _has_any(folded_question, _METRIC_REPLACE_MARKERS) or _has_any(
+        folded_question, _METRIC_ADD_MARKERS
+    )
 
 
 def merge_list_field(

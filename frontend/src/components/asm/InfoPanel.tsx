@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { tr } from "@/locales/tr";
+import { panelTransition } from "@/lib/ui-motion";
 
 interface Props {
   open: boolean;
@@ -31,10 +32,10 @@ export function InfoPanel({ open, responseMs, isThinking, sql }: Props) {
     <AnimatePresence>
       {open && (
         <motion.aside
-          initial={{ x: 340, opacity: 0 }}
+          initial={{ x: 24, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
-          exit={{ x: 340, opacity: 0 }}
-          transition={{ type: "spring", stiffness: 260, damping: 30 }}
+          exit={{ x: 16, opacity: 0 }}
+          transition={panelTransition}
           className="hidden h-full w-[340px] shrink-0 border-l border-border bg-sidebar/40 lg:block"
         >
           <div className="flex h-16 shrink-0 items-center border-b border-border px-4">
@@ -177,6 +178,7 @@ function Expandable({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
+            transition={panelTransition}
             className="overflow-hidden"
           >
             <div className="flex flex-col gap-2 px-4 pb-4">{children}</div>

@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -57,11 +57,29 @@ class PendingClarification(BaseModel):
     """
 
     field: str = Field(
-        ..., description="Name of the field awaiting clarification (e.g. 'ranking_metric')."
+        ..., description="Name of the field awaiting clarification (e.g. 'ranking_metric', "
+        "or 'value_filter:<field>' for AI-INTELLIGENCE-016/017 grounded value clarification)."
     )
     reason: str = Field(..., description="Why the previous turn was ambiguous.")
     choices: List[str] = Field(
         default_factory=list, description="Candidate values offered to the user, if any."
+    )
+    # ── AI-INTELLIGENCE-017: typed context for grounded value clarification ──
+    # Snapshot of the ORIGINAL analytical request at the moment clarification
+    # was raised, so a reply ("hepsini", "ilkini", an explicit value) can
+    # resume planning without losing the original question's intent (item 7).
+    original_question: Optional[str] = Field(
+        default=None, description="Full question text that triggered this clarification."
+    )
+    candidate_values: List[str] = Field(
+        default_factory=list, description="Grounded candidate values offered (ordinal-addressable)."
+    )
+    original_analysis_type: Optional[str] = Field(default=None)
+    original_metrics: List[str] = Field(default_factory=list)
+    original_dimensions: List[str] = Field(default_factory=list)
+    original_date_expression: Optional[str] = Field(default=None)
+    original_filters: Dict[str, List[str]] = Field(
+        default_factory=dict, description="Other grounded filter families already resolved this turn."
     )
 
 
@@ -137,7 +155,7 @@ class ConversationContext(BaseModel):
     dimensions: List[str] = Field(
         default_factory=list,
         description="Latest grouping dimensions: branch|doctor|department|status|service|"
-        "category|source|date.",
+        "category|source|appointment_type|gender|nationality|date.",
     )
     ranking: Optional[str] = Field(default=None, description="Latest ranking direction: top|bottom.")
     limit: Optional[int] = Field(default=None, description="Latest explicit row/group limit.")
@@ -146,6 +164,12 @@ class ConversationContext(BaseModel):
     )
     comparison_targets: List[str] = Field(
         default_factory=list, description="Latest comparison period descriptors."
+    )
+    query_plan_snapshot: dict[str, Any] | None = Field(
+        default=None,
+        description="Serialized QueryPlan from the latest successful analytical turn. "
+        "This is the authoritative structured continuation snapshot; result rows, "
+        "reports, and visualizations are deliberately excluded.",
     )
     pending_clarification: Optional[PendingClarification] = Field(
         default=None,
@@ -274,4 +298,16 @@ class ResolutionResult(BaseModel):
         default=False,
         description="Whether this turn resolved a previously pending clarification "
         "(e.g. answering 'Gerçekleşme oranına göre' after an ambiguous ranking question).",
+    )
+    filter_override: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="AI-INTELLIGENCE-017: fields resolved by this turn's pending "
+        "value-clarification reply, threaded into AgentState.forced_filter_override. "
+        "Empty list = 'clear this filter family' (an 'all' reply); non-empty = the "
+        "chosen grounded value(s).",
+    )
+    retained_query_plan_snapshot: dict[str, Any] | None = Field(
+        default=None,
+        description="Previous successful QueryPlan snapshot made available only when "
+        "this turn is a genuine follow-up. Independent questions receive None.",
     )

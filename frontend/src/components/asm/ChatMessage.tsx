@@ -2,7 +2,18 @@ import { AnimatePresence, motion } from "motion/react";
 import { lazy, Suspense, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { User, Copy, Check, ChevronRight, RefreshCw, Pencil } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronRight,
+  Copy,
+  DatabaseZap,
+  Pencil,
+  RefreshCw,
+  ServerCrash,
+  User,
+  WifiOff,
+} from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Message } from "./types";
@@ -10,6 +21,10 @@ import { tr } from "@/locales/tr";
 import { MedAgentLogo } from "./MedAgentLogo";
 import { useAnimatedText } from "@/components/ui/animated-text";
 import { TextShimmer } from "./TextShimmer";
+import type { WorkflowStage } from "@/lib/api";
+import type { MessageErrorKind } from "./types";
+import { panelTransition, quickTransition, uiTransition } from "@/lib/ui-motion";
+import { traceChatRuntime } from "@/lib/chat-runtime-trace";
 
 const LazySqlResultsTable = lazy(() =>
   import("./SqlResultsTable").then((module) => ({ default: module.SqlResultsTable })),
@@ -29,6 +44,23 @@ export function ChatMessage({
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const metricContext = (() => {
+    const cards = message.metricCards ?? [];
+    const context = cards[0]?.context;
+    return context && cards.every((card) => card.context === context) ? context : undefined;
+  })();
+  const returnsLoadingPlaceholder = !isUser && Boolean(message.streaming) && !message.content;
+  traceChatRuntime("chat-message-render", {
+    messageId: message.id,
+    role: message.role,
+    streaming: message.streaming ?? false,
+    status: message.status ?? null,
+    contentLength: message.content.length,
+    outcome: message.outcome ?? null,
+    rowCount: message.rowCount ?? null,
+    returnsNull: false,
+    returnsLoadingPlaceholder,
+  });
 
   const copy = async () => {
     try {
@@ -40,13 +72,15 @@ export function ChatMessage({
     }
   };
 
-  if (!isUser && message.streaming && !message.content) return <TypingIndicator />;
+  if (returnsLoadingPlaceholder) {
+    return <TypingIndicator stage={message.progressStage} />;
+  }
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
+      transition={uiTransition}
       className={cn("group flex gap-3", isUser && "flex-row-reverse")}
     >
       <div
@@ -83,6 +117,8 @@ export function ChatMessage({
         >
           {isUser ? (
             <p className="whitespace-pre-wrap">{message.content}</p>
+          ) : message.status === "error" ? (
+            <ResponseError kind={message.errorKind ?? "server"} />
           ) : message.streaming ? (
             <AssistantText content={message.content} streaming animate={animateResponse} />
           ) : (
@@ -91,21 +127,50 @@ export function ChatMessage({
         </div>
         {!isUser && !message.streaming && message.metricCards && message.metricCards.length > 0 && (
           <div className="w-full">
-            <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              {tr.chat.keyMetrics}
-            </p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-              {message.metricCards.map((card) => (
-                <div
-                  key={card.label}
-                  className="glass rounded-xl border border-border/60 px-3 py-2.5"
+            <div className="mb-2 flex min-w-0 items-baseline gap-2">
+              <p className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {tr.chat.keyMetrics}
+              </p>
+              {metricContext && (
+                <span
+                  className="truncate text-[11px] text-muted-foreground/70"
+                  title={metricContext}
                 >
-                  <div className="text-base font-semibold text-foreground">{card.value}</div>
-                  <div className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
-                    {card.label}
+                  {metricContext}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+              {message.metricCards.map((card) => {
+                const valueLength = Array.from(card.value).length;
+                return (
+                  <div
+                    key={`${card.context ?? "metric"}-${card.label}`}
+                    className="glass flex min-h-[104px] min-w-0 flex-col rounded-lg border border-border/60 px-3.5 py-3"
+                  >
+                    <div
+                      className={cn(
+                        "line-clamp-2 min-h-10 overflow-hidden break-words font-semibold [overflow-wrap:anywhere]",
+                        valueLength > 32
+                          ? "text-xs leading-5"
+                          : valueLength > 18
+                            ? "text-sm leading-5"
+                            : "text-lg leading-5",
+                        card.isEmpty ? "text-muted-foreground" : "text-foreground",
+                      )}
+                      title={card.value}
+                    >
+                      {card.value}
+                    </div>
+                    <div
+                      className="mt-auto line-clamp-2 min-h-8 overflow-hidden break-words pt-2 text-[11px] font-medium leading-4 text-muted-foreground [overflow-wrap:anywhere]"
+                      title={card.label}
+                    >
+                      {card.label}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -129,10 +194,21 @@ export function ChatMessage({
                   initial={{ height: 0, opacity: 0, y: -4 }}
                   animate={{ height: "auto", opacity: 1, y: 0 }}
                   exit={{ height: 0, opacity: 0, y: -4 }}
-                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                  transition={panelTransition}
                   className="overflow-hidden"
                 >
                   <div className="mt-2 w-full">
+                    {(message.sqlResult.technicalRowCount != null ||
+                      message.sqlResult.resultShape) && (
+                      <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
+                        {message.sqlResult.technicalRowCount != null && (
+                          <span>SQL sonuç satırı: {message.sqlResult.technicalRowCount}</span>
+                        )}
+                        {message.sqlResult.resultShape && (
+                          <span>Sonuç şekli: {message.sqlResult.resultShape}</span>
+                        )}
+                      </div>
+                    )}
                     <Suspense
                       fallback={<div className="h-24 animate-pulse rounded-lg bg-muted/40" />}
                     >
@@ -161,8 +237,7 @@ export function ChatMessage({
               {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
               {copied ? tr.common.copied : tr.common.copy}
             </button>
-            {message.prompt &&
-              (message.status === "error" || message.status === "stopped") && (
+            {message.prompt && (message.status === "error" || message.status === "stopped") && (
               <button
                 type="button"
                 onClick={() => onPrompt?.(message.prompt ?? "")}
@@ -172,7 +247,7 @@ export function ChatMessage({
                 {tr.chat.retry}
               </button>
             )}
-            {message.status === "error" && message.prompt && (
+            {message.status === "error" && message.errorKind === "query" && message.prompt && (
               <button
                 type="button"
                 onClick={() => onEditPrompt?.(message.prompt ?? "")}
@@ -278,7 +353,9 @@ function AssistantText({
   );
 }
 
-export function TypingIndicator() {
+export function TypingIndicator({ stage }: { stage?: WorkflowStage }) {
+  const label = stage ? tr.chat.workflowStages[stage] : tr.chat.thinking;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -291,14 +368,45 @@ export function TypingIndicator() {
         </span>
       </div>
       <div className="flex h-10 items-center px-1">
-        <TextShimmer
-          duration={1.55}
-          spread={1.4}
-          className="text-xs font-medium [--base-color:var(--muted-foreground)] [--base-gradient-color:var(--foreground)]"
-        >
-          {tr.chat.thinking}
-        </TextShimmer>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={label}
+            initial={{ opacity: 0, y: 3 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -3 }}
+            transition={quickTransition}
+          >
+            <TextShimmer
+              duration={1.55}
+              spread={1.4}
+              className="text-xs font-medium [--base-color:var(--muted-foreground)] [--base-gradient-color:var(--foreground)]"
+            >
+              {label}
+            </TextShimmer>
+          </motion.div>
+        </AnimatePresence>
       </div>
     </motion.div>
+  );
+}
+
+const errorIcons: Record<MessageErrorKind, typeof AlertTriangle> = {
+  network: WifiOff,
+  query: DatabaseZap,
+  server: ServerCrash,
+  invalid: AlertTriangle,
+};
+
+function ResponseError({ kind }: { kind: MessageErrorKind }) {
+  const Icon = errorIcons[kind];
+  const copy = tr.chat.errors[kind];
+  return (
+    <div className="flex max-w-xl items-start gap-3 border-l-2 border-destructive/60 bg-destructive/5 px-3 py-2.5">
+      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+      <div>
+        <p className="font-medium text-foreground">{copy.title}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{copy.description}</p>
+      </div>
+    </div>
   );
 }

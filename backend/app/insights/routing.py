@@ -42,8 +42,13 @@ _COMPLEXITY_MANY_ROWS_THRESHOLD = 6
 # A period-over-period growth_rate at or beyond this magnitude (%) is treated
 # as a genuine time-series anomaly signal — InsightRulesEngine's
 # OUTLIER_DETECTED rule only ever fires for CATEGORICAL data, so trend
-# anomalies need this separate, metrics-derived signal.
-_EXTREME_GROWTH_RATE_THRESHOLD = 50.0
+# anomalies need this separate, metrics-derived signal. AI-INTELLIGENCE-018
+# (item 5): raised from 50% — an ordinary single-metric monthly trend can
+# easily swing 50-60% endpoint-to-endpoint on modest absolute counts (e.g.
+# 12 -> 19 appointments = +58%) without being a genuine anomaly; only a
+# multi-hundred-percent swing is worth a stronger model's reasoning on its
+# own, independent of metric/dimension count.
+_EXTREME_GROWTH_RATE_THRESHOLD = 100.0
 
 # Intents that signal an explicitly statistical/forecasting question rather
 # than a plain grouping or trend — these always block deterministic candidacy,
@@ -204,6 +209,7 @@ class InsightRouter:
         factors: list[str] = []
 
         is_multi_intent = len(analytics.intents) > 1
+        metric_count = len(analytics.metric_summaries)
 
         if analytics.data_shape == DataShape.TIME_SERIES:
             score += 1
@@ -236,7 +242,6 @@ class InsightRouter:
         # their own; broken down by a dimension as well (the CATEGORICAL/
         # TIME_SERIES shape a grouped multi-metric result always produces)
         # makes it a full cross-metric comparison, not a single number.
-        metric_count = len(analytics.metric_summaries)
         if metric_count >= 3:
             score += 2
             factors.append("multi_metric_analysis")

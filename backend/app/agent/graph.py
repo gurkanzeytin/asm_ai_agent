@@ -5,15 +5,16 @@ from langgraph.graph.state import CompiledStateGraph
 
 from app.agent.nodes.analyze_intent import AnalyzeIntentNode
 from app.agent.nodes.analyze_results import AnalyzeResultsNode
+from app.agent.nodes.execute_sql import ExecuteSQLNode
+from app.agent.nodes.generate_chat_response import GenerateChatResponseNode
+from app.agent.nodes.generate_clarification import GenerateClarificationNode
+from app.agent.nodes.generate_help import GenerateHelpNode
 from app.agent.nodes.generate_insights import GenerateInsightsNode
 from app.agent.nodes.generate_observations import GenerateObservationsNode
-from app.agent.nodes.generate_chat_response import GenerateChatResponseNode
-from app.agent.nodes.generate_help import GenerateHelpNode
-from app.agent.nodes.generate_clarification import GenerateClarificationNode
 from app.agent.nodes.generate_out_of_scope import GenerateOutOfScopeNode
-from app.agent.nodes.execute_sql import ExecuteSQLNode
 from app.agent.nodes.generate_report import GenerateReportNode
 from app.agent.nodes.generate_sql import GenerateSQLNode
+from app.agent.nodes.resolve_filter_values import ResolveFilterValuesNode
 from app.agent.nodes.retrieve_context import RetrieveContextNode
 from app.agent.nodes.validate_sql import ValidateSQLNode
 from app.agent.state import AgentState
@@ -25,6 +26,7 @@ from app.services.interfaces import (
     IPromptService,
     IWorkflowService,
 )
+from app.services.workflow_progress import with_progress
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +61,9 @@ def route_by_intent(state: AgentState) -> str:
     elapsed_ms = state.node_timings.get("analyze_intent", 0.0)
 
     logger.info(
-        "Intent Router Decision: workflow_id=%s elapsed_ms=%.2f question=%s detected_intent=%s confidence=%.2f matched_rule=%s final_routing_decision=%s matched_keywords=%s",
+        "Intent Router Decision: workflow_id=%s elapsed_ms=%.2f question=%s "
+        "detected_intent=%s confidence=%.2f matched_rule=%s "
+        "final_routing_decision=%s matched_keywords=%s",
         state.workflow_id or "unknown",
         elapsed_ms,
         state.question,
@@ -70,6 +74,12 @@ def route_by_intent(state: AgentState) -> str:
         intent_res.matched_keywords,
     )
     return decision
+
+
+def route_after_value_resolution(state: AgentState) -> str:
+    """Diverts to clarification when ResolveFilterValuesNode found an
+    unresolved/ambiguous grounded filter mention (AI-INTELLIGENCE-016)."""
+    return "clarify" if state.ambiguity is not None else "continue"
 
 
 def route_after_execution(state: AgentState) -> str:
@@ -90,34 +100,35 @@ def route_after_execution(state: AgentState) -> str:
     return "continue"
 
 
-from typing import Optional
-
 class AgentGraphBuilder:
-    """Builder class responsible for injecting services, instantiating nodes, and compiling LangGraph."""
+    """Injects services, instantiates nodes, and compiles the agent graph."""
 
     def __init__(
         self,
         prompt_service: IPromptService,
         workflow_service: IWorkflowService,
-        intent_classifier: Optional[IIntentClassifier] = None,
-        help_service: Optional[IHelpService] = None,
-        llm_provider: Optional[ILLMProvider] = None,
+        intent_classifier: IIntentClassifier | None = None,
+        help_service: IHelpService | None = None,
+        llm_provider: ILLMProvider | None = None,
     ):
         self.prompt_service = prompt_service
         self.workflow_service = workflow_service
 
         if intent_classifier is None:
             from app.services.intent_classifier import IntentClassifier
+
             intent_classifier = IntentClassifier()
         self.intent_classifier = intent_classifier
 
         if help_service is None:
             from app.services.help_service import HelpService
+
             help_service = HelpService()
         self.help_service = help_service
 
         if llm_provider is None:
             from app.llm.provider import LLMFactory
+
             llm_provider = LLMFactory.get_provider()
         self.llm_provider = llm_provider
 
@@ -133,6 +144,7 @@ class AgentGraphBuilder:
         out_of_scope_node = GenerateOutOfScopeNode()
 
         retrieve_node = RetrieveContextNode(self.prompt_service)
+        resolve_values_node = ResolveFilterValuesNode()
         generate_node = GenerateSQLNode(self.workflow_service)
         validate_node = ValidateSQLNode()
         execute_node = ExecuteSQLNode(self.workflow_service)
@@ -182,20 +194,35 @@ class AgentGraphBuilder:
         # 2. Build StateGraph using the IAgentNode.execute method wrappers
         workflow = StateGraph(AgentState)
 
-        workflow.add_node("analyze_intent", analyze_intent_node.execute)
-        workflow.add_node("generate_chat_response", chat_node.execute)
-        workflow.add_node("generate_help", help_node.execute)
-        workflow.add_node("generate_clarification", clarification_node.execute)
-        workflow.add_node("generate_out_of_scope", out_of_scope_node.execute)
+        workflow.add_node(
+            "analyze_intent", with_progress("understanding", analyze_intent_node.execute)
+        )
+        workflow.add_node("generate_chat_response", with_progress("reporting", chat_node.execute))
+        workflow.add_node("generate_help", with_progress("reporting", help_node.execute))
+        workflow.add_node(
+            "generate_clarification", with_progress("reporting", clarification_node.execute)
+        )
+        workflow.add_node(
+            "generate_out_of_scope", with_progress("reporting", out_of_scope_node.execute)
+        )
 
-        workflow.add_node("retrieve_context", retrieve_node.execute)
-        workflow.add_node("generate_sql", generate_node.execute)
-        workflow.add_node("validate_sql", validate_node.execute)
-        workflow.add_node("execute_sql", execute_node.execute)
-        workflow.add_node("analyze_results", analyze_results_node.execute)
-        workflow.add_node("generate_insights", insights_node.execute)
-        workflow.add_node("generate_observations", observations_node.execute)
-        workflow.add_node("generate_report", report_node.execute)
+        workflow.add_node("retrieve_context", with_progress("preparing_sql", retrieve_node.execute))
+        workflow.add_node(
+            "resolve_filter_values", with_progress("preparing_sql", resolve_values_node.execute)
+        )
+        workflow.add_node("generate_sql", with_progress("preparing_sql", generate_node.execute))
+        workflow.add_node("validate_sql", with_progress("validating_sql", validate_node.execute))
+        workflow.add_node("execute_sql", with_progress("executing_sql", execute_node.execute))
+        workflow.add_node(
+            "analyze_results", with_progress("analyzing_data", analyze_results_node.execute)
+        )
+        workflow.add_node(
+            "generate_insights", with_progress("analyzing_data", insights_node.execute)
+        )
+        workflow.add_node(
+            "generate_observations", with_progress("reporting", observations_node.execute)
+        )
+        workflow.add_node("generate_report", with_progress("reporting", report_node.execute))
 
         # 3. Add Edges & Conditional Routing
         workflow.add_edge(START, "analyze_intent")
@@ -209,7 +236,7 @@ class AgentGraphBuilder:
                 "help": "generate_help",
                 "unknown": "generate_clarification",
                 "out_of_scope": "generate_out_of_scope",
-            }
+            },
         )
 
         # Direct shortcuts to END
@@ -219,7 +246,15 @@ class AgentGraphBuilder:
         workflow.add_edge("generate_out_of_scope", END)
 
         # Standard SQL execution pipeline
-        workflow.add_edge("retrieve_context", "generate_sql")
+        workflow.add_edge("retrieve_context", "resolve_filter_values")
+        workflow.add_conditional_edges(
+            "resolve_filter_values",
+            route_after_value_resolution,
+            {
+                "clarify": "generate_clarification",
+                "continue": "generate_sql",
+            },
+        )
         workflow.add_edge("generate_sql", "validate_sql")
         workflow.add_edge("validate_sql", "execute_sql")
 
@@ -240,4 +275,3 @@ class AgentGraphBuilder:
 
         logger.info("Agent graph constructed and compiled successfully.")
         return workflow.compile()
-

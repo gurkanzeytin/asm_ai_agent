@@ -8,13 +8,21 @@ confidence — which feeds the Query Planner and routing decisions.
 No LLM calls, no embeddings, no vector search, no SQL awareness.
 """
 
-from app.semantics.engine import SemanticUnderstandingEngine
 from app.semantics.models import (
     SemanticAmbiguity,
     SemanticConstraint,
     SemanticFrame,
     SemanticRelationship,
 )
+
+
+def __getattr__(name: str):
+    """Lazily expose the engine without creating a bootstrap import cycle."""
+    if name == "SemanticUnderstandingEngine":
+        from app.semantics.engine import SemanticUnderstandingEngine
+
+        return SemanticUnderstandingEngine
+    raise AttributeError(name)
 
 __all__ = [
     "SemanticAmbiguity",

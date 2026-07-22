@@ -13,6 +13,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { useChatController } from "@/hooks/use-chat-controller";
 import { tr } from "@/locales/tr";
 import { isNearScrollBottom } from "@/lib/scroll-utils";
+import { uiTransition } from "@/lib/ui-motion";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -98,21 +99,32 @@ function Index() {
           }}
           className="flex-1 overflow-y-auto"
         >
-          {chat.messages.length === 0 ? (
-            <EmptyState onPick={(prompt) => void chat.send(prompt)} />
-          ) : (
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8">
-              {chat.messages.map((message) => (
-                <ChatMessage
-                  key={message.id}
-                  message={message}
-                  animateResponse={message.id === chat.animatedMessageId}
-                  onPrompt={(prompt) => void chat.send(prompt)}
-                  onEditPrompt={chat.setInput}
-                />
-              ))}
-            </div>
-          )}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={chat.activeId ?? "no-conversation"}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={uiTransition}
+              className="min-h-full"
+            >
+              {chat.messages.length === 0 ? (
+                <EmptyState onPick={(prompt) => void chat.send(prompt)} />
+              ) : (
+                <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8">
+                  {chat.messages.map((message) => (
+                    <ChatMessage
+                      key={message.id}
+                      message={message}
+                      animateResponse={message.id === chat.animatedMessageId}
+                      onPrompt={(prompt) => void chat.send(prompt)}
+                      onEditPrompt={chat.setInput}
+                    />
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
 
         <AnimatePresence>

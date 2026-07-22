@@ -1,0 +1,399 @@
+{"kind":"deck","id":"pr/dvaqjr","name":"Deck"}
+{"kind":"layout","layoutId":"4e75a457-d167-41ac-9d6b-ee97012e4ca6","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"1bec07e8-d8df-4dda-963b-90fd31561d75","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/or49xv","slide":1,"title":"Med Agent","textShapes":11}
+{"kind":"textbox","id":"sh/65wjudg7","slide":1,"text":"Med Agent","textPreview":"Med Agent","textChars":9,"textLines":1,"bbox":[72,64,480,64]}
+{"kind":"textbox","id":"sh/hwfyxobm","slide":1,"text":"Sağlık verisini doğal dille raporlayan ajan","textPreview":"Sağlık verisini doğal dille raporlayan ajan","textChars":43,"textLines":1,"bbox":[72,178,690,150]}
+{"kind":"textbox","id":"sh/obm58z25","slide":1,"text":"Toplantı sunumu | Proje durumu, mimari, doğrulama ve sonraki adımlar","textPreview":"Toplantı sunumu | Proje durumu, mimari, doğrulama ve sonraki adımlar","textChars":68,"textLines":1,"bbox":[76,342,690,60]}
+{"kind":"shape","id":"sh/zed8v6ps","slide":1,"bbox":[820,164,300,124]}
+{"kind":"textbox","id":"sh/6xkf6dcb","slide":1,"text":"1209","textPreview":"1209","textChars":4,"textLines":1,"bbox":[844,186,252,48]}
+{"kind":"textbox","id":"sh/hk3q5o7q","slide":1,"text":"Backend testi geçti","textPreview":"Backend testi geçti","textChars":19,"textLines":1,"bbox":[844,242,252,48]}
+{"kind":"shape","id":"sh/oza1gvy9","slide":1,"bbox":[820,312,300,124]}
+{"kind":"textbox","id":"sh/z61032ls","slide":1,"text":"93,8%","textPreview":"93,8%","textChars":5,"textLines":1,"bbox":[844,334,252,48]}
+{"kind":"textbox","id":"sh/al87ed8b","slide":1,"text":"Benchmark başarı oranı","textPreview":"Benchmark başarı oranı","textChars":22,"textLines":1,"bbox":[844,390,252,48]}
+{"kind":"shape","id":"sh/k3q5o7qp","slide":1,"bbox":[820,460,300,124]}
+{"kind":"textbox","id":"sh/donyd0z6","slide":1,"text":"84","textPreview":"84","textChars":2,"textLines":1,"bbox":[844,482,252,48]}
+{"kind":"textbox","id":"sh/2x4nap4r","slide":1,"text":"Frontend testi geçti","textPreview":"Frontend testi geçti","textChars":20,"textLines":1,"bbox":[844,538,252,48]}
+{"kind":"shape","id":"sh/vixczed8","slide":1,"bbox":[72,676,1136,0]}
+{"kind":"textbox","id":"sh/kre1w7mp","slide":1,"text":"ASM AI Agent","textPreview":"ASM AI Agent","textChars":12,"textLines":1,"bbox":[72,688,240,20]}
+{"kind":"textbox","id":"sh/dcbulwva","slide":1,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[1160,688,48,20]}
+{"kind":"notes","id":"nt/or49xv","slide":1,"text":""}
+{"kind":"slide","id":"sl/vtrjea","slide":2,"title":"BÜYÜK RESİM","textShapes":11}
+{"kind":"textbox","id":"sh/2t83itgf","slide":2,"text":"BÜYÜK RESİM","textPreview":"BÜYÜK RESİM","textChars":11,"textLines":1,"bbox":[72,42,700,28]}
+{"kind":"textbox","id":"sh/9knih4by","slide":2,"text":"Proje, veriye soru sormayı herkes için kolaylaştırıyor","textPreview":"Proje, veriye soru sormayı herkes için kolaylaştırıyor","textChars":54,"textLines":1,"bbox":[72,72,980,84]}
+{"kind":"shape","id":"sh/kzupwb2h","slide":2,"bbox":[72,184,330,210]}
+{"kind":"shape","id":"sh/rqd4vmtw","slide":2,"bbox":[72,184,6,210]}
+{"kind":"textbox","id":"sh/25kb6xkf","slide":2,"text":"Bugünkü sorun","textPreview":"Bugünkü sorun","textChars":13,"textLines":1,"bbox":[96,206,282,34]}
+{"kind":"textbox","id":"sh/9w3m94fu","slide":2,"text":"Rapor almak için SQL, tablo yapısı ve teknik filtreleri bilmek gerekiyor. Bu da karar alma hızını düşürüyor.","textPreview":"Rapor almak için SQL, tablo yapısı ve teknik filtreleri bilmek gerekiyor. Bu da karar alma hızını düşürüyor.","textChars":108,"textLines":1,"bbox":[96,248,282,130]}
+{"kind":"shape","id":"sh/kb6xkf6d","slide":2,"bbox":[475,184,330,210]}
+{"kind":"shape","id":"sh/r2p8nqxs","slide":2,"bbox":[475,184,6,210]}
+{"kind":"textbox","id":"sh/2hwfyxob","slide":2,"text":"Projenin çözümü","textPreview":"Projenin çözümü","textChars":15,"textLines":1,"bbox":[499,206,282,34]}
+{"kind":"textbox","id":"sh/crmhk3q5","slide":2,"text":"Kullanıcı normal Türkçe ile soruyor. Ajan doğru veriyi buluyor, güvenli sorgu üretiyor ve anlaşılır sonuç döndürüyor.","textPreview":"Kullanıcı normal Türkçe ile soruyor. Ajan doğru veriyi buluyor, güvenli sorgu üretiyor ve anlaşılır sonuç döndürüyor.","textChars":117,"textLines":1,"bbox":[499,248,282,130]}
+{"kind":"shape","id":"sh/1cfa9w3m","slide":2,"bbox":[878,184,330,210]}
+{"kind":"shape","id":"sh/ulwval87","slide":2,"bbox":[878,184,6,210]}
+{"kind":"textbox","id":"sh/j6tovaho","slide":2,"text":"İş değeri","textPreview":"İş değeri","textChars":9,"textLines":1,"bbox":[902,206,282,34]}
+{"kind":"textbox","id":"sh/c3ylc7u5","slide":2,"text":"Teknik ekip beklemeden randevu, bölüm, doktor ve dönem karşılaştırması gibi sorular hızlıca cevaplanabiliyor.","textPreview":"Teknik ekip beklemeden randevu, bölüm, doktor ve dönem karşılaştırması gibi sorular hızlıca cevaplanabiliyor.","textChars":109,"textLines":1,"bbox":[902,248,282,130]}
+{"kind":"textbox","id":"sh/1kre1w7m","slide":2,"text":"Basit anlatım: Bu sistem bir veri tercümanı gibi çalışır. Soruyu alır, veritabanının anlayacağı dile çevirir, sonra sonucu insan dilinde açıklar.","textPreview":"Basit anlatım: Bu sistem bir veri tercümanı gibi çalışır. Soruyu alır, veritabanının anlayacağı dile çevirir, sonra sonucu insan dilinde ...","textChars":145,"textLines":1,"bbox":[120,470,1040,88]}
+{"kind":"shape","id":"sh/uxc3ylc7","slide":2,"bbox":[72,676,1136,0]}
+{"kind":"textbox","id":"sh/ji5snelo","slide":2,"text":"ASM AI Agent","textPreview":"ASM AI Agent","textChars":12,"textLines":1,"bbox":[72,688,240,20]}
+{"kind":"textbox","id":"sh/8bat47y1","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1160,688,48,20]}
+{"kind":"notes","id":"nt/vtrjea","slide":2,"text":""}
+{"kind":"slide","id":"sl/em0a4a","slide":3,"title":"KULLANICI DENEYİMİ","textShapes":13}
+{"kind":"textbox","id":"sh/4fu18jqh","slide":3,"text":"KULLANICI DENEYİMİ","textPreview":"KULLANICI DENEYİMİ","textChars":18,"textLines":1,"bbox":[72,42,700,28]}
+{"kind":"textbox","id":"sh/fu18jqh0","slide":3,"text":"Kullanıcının gördüğü akış üç adımdan ibaret","textPreview":"Kullanıcının gördüğü akış üç adımdan ibaret","textChars":43,"textLines":1,"bbox":[72,72,980,84]}
+{"kind":"shape","id":"sh/m94fu18j","slide":3,"bbox":[329,315,48,0]}
+{"kind":"shape","id":"sh/xobm58z2","slide":3,"bbox":[616,315,48,0]}
+{"kind":"shape","id":"sh/83itgfml","slide":3,"bbox":[903,315,48,0]}
+{"kind":"shape","id":"sh/fil0rqd4","slide":3,"bbox":[90,220,239,190]}
+{"kind":"textbox","id":"sh/qxs72x4n","slide":3,"text":"Soru","textPreview":"Soru","textChars":4,"textLines":1,"bbox":[108,240,203,34]}
+{"kind":"textbox","id":"sh/xkf6dcbu","slide":3,"text":"Bugün en yoğun bölüm hangisi?","textPreview":"Bugün en yoğun bölüm hangisi?","textChars":29,"textLines":1,"bbox":[108,284,203,110]}
+{"kind":"shape","id":"sh/4zidonyd","slide":3,"bbox":[377,220,239,190]}
+{"kind":"textbox","id":"sh/mhk3q5o7","slide":3,"text":"Güvenli analiz","textPreview":"Güvenli analiz","textChars":14,"textLines":1,"bbox":[395,240,203,34]}
+{"kind":"textbox","id":"sh/b2hwfyxo","slide":3,"text":"Sistem niyeti, tarihleri ve filtreleri çıkarır.","textPreview":"Sistem niyeti, tarihleri ve filtreleri çıkarır.","textChars":47,"textLines":1,"bbox":[395,284,203,110]}
+{"kind":"shape","id":"sh/4nap4r65","slide":3,"bbox":[664,220,239,190]}
+{"kind":"textbox","id":"sh/t83itgfm","slide":3,"text":"Veri sorgusu","textPreview":"Veri sorgusu","textChars":12,"textLines":1,"bbox":[682,240,203,34]}
+{"kind":"textbox","id":"sh/m58z25kb","slide":3,"text":"Yalnızca izinli view üzerinde okuma yapar.","textPreview":"Yalnızca izinli view üzerinde okuma yapar.","textChars":42,"textLines":1,"bbox":[682,284,203,110]}
+{"kind":"shape","id":"sh/bq1oryts","slide":3,"bbox":[951,220,239,190]}
+{"kind":"textbox","id":"sh/4byhgn29","slide":3,"text":"Anlaşılır cevap","textPreview":"Anlaşılır cevap","textChars":15,"textLines":1,"bbox":[969,240,203,34]}
+{"kind":"textbox","id":"sh/twra5gbq","slide":3,"text":"Sonuç, grafik ve kısa yorum olarak döner.","textPreview":"Sonuç, grafik ve kısa yorum olarak döner.","textChars":41,"textLines":1,"bbox":[969,284,203,110]}
+{"kind":"textbox","id":"sh/m1cfa9w3","slide":3,"text":"Bu yüzden sunumda “LLM, graph, prompt” gibi teknik kavramları merkeze almak yerine, sistemin soruyu nasıl güvenli bir rapora dönüştürdüğünü anlatmak yeterli.","textPreview":"Bu yüzden sunumda “LLM, graph, prompt” gibi teknik kavramları merkeze almak yerine, sistemin soruyu nasıl güvenli bir rapora dönüştürdüğü...","textChars":157,"textLines":1,"bbox":[130,496,1020,64]}
+{"kind":"shape","id":"sh/bm58z25k","slide":3,"bbox":[72,676,1136,0]}
+{"kind":"textbox","id":"sh/7adsji5s","slide":3,"text":"ASM AI Agent","textPreview":"ASM AI Agent","textChars":12,"textLines":1,"bbox":[72,688,240,20]}
+{"kind":"textbox","id":"sh/epkzupwb","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1160,688,48,20]}
+{"kind":"notes","id":"nt/em0a4a","slide":3,"text":""}
+{"kind":"slide","id":"sl/0757ig","slide":4,"title":"MİMARİ","textShapes":18}
+{"kind":"textbox","id":"sh/lc7u54zi","slide":4,"text":"MİMARİ","textPreview":"MİMARİ","textChars":6,"textLines":1,"bbox":[72,42,700,28]}
+{"kind":"textbox","id":"sh/eloj2t83","slide":4,"text":"Mimari katmanlı kurulduğu için büyütmesi ve denetlemesi kolay","textPreview":"Mimari katmanlı kurulduğu için büyütmesi ve denetlemesi kolay","textChars":61,"textLines":1,"bbox":[72,72,980,84]}
+{"kind":"shape","id":"sh/36hcrmhk","slide":4,"bbox":[260.8,302,48,0]}
+{"kind":"shape","id":"sh/wfyxobm5","slide":4,"bbox":[497.6,302,48,0]}
+{"kind":"shape","id":"sh/l0rqd4vm","slide":4,"bbox":[734.4,302,48,0]}
+{"kind":"shape","id":"sh/ed8bat47","slide":4,"bbox":[971.2,302,48,0]}
+{"kind":"shape","id":"sh/7u54zido","slide":4,"bbox":[72,214,188.8,176]}
+{"kind":"textbox","id":"sh/w7mp0bi9","slide":4,"text":"Arayüz","textPreview":"Arayüz","textChars":6,"textLines":1,"bbox":[90,234,152.8,34]}
+{"kind":"textbox","id":"sh/psfil0rq","slide":4,"text":"React ekranı, sohbet ve sonuç bileşenleri","textPreview":"React ekranı, sohbet ve sonuç bileşenleri","textChars":41,"textLines":1,"bbox":[90,278,152.8,96]}
+{"kind":"shape","id":"sh/tsvu9kni","slide":4,"bbox":[308.8,214,188.8,176]}
+{"kind":"textbox","id":"sh/47y1kre1","slide":4,"text":"API","textPreview":"API","textChars":3,"textLines":1,"bbox":[326.8,234,152.8,34]}
+{"kind":"textbox","id":"sh/bm58z25k","slide":4,"text":"FastAPI sadece istekleri alır ve yanıtı taşır","textPreview":"FastAPI sadece istekleri alır ve yanıtı taşır","textChars":45,"textLines":1,"bbox":[326.8,278,152.8,96]}
+{"kind":"shape","id":"sh/m1cfa9w3","slide":4,"bbox":[545.6,214,188.8,176]}
+{"kind":"textbox","id":"sh/tgfmlkjm","slide":4,"text":"Servisler","textPreview":"Servisler","textChars":9,"textLines":1,"bbox":[563.6,234,152.8,34]}
+{"kind":"textbox","id":"sh/4vmtwra5","slide":4,"text":"İş akışı, SQL, rapor ve analiz kararları","textPreview":"İş akışı, SQL, rapor ve analiz kararları","textChars":40,"textLines":1,"bbox":[563.6,278,152.8,96]}
+{"kind":"shape","id":"sh/bat47y1k","slide":4,"bbox":[782.4,214,188.8,176]}
+{"kind":"textbox","id":"sh/mp0bi9s3","slide":4,"text":"Ajan","textPreview":"Ajan","textChars":4,"textLines":1,"bbox":[800.4,234,152.8,34]}
+{"kind":"textbox","id":"sh/t83itgfm","slide":4,"text":"Adım adım niyet, SQL, kontrol, analiz ve rapor","textPreview":"Adım adım niyet, SQL, kontrol, analiz ve rapor","textChars":46,"textLines":1,"bbox":[800.4,278,152.8,96]}
+{"kind":"shape","id":"sh/4nap4r65","slide":4,"bbox":[1019.2,214,188.8,176]}
+{"kind":"textbox","id":"sh/0rqd4vmt","slide":4,"text":"Veri","textPreview":"Veri","textChars":4,"textLines":1,"bbox":[1037.2,234,152.8,34]}
+{"kind":"textbox","id":"sh/tcj6tova","slide":4,"text":"Repository ve güvenli SQL katmanı","textPreview":"Repository ve güvenli SQL katmanı","textChars":33,"textLines":1,"bbox":[1037.2,278,152.8,96]}
+{"kind":"shape","id":"sh/il0rqd4v","slide":4,"bbox":[130,470,465,116]}
+{"kind":"shape","id":"sh/b6xkf6dc","slide":4,"bbox":[130,470,6,116]}
+{"kind":"textbox","id":"sh/0je9cvix","slide":4,"text":"Neden önemli?","textPreview":"Neden önemli?","textChars":13,"textLines":1,"bbox":[154,492,417,34]}
+{"kind":"textbox","id":"sh/t47y1kre","slide":4,"text":"API rotalarında iş mantığı yok. LLM çağrıları provider katmanından geçiyor. Veritabanına erişim repository ve execution servisleriyle ayrılmış durumda.","textPreview":"API rotalarında iş mantığı yok. LLM çağrıları provider katmanından geçiyor. Veritabanına erişim repository ve execution servisleriyle ayr...","textChars":151,"textLines":1,"bbox":[154,534,417,36]}
+{"kind":"shape","id":"sh/idonyd0z","slide":4,"bbox":[685,470,465,116]}
+{"kind":"shape","id":"sh/byhgn29g","slide":4,"bbox":[685,470,6,116]}
+{"kind":"textbox","id":"sh/0fepkzup","slide":4,"text":"Sonuç","textPreview":"Sonuç","textChars":5,"textLines":1,"bbox":[709,492,417,34]}
+{"kind":"textbox","id":"sh/p0bi9s36","slide":4,"text":"Sistem hem test edilebilir hem de yeni analiz türleri, farklı LLM sağlayıcıları veya farklı UI bileşenleri eklenebilir hale geliyor.","textPreview":"Sistem hem test edilebilir hem de yeni analiz türleri, farklı LLM sağlayıcıları veya farklı UI bileşenleri eklenebilir hale geliyor.","textChars":132,"textLines":1,"bbox":[709,534,417,36]}
+{"kind":"shape","id":"sh/zed8v6ps","slide":4,"bbox":[72,676,1136,0]}
+{"kind":"textbox","id":"sh/6xkf6dcb","slide":4,"text":"ASM AI Agent","textPreview":"ASM AI Agent","textChars":12,"textLines":1,"bbox":[72,688,240,20]}
+{"kind":"textbox","id":"sh/hk3q5o7q","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1160,688,48,20]}
+{"kind":"notes","id":"nt/0757ig","slide":4,"text":""}
+{"kind":"slide","id":"sl/d44gua","slide":5,"title":"SİSTEM TOPOLOJİSİ","textShapes":23}
+{"kind":"textbox","id":"sh/zed8v6ps","slide":5,"text":"SİSTEM TOPOLOJİSİ","textPreview":"SİSTEM TOPOLOJİSİ","textChars":17,"textLines":1,"bbox":[72,42,700,28]}
+{"kind":"textbox","id":"sh/oza1gvy9","slide":5,"text":"Topoloji, sistemi tek bir blok yerine bağlantılı parçalara ayırıyor","textPreview":"Topoloji, sistemi tek bir blok yerine bağlantılı parçalara ayırıyor","textChars":67,"textLines":1,"bbox":[72,72,980,84]}
+{"kind":"shape","id":"sh/hk3q5o7q","slide":5,"bbox":[200,330,130,-90]}
+{"kind":"shape","id":"sh/65wjudg7","slide":5,"bbox":[200,330,130,0]}
+{"kind":"shape","id":"sh/zqtcj6to","slide":5,"bbox":[200,330,130,90]}
+{"kind":"shape","id":"sh/obm58z25","slide":5,"bbox":[540,240,150,0]}
+{"kind":"shape","id":"sh/hwfyxobm","slide":5,"bbox":[540,330,150,0]}
+{"kind":"shape","id":"sh/a9w3m94f","slide":5,"bbox":[540,420,150,0]}
+{"kind":"shape","id":"sh/zupwb2hw","slide":5,"bbox":[900,240,140,45]}
+{"kind":"shape","id":"sh/7y1kre1w","slide":5,"bbox":[900,330,140,0]}
+{"kind":"shape","id":"sh/ed8v6psf","slide":5,"bbox":[900,420,140,-45]}
+{"kind":"shape","id":"sh/p4r65wju","slide":5,"bbox":[72,280,180,100]}
+{"kind":"textbox","id":"sh/wjudg7ad","slide":5,"text":"Kullanıcı","textPreview":"Kullanıcı","textChars":9,"textLines":1,"bbox":[86,292,152,28]}
+{"kind":"textbox","id":"sh/7qpg3ex0","slide":5,"text":"Türkçe soru sorar","textPreview":"Türkçe soru sorar","textChars":17,"textLines":1,"bbox":[88,326,148,44]}
+{"kind":"shape","id":"sh/i5sneloj","slide":5,"bbox":[330,192,210,96]}
+{"kind":"textbox","id":"sh/pwb2hwfy","slide":5,"text":"Arayüz","textPreview":"Arayüz","textChars":6,"textLines":1,"bbox":[344,204,182,28]}
+{"kind":"textbox","id":"sh/0bi9s36h","slide":5,"text":"Sohbet, tablo, grafik","textPreview":"Sohbet, tablo, grafik","textChars":21,"textLines":1,"bbox":[346,238,178,40]}
+{"kind":"shape","id":"sh/7ed8bat4","slide":5,"bbox":[330,282,210,96]}
+{"kind":"textbox","id":"sh/itgfmlkj","slide":5,"text":"API","textPreview":"API","textChars":3,"textLines":1,"bbox":[344,294,182,28]}
+{"kind":"textbox","id":"sh/qtcj6tov","slide":5,"text":"İstek ve yanıt kapısı","textPreview":"İstek ve yanıt kapısı","textChars":21,"textLines":1,"bbox":[346,328,178,40]}
+{"kind":"shape","id":"sh/je9cvixc","slide":5,"bbox":[330,372,210,96]}
+{"kind":"textbox","id":"sh/8z25kb6x","slide":5,"text":"Streaming","textPreview":"Streaming","textChars":9,"textLines":1,"bbox":[344,384,182,28]}
+{"kind":"textbox","id":"sh/1gvy90je","slide":5,"text":"İlerleme aşamaları","textPreview":"İlerleme aşamaları","textChars":18,"textLines":1,"bbox":[346,418,178,40]}
+{"kind":"shape","id":"sh/q1orytsv","slide":5,"bbox":[690,192,210,96]}
+{"kind":"textbox","id":"sh/fmlkjm1c","slide":5,"text":"Ajan grafı","textPreview":"Ajan grafı","textChars":10,"textLines":1,"bbox":[704,204,182,28]}
+{"kind":"textbox","id":"sh/87ed8bat","slide":5,"text":"Karar ve iş akışı","textPreview":"Karar ve iş akışı","textChars":17,"textLines":1,"bbox":[706,238,178,40]}
+{"kind":"shape","id":"sh/xs72x4na","slide":5,"bbox":[690,282,210,96]}
+{"kind":"textbox","id":"sh/qd4vmtwr","slide":5,"text":"Servis katmanı","textPreview":"Servis katmanı","textChars":14,"textLines":1,"bbox":[704,294,182,28]}
+{"kind":"textbox","id":"sh/fyxobm58","slide":5,"text":"SQL, rapor, analiz","textPreview":"SQL, rapor, analiz","textChars":18,"textLines":1,"bbox":[706,328,178,40]}
+{"kind":"shape","id":"sh/5wjudg7a","slide":5,"bbox":[690,372,210,96]}
+{"kind":"textbox","id":"sh/gbq1oryt","slide":5,"text":"Provider katmanı","textPreview":"Provider katmanı","textChars":16,"textLines":1,"bbox":[704,384,182,28]}
+{"kind":"textbox","id":"sh/nuxc3ylc","slide":5,"text":"Yerel veya uzak model","textPreview":"Yerel veya uzak model","textChars":21,"textLines":1,"bbox":[706,418,178,40]}
+{"kind":"shape","id":"sh/y90je9cv","slide":5,"bbox":[1040,252,168,86]}
+{"kind":"textbox","id":"sh/58z25kb6","slide":5,"text":"Güvenli SQL","textPreview":"Güvenli SQL","textChars":11,"textLines":1,"bbox":[1054,264,140,28]}
+{"kind":"textbox","id":"sh/gn29gr2p","slide":5,"text":"Validator kapısı","textPreview":"Validator kapısı","textChars":16,"textLines":1,"bbox":[1056,298,136,30]}
+{"kind":"shape","id":"sh/n29gr2p8","slide":5,"bbox":[1040,350,168,86]}
+{"kind":"textbox","id":"sh/yhgn29gr","slide":5,"text":"MSSQL view","textPreview":"MSSQL view","textChars":10,"textLines":1,"bbox":[1054,362,140,28]}
+{"kind":"textbox","id":"sh/5kb6xkf6","slide":5,"text":"Sadece okuma","textPreview":"Sadece okuma","textChars":12,"textLines":1,"bbox":[1056,396,136,30]}
+{"kind":"textbox","id":"sh/czed8v6p","slide":5,"text":"Dalların amacı şudur: kullanıcı basit bir soru görür, içeride ise her parça kendi görevini yapar ve riskli adımlar ayrı kapılardan geçer.","textPreview":"Dalların amacı şudur: kullanıcı basit bir soru görür, içeride ise her parça kendi görevini yapar ve riskli adımlar ayrı kapılardan geçer.","textChars":137,"textLines":1,"bbox":[128,540,1024,52]}
+{"kind":"shape","id":"sh/k3q5o7qp","slide":5,"bbox":[72,676,1136,0]}
+{"kind":"textbox","id":"sh/donyd0z6","slide":5,"text":"ASM AI Agent","textPreview":"ASM AI Agent","textChars":12,"textLines":1,"bbox":[72,688,240,20]}
+{"kind":"textbox","id":"sh/2x4nap4r","slide":5,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1160,688,48,20]}
+{"kind":"notes","id":"nt/d44gua","slide":5,"text":""}
+{"kind":"slide","id":"sl/z0wtmu","slide":6,"title":"KARAR AĞACI","textShapes":25}
+{"kind":"textbox","id":"sh/b6xkf6dc","slide":6,"text":"KARAR AĞACI","textPreview":"KARAR AĞACI","textChars":11,"textLines":1,"bbox":[72,42,700,28]}
+{"kind":"textbox","id":"sh/0rqd4vmt","slide":6,"text":"Ajan önce sorunun türünü seçer, sonra doğru dala gider","textPreview":"Ajan önce sorunun türünü seçer, sonra doğru dala gider","textChars":54,"textLines":1,"bbox":[72,72,980,84]}
+{"kind":"shape","id":"sh/tcj6tova","slide":6,"bbox":[215,330,180,-125]}
+{"kind":"shape","id":"sh/idonyd0z","slide":6,"bbox":[215,330,180,-30]}
+{"kind":"shape","id":"sh/byhgn29g","slide":6,"bbox":[215,330,180,65]}
+{"kind":"shape","id":"sh/0je9cvix","slide":6,"bbox":[215,330,180,160]}
+{"kind":"shape","id":"sh/t47y1kre","slide":6,"bbox":[72,278,210,104]}
+{"kind":"textbox","id":"sh/i9s36hcr","slide":6,"text":"Soru geldi","textPreview":"Soru geldi","textChars":10,"textLines":1,"bbox":[86,290,182,28]}
+{"kind":"textbox","id":"sh/bulwval8","slide":6,"text":"Sistem önce niyeti anlar","textPreview":"Sistem önce niyeti anlar","textChars":24,"textLines":1,"bbox":[88,324,178,48]}
+{"kind":"shape","id":"sh/j6tovaho","slide":6,"bbox":[395,158,230,92]}
+{"kind":"textbox","id":"sh/ulwval87","slide":6,"text":"Veri sorusu","textPreview":"Veri sorusu","textChars":11,"textLines":1,"bbox":[409,170,202,28]}
+{"kind":"textbox","id":"sh/1cfa9w3m","slide":6,"text":"Rapor akışına girer","textPreview":"Rapor akışına girer","textChars":19,"textLines":1,"bbox":[411,204,198,36]}
+{"kind":"shape","id":"sh/crmhk3q5","slide":6,"bbox":[395,253,230,92]}
+{"kind":"textbox","id":"sh/ji5snelo","slide":6,"text":"Yardım isteği","textPreview":"Yardım isteği","textChars":13,"textLines":1,"bbox":[409,265,202,28]}
+{"kind":"textbox","id":"sh/uxc3ylc7","slide":6,"text":"Kullanım cevabı döner","textPreview":"Kullanım cevabı döner","textChars":21,"textLines":1,"bbox":[411,299,198,36]}
+{"kind":"shape","id":"sh/1kre1w7m","slide":6,"bbox":[395,348,230,92]}
+{"kind":"textbox","id":"sh/c3ylc7u5","slide":6,"text":"Genel sohbet","textPreview":"Genel sohbet","textChars":12,"textLines":1,"bbox":[409,360,202,28]}
+{"kind":"textbox","id":"sh/jqh0fepk","slide":6,"text":"Kısa yanıt üretilir","textPreview":"Kısa yanıt üretilir","textChars":19,"textLines":1,"bbox":[411,394,198,36]}
+{"kind":"shape","id":"sh/q5o7qpg3","slide":6,"bbox":[395,443,230,92]}
+{"kind":"textbox","id":"sh/itgfmlkj","slide":6,"text":"Belirsiz soru","textPreview":"Belirsiz soru","textChars":13,"textLines":1,"bbox":[409,455,202,28]}
+{"kind":"textbox","id":"sh/7ed8bat4","slide":6,"text":"Netleştirme sorulur","textPreview":"Netleştirme sorulur","textChars":19,"textLines":1,"bbox":[411,489,198,36]}
+{"kind":"shape","id":"sh/0z61032l","slide":6,"bbox":[625,204,150,0]}
+{"kind":"shape","id":"sh/pkzupwb2","slide":6,"bbox":[625,299,150,0]}
+{"kind":"shape","id":"sh/ih4byhgn","slide":6,"bbox":[625,394,150,0]}
+{"kind":"shape","id":"sh/72x4nap4","slide":6,"bbox":[625,489,150,0]}
+{"kind":"shape","id":"sh/0nuxc3yl","slide":6,"bbox":[775,148,225,112]}
+{"kind":"textbox","id":"sh/p8nqxs72","slide":6,"text":"SQL hattı","textPreview":"SQL hattı","textChars":9,"textLines":1,"bbox":[789,160,197,28]}
+{"kind":"textbox","id":"sh/ed8v6psf","slide":6,"text":"Bağlam, plan, üretim, kontrol","textPreview":"Bağlam, plan, üretim, kontrol","textChars":29,"textLines":1,"bbox":[791,194,193,56]}
+{"kind":"shape","id":"sh/7y1kre1w","slide":6,"bbox":[775,255,225,86]}
+{"kind":"textbox","id":"sh/x0nuxc3y","slide":6,"text":"Yardım cevabı","textPreview":"Yardım cevabı","textChars":13,"textLines":1,"bbox":[789,267,197,28]}
+{"kind":"textbox","id":"sh/4fu18jqh","slide":6,"text":"Veri sorgusu yok","textPreview":"Veri sorgusu yok","textChars":16,"textLines":1,"bbox":[791,301,193,30]}
+{"kind":"shape","id":"sh/fu18jqh0","slide":6,"bbox":[775,350,225,86]}
+{"kind":"textbox","id":"sh/m94fu18j","slide":6,"text":"Sohbet cevabı","textPreview":"Sohbet cevabı","textChars":13,"textLines":1,"bbox":[789,362,197,28]}
+{"kind":"textbox","id":"sh/xobm58z2","slide":6,"text":"Veri sorgusu yok","textPreview":"Veri sorgusu yok","textChars":16,"textLines":1,"bbox":[791,396,193,30]}
+{"kind":"shape","id":"sh/83itgfml","slide":6,"bbox":[775,445,225,86]}
+{"kind":"textbox","id":"sh/fil0rqd4","slide":6,"text":"Açıklama isteği","textPreview":"Açıklama isteği","textChars":15,"textLines":1,"bbox":[789,457,197,28]}
+{"kind":"textbox","id":"sh/qxs72x4n","slide":6,"text":"Yanlış SQL denenmez","textPreview":"Yanlış SQL denenmez","textChars":19,"textLines":1,"bbox":[791,491,193,30]}
+{"kind":"shape","id":"sh/xkf6dcbu","slide":6,"bbox":[1000,204,90,0]}
+{"kind":"shape","id":"sh/4zidonyd","slide":6,"bbox":[1090,156,118,96]}
+{"kind":"textbox","id":"sh/s72x4nap","slide":6,"text":"Rapor","textPreview":"Rapor","textChars":5,"textLines":1,"bbox":[1104,168,90,28]}
+{"kind":"textbox","id":"sh/lszqtcj6","slide":6,"text":"Sade sonuç","textPreview":"Sade sonuç","textChars":10,"textLines":1,"bbox":[1106,202,86,40]}
+{"kind":"textbox","id":"sh/a5gbq1or","slide":6,"text":"Bu yapı hatayı azaltır: sistem emin değilse SQL üretmeye zorlanmaz, kullanıcıdan daha net soru ister.","textPreview":"Bu yapı hatayı azaltır: sistem emin değilse SQL üretmeye zorlanmaz, kullanıcıdan daha net soru ister.","textChars":101,"textLines":1,"bbox":[168,584,944,42]}
+{"kind":"shape","id":"sh/3m94fu18","slide":6,"bbox":[72,676,1136,0]}
+{"kind":"textbox","id":"sh/sji5snel","slide":6,"text":"ASM AI Agent","textPreview":"ASM AI Agent","textChars":12,"textLines":1,"bbox":[72,688,240,20]}
+{"kind":"textbox","id":"sh/h4byhgn2","slide":6,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1160,688,48,20]}
+{"kind":"notes","id":"nt/z0wtmu","slide":6,"text":""}
+{"kind":"slide","id":"sl/qnrcna","slide":7,"title":"VERİ VE RAPOR TOPOLOJİSİ","textShapes":19}
+{"kind":"textbox","id":"sh/hk3q5o7q","slide":7,"text":"VERİ VE RAPOR TOPOLOJİSİ","textPreview":"VERİ VE RAPOR TOPOLOJİSİ","textChars":24,"textLines":1,"bbox":[72,42,700,28]}
+{"kind":"textbox","id":"sh/6xkf6dcb","slide":7,"text":"Veri topolojisi sorguyu daraltır, sonucu genişletir","textPreview":"Veri topolojisi sorguyu daraltır, sonucu genişletir","textChars":51,"textLines":1,"bbox":[72,72,980,84]}
+{"kind":"shape","id":"sh/zed8v6ps","slide":7,"bbox":[72,250,180,96]}
+{"kind":"textbox","id":"sh/obm58z25","slide":7,"text":"Doğal soru","textPreview":"Doğal soru","textChars":10,"textLines":1,"bbox":[86,262,152,28]}
+{"kind":"textbox","id":"sh/hwfyxobm","slide":7,"text":"İnsan dili","textPreview":"İnsan dili","textChars":10,"textLines":1,"bbox":[88,296,148,40]}
+{"kind":"shape","id":"sh/65wjudg7","slide":7,"bbox":[252,298,103,0]}
+{"kind":"shape","id":"sh/zqtcj6to","slide":7,"bbox":[355,180,210,86]}
+{"kind":"textbox","id":"sh/sfil0rqd","slide":7,"text":"Sözlükler","textPreview":"Sözlükler","textChars":9,"textLines":1,"bbox":[369,192,182,28]}
+{"kind":"textbox","id":"sh/h0fepkzu","slide":7,"text":"Metrik ve alan anlamları","textPreview":"Metrik ve alan anlamları","textChars":24,"textLines":1,"bbox":[371,226,178,30]}
+{"kind":"shape","id":"sh/5wjudg7a","slide":7,"bbox":[355,292,210,86]}
+{"kind":"textbox","id":"sh/gbq1oryt","slide":7,"text":"Bağlam hafızası","textPreview":"Bağlam hafızası","textChars":15,"textLines":1,"bbox":[369,304,182,28]}
+{"kind":"textbox","id":"sh/nuxc3ylc","slide":7,"text":"Önceki filtreler","textPreview":"Önceki filtreler","textChars":16,"textLines":1,"bbox":[371,338,178,30]}
+{"kind":"shape","id":"sh/y90je9cv","slide":7,"bbox":[355,404,210,86]}
+{"kind":"textbox","id":"sh/58z25kb6","slide":7,"text":"Şema bilgisi","textPreview":"Şema bilgisi","textChars":12,"textLines":1,"bbox":[369,416,182,28]}
+{"kind":"textbox","id":"sh/gn29gr2p","slide":7,"text":"View ve kolonlar","textPreview":"View ve kolonlar","textChars":16,"textLines":1,"bbox":[371,450,178,30]}
+{"kind":"shape","id":"sh/n29gr2p8","slide":7,"bbox":[565,223,115,77]}
+{"kind":"shape","id":"sh/yhgn29gr","slide":7,"bbox":[565,335,115,-35]}
+{"kind":"shape","id":"sh/5kb6xkf6","slide":7,"bbox":[565,447,115,-147]}
+{"kind":"shape","id":"sh/czed8v6p","slide":7,"bbox":[680,240,205,120]}
+{"kind":"textbox","id":"sh/8bat47y1","slide":7,"text":"Query plan","textPreview":"Query plan","textChars":10,"textLines":1,"bbox":[694,252,177,28]}
+{"kind":"textbox","id":"sh/1w7mp0bi","slide":7,"text":"Tarih, bölüm, sıralama ve limit sözleşmesi","textPreview":"Tarih, bölüm, sıralama ve limit sözleşmesi","textChars":42,"textLines":1,"bbox":[696,286,173,64]}
+{"kind":"shape","id":"sh/q5o7qpg3","slide":7,"bbox":[885,300,105,-48]}
+{"kind":"shape","id":"sh/jqh0fepk","slide":7,"bbox":[885,300,105,50]}
+{"kind":"shape","id":"sh/8nqxs72x","slide":7,"bbox":[990,205,190,88]}
+{"kind":"textbox","id":"sh/18jqh0fe","slide":7,"text":"SQL validator","textPreview":"SQL validator","textChars":13,"textLines":1,"bbox":[1004,217,162,28]}
+{"kind":"textbox","id":"sh/qh0fepkz","slide":7,"text":"Güvenlik kapısı","textPreview":"Güvenlik kapısı","textChars":15,"textLines":1,"bbox":[1006,251,158,32]}
+{"kind":"shape","id":"sh/j2t83itg","slide":7,"bbox":[990,324,190,88]}
+{"kind":"textbox","id":"sh/crmhk3q5","slide":7,"text":"Analitik motor","textPreview":"Analitik motor","textChars":14,"textLines":1,"bbox":[1004,336,162,28]}
+{"kind":"textbox","id":"sh/1cfa9w3m","slide":7,"text":"Trend ve KPI yorumu","textPreview":"Trend ve KPI yorumu","textChars":19,"textLines":1,"bbox":[1006,370,158,32]}
+{"kind":"shape","id":"sh/7y1kre1w","slide":7,"bbox":[1085,293,0,31]}
+{"kind":"textbox","id":"sh/ed8v6psf","slide":7,"text":"Daraltma tarafı güvenlik sağlar; genişletme tarafı ise ham tabloyu toplantıda anlatılabilir içgörüye dönüştürür.","textPreview":"Daraltma tarafı güvenlik sağlar; genişletme tarafı ise ham tabloyu toplantıda anlatılabilir içgörüye dönüştürür.","textChars":112,"textLines":1,"bbox":[142,558,996,52]}
+{"kind":"shape","id":"sh/p4r65wju","slide":7,"bbox":[72,676,1136,0]}
+{"kind":"textbox","id":"sh/wjudg7ad","slide":7,"text":"ASM AI Agent","textPreview":"ASM AI Agent","textChars":12,"textLines":1,"bbox":[72,688,240,20]}
+{"kind":"textbox","id":"sh/7qpg3ex0","slide":7,"text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1160,688,48,20]}
+{"kind":"notes","id":"nt/qnrcna","slide":7,"text":""}
+{"kind":"slide","id":"sl/ub47dq","slide":8,"title":"GÜVENLİK","textShapes":12}
+{"kind":"textbox","id":"sh/1kre1w7m","slide":8,"text":"GÜVENLİK","textPreview":"GÜVENLİK","textChars":8,"textLines":1,"bbox":[72,42,700,28]}
+{"kind":"textbox","id":"sh/uxc3ylc7","slide":8,"text":"Güvenlik tasarımı sistemin merkezinde","textPreview":"Güvenlik tasarımı sistemin merkezinde","textChars":37,"textLines":1,"bbox":[72,72,980,84]}
+{"kind":"shape","id":"sh/ji5snelo","slide":8,"bbox":[82,196,300,132]}
+{"kind":"textbox","id":"sh/crmhk3q5","slide":8,"text":"Tek view","textPreview":"Tek view","textChars":8,"textLines":1,"bbox":[106,218,252,48]}
+{"kind":"textbox","id":"sh/1cfa9w3m","slide":8,"text":"Sorgulanabilir nesne: dbo.vw_RandevuRaporu","textPreview":"Sorgulanabilir nesne: dbo.vw_RandevuRaporu","textChars":42,"textLines":1,"bbox":[106,274,252,48]}
+{"kind":"shape","id":"sh/ulwval87","slide":8,"bbox":[490,196,300,132]}
+{"kind":"textbox","id":"sh/j6tovaho","slide":8,"text":"Read-only","textPreview":"Read-only","textChars":9,"textLines":1,"bbox":[514,218,252,48]}
+{"kind":"textbox","id":"sh/8nqxs72x","slide":8,"text":"Sadece SELECT ve CTE desteklenir","textPreview":"Sadece SELECT ve CTE desteklenir","textChars":32,"textLines":1,"bbox":[514,274,252,48]}
+{"kind":"shape","id":"sh/18jqh0fe","slide":8,"bbox":[898,196,300,132]}
+{"kind":"textbox","id":"sh/psfil0rq","slide":8,"text":"Validator","textPreview":"Validator","textChars":9,"textLines":1,"bbox":[922,218,252,48]}
+{"kind":"textbox","id":"sh/w7mp0bi9","slide":8,"text":"DDL, DML, EXEC, çoklu sorgu ve yorumlar reddedilir","textPreview":"DDL, DML, EXEC, çoklu sorgu ve yorumlar reddedilir","textChars":50,"textLines":1,"bbox":[922,274,252,48]}
+{"kind":"textbox","id":"sh/7mp0bi9s","slide":8,"text":"Yani sistem kullanıcıya serbest SQL çalıştırma gücü vermez. Kullanıcının doğal dil sorusu, önce kurallarla sınırlandırılmış güvenli bir sorguya çevrilir.","textPreview":"Yani sistem kullanıcıya serbest SQL çalıştırma gücü vermez. Kullanıcının doğal dil sorusu, önce kurallarla sınırlandırılmış güvenli bir s...","textChars":153,"textLines":1,"bbox":[130,438,1020,72]}
+{"kind":"textbox","id":"sh/e1w7mp0b","slide":8,"text":"Bu yaklaşım özellikle sağlık verisi gibi hassas alanlarda kritik: amaç hızlı analizdir, kontrolsüz veri erişimi değil.","textPreview":"Bu yaklaşım özellikle sağlık verisi gibi hassas alanlarda kritik: amaç hızlı analizdir, kontrolsüz veri erişimi değil.","textChars":118,"textLines":1,"bbox":[180,548,920,48]}
+{"kind":"shape","id":"sh/pg3ex0nu","slide":8,"bbox":[72,676,1136,0]}
+{"kind":"textbox","id":"sh/wval87ed","slide":8,"text":"ASM AI Agent","textPreview":"ASM AI Agent","textChars":12,"textLines":1,"bbox":[72,688,240,20]}
+{"kind":"textbox","id":"sh/7adsji5s","slide":8,"text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1160,688,48,20]}
+{"kind":"notes","id":"nt/ub47dq","slide":8,"text":""}
+{"kind":"slide","id":"sl/eqtbp0","slide":9,"title":"AJAN AKIŞI","textShapes":22}
+{"kind":"textbox","id":"sh/a5gbq1or","slide":9,"text":"AJAN AKIŞI","textPreview":"AJAN AKIŞI","textChars":10,"textLines":1,"bbox":[72,42,700,28]}
+{"kind":"textbox","id":"sh/lszqtcj6","slide":9,"text":"Ajan iş akışı soruyu kontrollü küçük adımlara böler","textPreview":"Ajan iş akışı soruyu kontrollü küçük adımlara böler","textChars":51,"textLines":1,"bbox":[72,72,980,84]}
+{"kind":"shape","id":"sh/s72x4nap","slide":9,"bbox":[252.4,265,48,0]}
+{"kind":"shape","id":"sh/3ylc7u54","slide":9,"bbox":[494.8,265,48,0]}
+{"kind":"shape","id":"sh/adsji5sn","slide":9,"bbox":[737.2,265,48,0]}
+{"kind":"shape","id":"sh/h4byhgn2","slide":9,"bbox":[979.6,265,48,0]}
+{"kind":"shape","id":"sh/sji5snel","slide":9,"bbox":[58,185,194.4,160]}
+{"kind":"textbox","id":"sh/za1gvy90","slide":9,"text":"Niyeti anla","textPreview":"Niyeti anla","textChars":11,"textLines":1,"bbox":[76,205,158.4,34]}
+{"kind":"textbox","id":"sh/ap4r65wj","slide":9,"text":"Soru rapor mu, yardım mı, sohbet mi?","textPreview":"Soru rapor mu, yardım mı, sohbet mi?","textChars":36,"textLines":1,"bbox":[76,249,158.4,80]}
+{"kind":"shape","id":"sh/0je9cvix","slide":9,"bbox":[300.4,185,194.4,160]}
+{"kind":"textbox","id":"sh/t47y1kre","slide":9,"text":"Bağlamı getir","textPreview":"Bağlamı getir","textChars":13,"textLines":1,"bbox":[318.4,205,158.4,34]}
+{"kind":"textbox","id":"sh/idonyd0z","slide":9,"text":"İlgili tablo, metrik ve tarih bilgisi","textPreview":"İlgili tablo, metrik ve tarih bilgisi","textChars":37,"textLines":1,"bbox":[318.4,249,158.4,80]}
+{"kind":"shape","id":"sh/byhgn29g","slide":9,"bbox":[542.8,185,194.4,160]}
+{"kind":"textbox","id":"sh/0rqd4vmt","slide":9,"text":"Plan kur","textPreview":"Plan kur","textChars":8,"textLines":1,"bbox":[560.8,205,158.4,34]}
+{"kind":"textbox","id":"sh/tcj6tova","slide":9,"text":"Filtre, sıralama, dönem ve join sözleşmesi","textPreview":"Filtre, sıralama, dönem ve join sözleşmesi","textChars":42,"textLines":1,"bbox":[560.8,249,158.4,80]}
+{"kind":"shape","id":"sh/il0rqd4v","slide":9,"bbox":[785.2,185,194.4,160]}
+{"kind":"textbox","id":"sh/b6xkf6dc","slide":9,"text":"SQL üret","textPreview":"SQL üret","textChars":8,"textLines":1,"bbox":[803.2,205,158.4,34]}
+{"kind":"textbox","id":"sh/032lszqt","slide":9,"text":"LLM sadece bu sözleşmeye göre üretir","textPreview":"LLM sadece bu sözleşmeye göre üretir","textChars":36,"textLines":1,"bbox":[803.2,249,158.4,80]}
+{"kind":"shape","id":"sh/tovahoza","slide":9,"bbox":[1027.6,185,194.4,160]}
+{"kind":"textbox","id":"sh/tgfmlkjm","slide":9,"text":"Kontrol et","textPreview":"Kontrol et","textChars":10,"textLines":1,"bbox":[1045.6,205,158.4,34]}
+{"kind":"textbox","id":"sh/4vmtwra5","slide":9,"text":"Validator ve compliance kontrolü","textPreview":"Validator ve compliance kontrolü","textChars":32,"textLines":1,"bbox":[1045.6,249,158.4,80]}
+{"kind":"shape","id":"sh/bat47y1k","slide":9,"bbox":[361,502.5,48,0]}
+{"kind":"shape","id":"sh/mp0bi9s3","slide":9,"bbox":[616,502.5,48,0]}
+{"kind":"shape","id":"sh/tsvu9kni","slide":9,"bbox":[871,502.5,48,0]}
+{"kind":"shape","id":"sh/47y1kre1","slide":9,"bbox":[154,430,207,145]}
+{"kind":"textbox","id":"sh/bm58z25k","slide":9,"text":"Çalıştır","textPreview":"Çalıştır","textChars":8,"textLines":1,"bbox":[172,450,171,34]}
+{"kind":"textbox","id":"sh/m1cfa9w3","slide":9,"text":"Güvenli sorgu veritabanında okunur","textPreview":"Güvenli sorgu veritabanında okunur","textChars":34,"textLines":1,"bbox":[172,494,171,65]}
+{"kind":"shape","id":"sh/twra5gbq","slide":9,"bbox":[409,430,207,145]}
+{"kind":"textbox","id":"sh/4byhgn29","slide":9,"text":"Analiz et","textPreview":"Analiz et","textChars":9,"textLines":1,"bbox":[427,450,171,34]}
+{"kind":"textbox","id":"sh/ed8bat47","slide":9,"text":"Trend, karşılaştırma ve KPI çıkarılır","textPreview":"Trend, karşılaştırma ve KPI çıkarılır","textChars":37,"textLines":1,"bbox":[427,494,171,65]}
+{"kind":"shape","id":"sh/7u54zido","slide":9,"bbox":[664,430,207,145]}
+{"kind":"textbox","id":"sh/wfyxobm5","slide":9,"text":"İçgörü üret","textPreview":"İçgörü üret","textChars":11,"textLines":1,"bbox":[682,450,171,34]}
+{"kind":"textbox","id":"sh/l0rqd4vm","slide":9,"text":"Kural tabanlı ve gerekirse LLM destekli","textPreview":"Kural tabanlı ve gerekirse LLM destekli","textChars":39,"textLines":1,"bbox":[682,494,171,65]}
+{"kind":"shape","id":"sh/eloj2t83","slide":9,"bbox":[919,430,207,145]}
+{"kind":"textbox","id":"sh/36hcrmhk","slide":9,"text":"Raporla","textPreview":"Raporla","textChars":7,"textLines":1,"bbox":[937,450,171,34]}
+{"kind":"textbox","id":"sh/wra5gbq1","slide":9,"text":"Kullanıcıya sade cevap döner","textPreview":"Kullanıcıya sade cevap döner","textChars":28,"textLines":1,"bbox":[937,494,171,65]}
+{"kind":"shape","id":"sh/lc7u54zi","slide":9,"bbox":[72,676,1136,0]}
+{"kind":"textbox","id":"sh/epkzupwb","slide":9,"text":"ASM AI Agent","textPreview":"ASM AI Agent","textChars":12,"textLines":1,"bbox":[72,688,240,20]}
+{"kind":"textbox","id":"sh/7adsji5s","slide":9,"text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1160,688,48,20]}
+{"kind":"notes","id":"nt/eqtbp0","slide":9,"text":""}
+{"kind":"slide","id":"sl/jkqbud","slide":10,"title":"ÜRÜN YETENEKLERİ","textShapes":16}
+{"kind":"textbox","id":"sh/hwfyxobm","slide":10,"text":"ÜRÜN YETENEKLERİ","textPreview":"ÜRÜN YETENEKLERİ","textChars":16,"textLines":1,"bbox":[72,42,700,28]}
+{"kind":"textbox","id":"sh/65wjudg7","slide":10,"text":"Sistem sadece cevap değil, yorumlanabilir analiz üretiyor","textPreview":"Sistem sadece cevap değil, yorumlanabilir analiz üretiyor","textChars":57,"textLines":1,"bbox":[72,72,980,84]}
+{"kind":"shape","id":"sh/zqtcj6to","slide":10,"bbox":[72,190,335,148]}
+{"kind":"shape","id":"sh/oza1gvy9","slide":10,"bbox":[72,190,6,148]}
+{"kind":"textbox","id":"sh/hk3q5o7q","slide":10,"text":"Doğal dil raporlama","textPreview":"Doğal dil raporlama","textChars":19,"textLines":1,"bbox":[96,212,287,34]}
+{"kind":"textbox","id":"sh/6xkf6dcb","slide":10,"text":"Kullanıcı Türkçe sorar; sistem SQL, tablo ve tarih ayrıntılarını arka planda yönetir.","textPreview":"Kullanıcı Türkçe sorar; sistem SQL, tablo ve tarih ayrıntılarını arka planda yönetir.","textChars":85,"textLines":1,"bbox":[96,254,287,68]}
+{"kind":"shape","id":"sh/zed8v6ps","slide":10,"bbox":[472,190,335,148]}
+{"kind":"shape","id":"sh/orytsvu9","slide":10,"bbox":[472,190,6,148]}
+{"kind":"textbox","id":"sh/hcrmhk3q","slide":10,"text":"Analitik motor","textPreview":"Analitik motor","textChars":14,"textLines":1,"bbox":[496,212,287,34]}
+{"kind":"textbox","id":"sh/d4vmtwra","slide":10,"text":"Trend, dönem karşılaştırması, sıralama, dağılım ve temel KPI mantıkları ayrıştırılmıştır.","textPreview":"Trend, dönem karşılaştırması, sıralama, dağılım ve temel KPI mantıkları ayrıştırılmıştır.","textChars":89,"textLines":1,"bbox":[496,254,287,68]}
+{"kind":"shape","id":"sh/oj2t83it","slide":10,"bbox":[872,190,335,148]}
+{"kind":"shape","id":"sh/vy90je9c","slide":10,"bbox":[872,190,6,148]}
+{"kind":"textbox","id":"sh/6dcbulwv","slide":10,"text":"İçgörü katmanı","textPreview":"İçgörü katmanı","textChars":14,"textLines":1,"bbox":[896,212,287,34]}
+{"kind":"textbox","id":"sh/dsji5sne","slide":10,"text":"Sonuçlar kurallarla yorumlanır; düşük kanıtta LLM çağrısı yapılmadan güvenli cevap üretilir.","textPreview":"Sonuçlar kurallarla yorumlanır; düşük kanıtta LLM çağrısı yapılmadan güvenli cevap üretilir.","textChars":92,"textLines":1,"bbox":[896,254,287,68]}
+{"kind":"shape","id":"sh/o7qpg3ex","slide":10,"bbox":[72,406,335,148]}
+{"kind":"shape","id":"sh/vmtwra5g","slide":10,"bbox":[72,406,6,148]}
+{"kind":"textbox","id":"sh/61032lsz","slide":10,"text":"Konuşma bağlamı","textPreview":"Konuşma bağlamı","textChars":15,"textLines":1,"bbox":[96,428,287,34]}
+{"kind":"textbox","id":"sh/dg7adsji","slide":10,"text":"Takip sorularında önceki metrik, filtre ve dönem bilgisi izole session ile taşınır.","textPreview":"Takip sorularında önceki metrik, filtre ve dönem bilgisi izole session ile taşınır.","textChars":83,"textLines":1,"bbox":[96,470,287,68]}
+{"kind":"shape","id":"sh/ovahoza1","slide":10,"bbox":[472,406,335,148]}
+{"kind":"shape","id":"sh/k3q5o7qp","slide":10,"bbox":[472,406,6,148]}
+{"kind":"textbox","id":"sh/donyd0z6","slide":10,"text":"Canlı ilerleme","textPreview":"Canlı ilerleme","textChars":14,"textLines":1,"bbox":[496,428,287,34]}
+{"kind":"textbox","id":"sh/2x4nap4r","slide":10,"text":"Stream endpoint gerçek iş akışı aşamalarını kullanıcı arayüzüne aktarır.","textPreview":"Stream endpoint gerçek iş akışı aşamalarını kullanıcı arayüzüne aktarır.","textChars":72,"textLines":1,"bbox":[496,470,287,68]}
+{"kind":"shape","id":"sh/vixczed8","slide":10,"bbox":[872,406,335,148]}
+{"kind":"shape","id":"sh/kre1w7mp","slide":10,"bbox":[872,406,6,148]}
+{"kind":"textbox","id":"sh/dcbulwva","slide":10,"text":"Sunuma uygun sonuç","textPreview":"Sunuma uygun sonuç","textChars":18,"textLines":1,"bbox":[896,428,287,34]}
+{"kind":"textbox","id":"sh/6psfil0r","slide":10,"text":"Frontend teknik SQL aliaslarını sade metrik adları ve okunur tablo/grafiklerle gösterir.","textPreview":"Frontend teknik SQL aliaslarını sade metrik adları ve okunur tablo/grafiklerle gösterir.","textChars":88,"textLines":1,"bbox":[896,470,287,68]}
+{"kind":"shape","id":"sh/val87ed8","slide":10,"bbox":[72,676,1136,0]}
+{"kind":"textbox","id":"sh/knih4byh","slide":10,"text":"ASM AI Agent","textPreview":"ASM AI Agent","textChars":12,"textLines":1,"bbox":[72,688,240,20]}
+{"kind":"textbox","id":"sh/d8bat47y","slide":10,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1160,688,48,20]}
+{"kind":"notes","id":"nt/jkqbud","slide":10,"text":""}
+{"kind":"slide","id":"sl/ifhqan","slide":11,"title":"KANIT","textShapes":6}
+{"kind":"textbox","id":"sh/judg7ads","slide":11,"text":"KANIT","textPreview":"KANIT","textChars":5,"textLines":1,"bbox":[72,42,700,28]}
+{"kind":"textbox","id":"sh/cfa9w3m9","slide":11,"text":"Benchmark sonuçları ilk üretim adayı için güçlü","textPreview":"Benchmark sonuçları ilk üretim adayı için güçlü","textChars":47,"textLines":1,"bbox":[72,72,980,84]}
+{"kind":"textbox","id":"sh/jm1cfa9w","slide":11,"text":"qwen3:8b benchmark çalışmasında %93,8 başarı oranı, 5,6 saniye ortalama iş akışı süresi ve %0 timeout verdi.","textPreview":"qwen3:8b benchmark çalışmasında %93,8 başarı oranı, 5,6 saniye ortalama iş akışı süresi ve %0 timeout verdi.","textChars":108,"textLines":1,"bbox":[110,535,1060,44]}
+{"kind":"textbox","id":"sh/c7u54zid","slide":11,"text":"Bu sonuç, yerel modelle kontrollü bir pilot senaryo için makul performans ve güvenilirlik seviyesine ulaşıldığını gösteriyor.","textPreview":"Bu sonuç, yerel modelle kontrollü bir pilot senaryo için makul performans ve güvenilirlik seviyesine ulaşıldığını gösteriyor.","textChars":125,"textLines":1,"bbox":[160,586,960,36]}
+{"kind":"shape","id":"sh/1orytsvu","slide":11,"bbox":[72,676,1136,0]}
+{"kind":"textbox","id":"sh/upwb2hwf","slide":11,"text":"ASM AI Agent","textPreview":"ASM AI Agent","textChars":12,"textLines":1,"bbox":[72,688,240,20]}
+{"kind":"textbox","id":"sh/nap4r65w","slide":11,"text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[1160,688,48,20]}
+{"kind":"image","id":"im/cfa9w3m9","slide":11,"name":"","alt":"Benchmark success rate chart","bbox":[76,174,520,310]}
+{"kind":"image","id":"im/jm1cfa9w","slide":11,"name":"","alt":"Average latency chart","bbox":[684,174,500,310]}
+{"kind":"notes","id":"nt/ifhqan","slide":11,"text":""}
+{"kind":"slide","id":"sl/xexudl","slide":12,"title":"DOĞRULAMA","textShapes":14}
+{"kind":"textbox","id":"sh/qxs72x4n","slide":12,"text":"DOĞRULAMA","textPreview":"DOĞRULAMA","textChars":9,"textLines":1,"bbox":[72,42,700,28]}
+{"kind":"textbox","id":"sh/xobm58z2","slide":12,"text":"Test kapsamı projenin riskli noktalarını koruyor","textPreview":"Test kapsamı projenin riskli noktalarını koruyor","textChars":48,"textLines":1,"bbox":[72,72,980,84]}
+{"kind":"shape","id":"sh/83itgfml","slide":12,"bbox":[82,190,310,132]}
+{"kind":"textbox","id":"sh/fu18jqh0","slide":12,"text":"1209 geçti","textPreview":"1209 geçti","textChars":10,"textLines":1,"bbox":[106,212,262,48]}
+{"kind":"textbox","id":"sh/m94fu18j","slide":12,"text":"Backend testleri","textPreview":"Backend testleri","textChars":16,"textLines":1,"bbox":[106,268,262,48]}
+{"kind":"shape","id":"sh/x0nuxc3y","slide":12,"bbox":[486,190,310,132]}
+{"kind":"textbox","id":"sh/4fu18jqh","slide":12,"text":"1 skipped","textPreview":"1 skipped","textChars":9,"textLines":1,"bbox":[510,212,262,48]}
+{"kind":"textbox","id":"sh/f6dcbulw","slide":12,"text":"Harici MSSQL entegrasyon testi","textPreview":"Harici MSSQL entegrasyon testi","textChars":30,"textLines":1,"bbox":[510,268,262,48]}
+{"kind":"shape","id":"sh/mlkjm1cf","slide":12,"bbox":[890,190,310,132]}
+{"kind":"textbox","id":"sh/gbq1oryt","slide":12,"text":"84 geçti","textPreview":"84 geçti","textChars":8,"textLines":1,"bbox":[914,212,262,48]}
+{"kind":"textbox","id":"sh/5wjudg7a","slide":12,"text":"Frontend Vitest testleri","textPreview":"Frontend Vitest testleri","textChars":24,"textLines":1,"bbox":[914,268,262,48]}
+{"kind":"shape","id":"sh/y90je9cv","slide":12,"bbox":[120,410,470,134]}
+{"kind":"shape","id":"sh/nuxc3ylc","slide":12,"bbox":[120,410,6,134]}
+{"kind":"textbox","id":"sh/gn29gr2p","slide":12,"text":"Özellikle korunan alanlar","textPreview":"Özellikle korunan alanlar","textChars":25,"textLines":1,"bbox":[144,432,422,34]}
+{"kind":"textbox","id":"sh/58z25kb6","slide":12,"text":"SQL güvenliği, şema koruması, niyet analizi, dönem karşılaştırmaları, analitik sonuçlar, streaming ve UI tablo/grafik sunumu.","textPreview":"SQL güvenliği, şema koruması, niyet analizi, dönem karşılaştırmaları, analitik sonuçlar, streaming ve UI tablo/grafik sunumu.","textChars":125,"textLines":1,"bbox":[144,474,422,54]}
+{"kind":"shape","id":"sh/yhgn29gr","slide":12,"bbox":[690,410,470,134]}
+{"kind":"shape","id":"sh/n29gr2p8","slide":12,"bbox":[690,410,6,134]}
+{"kind":"textbox","id":"sh/czed8v6p","slide":12,"text":"Çalışma ağacı notu","textPreview":"Çalışma ağacı notu","textChars":18,"textLines":1,"bbox":[714,432,422,34]}
+{"kind":"textbox","id":"sh/5kb6xkf6","slide":12,"text":"Depoda mevcut geliştirme değişiklikleri var. Sunum bu anlık durumu anlatır; commit öncesi son diff ve regression kontrolü ayrıca yapılmalı.","textPreview":"Depoda mevcut geliştirme değişiklikleri var. Sunum bu anlık durumu anlatır; commit öncesi son diff ve regression kontrolü ayrıca yapılmalı.","textChars":139,"textLines":1,"bbox":[714,474,422,54]}
+{"kind":"shape","id":"sh/9cvixcze","slide":12,"bbox":[72,676,1136,0]}
+{"kind":"textbox","id":"sh/gr2p8nqx","slide":12,"text":"ASM AI Agent","textPreview":"ASM AI Agent","textChars":12,"textLines":1,"bbox":[72,688,240,20]}
+{"kind":"textbox","id":"sh/r65wjudg","slide":12,"text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[1160,688,48,20]}
+{"kind":"notes","id":"nt/xexudl","slide":12,"text":""}
+{"kind":"slide","id":"sl/a5h18g","slide":13,"title":"DURUM ÖZETİ","textShapes":11}
+{"kind":"textbox","id":"sh/udg7adsj","slide":13,"text":"DURUM ÖZETİ","textPreview":"DURUM ÖZETİ","textChars":11,"textLines":1,"bbox":[72,42,700,28]}
+{"kind":"textbox","id":"sh/54zidony","slide":13,"text":"Bugünkü proje durumu: çekirdek akış çalışıyor, pilot için toparlama gerekiyor","textPreview":"Bugünkü proje durumu: çekirdek akış çalışıyor, pilot için toparlama gerekiyor","textChars":77,"textLines":1,"bbox":[72,72,980,84]}
+{"kind":"shape","id":"sh/cj6tovah","slide":13,"bbox":[72,188,350,190]}
+{"kind":"shape","id":"sh/nap4r65w","slide":13,"bbox":[72,188,6,190]}
+{"kind":"textbox","id":"sh/upwb2hwf","slide":13,"text":"Tamamlanmış güçlü taraflar","textPreview":"Tamamlanmış güçlü taraflar","textChars":26,"textLines":1,"bbox":[96,210,302,34]}
+{"kind":"textbox","id":"sh/5gbq1ory","slide":13,"text":"Katmanlı mimari, güvenli SQL validator, query planner, analitik motor, içgörü üretimi, streaming endpoint ve sadeleştirilmiş frontend sunumu hazır.","textPreview":"Katmanlı mimari, güvenli SQL validator, query planner, analitik motor, içgörü üretimi, streaming endpoint ve sadeleştirilmiş frontend sun...","textChars":147,"textLines":1,"bbox":[96,252,302,110]}
+{"kind":"shape","id":"sh/cvixczed","slide":13,"bbox":[466,188,350,190]}
+{"kind":"shape","id":"sh/jm1cfa9w","slide":13,"bbox":[466,188,6,190]}
+{"kind":"textbox","id":"sh/u18jqh0f","slide":13,"text":"Dikkat isteyen noktalar","textPreview":"Dikkat isteyen noktalar","textChars":23,"textLines":1,"bbox":[490,210,302,34]}
+{"kind":"textbox","id":"sh/w3m94fu1","slide":13,"text":"Çalışma ağacı temiz değil. MSSQL canlı izinleri, model servislerinin erişilebilirliği ve production konfigürasyonu toplantı öncesi netleştirilmeli.","textPreview":"Çalışma ağacı temiz değil. MSSQL canlı izinleri, model servislerinin erişilebilirliği ve production konfigürasyonu toplantı öncesi netleş...","textChars":147,"textLines":1,"bbox":[490,252,302,110]}
+{"kind":"shape","id":"sh/loj2t83i","slide":13,"bbox":[860,188,350,190]}
+{"kind":"shape","id":"sh/ex0nuxc3","slide":13,"bbox":[860,188,6,190]}
+{"kind":"textbox","id":"sh/3itgfmlk","slide":13,"text":"Toplantıda verilecek mesaj","textPreview":"Toplantıda verilecek mesaj","textChars":26,"textLines":1,"bbox":[884,210,302,34]}
+{"kind":"textbox","id":"sh/wb2hwfyx","slide":13,"text":"Bu artık sadece demo fikri değil; testleri, güvenlik kapıları ve ölçülmüş performansı olan çalışan bir raporlama ajanı.","textPreview":"Bu artık sadece demo fikri değil; testleri, güvenlik kapıları ve ölçülmüş performansı olan çalışan bir raporlama ajanı.","textChars":119,"textLines":1,"bbox":[884,252,302,110]}
+{"kind":"textbox","id":"sh/lwval87e","slide":13,"text":"En sade anlatım: Sistem, kurum verisini bilen bir asistan gibi davranır; ama cevap vermeden önce her adımı kurallarla kontrol eder.","textPreview":"En sade anlatım: Sistem, kurum verisini bilen bir asistan gibi davranır; ama cevap vermeden önce her adımı kurallarla kontrol eder.","textChars":131,"textLines":1,"bbox":[132,484,1016,58]}
+{"kind":"shape","id":"sh/e9cvixcz","slide":13,"bbox":[72,676,1136,0]}
+{"kind":"textbox","id":"sh/3q5o7qpg","slide":13,"text":"ASM AI Agent","textPreview":"ASM AI Agent","textChars":12,"textLines":1,"bbox":[72,688,240,20]}
+{"kind":"textbox","id":"sh/sneloj2t","slide":13,"text":"13","textPreview":"13","textChars":2,"textLines":1,"bbox":[1160,688,48,20]}
+{"kind":"notes","id":"nt/a5h18g","slide":13,"text":""}
+{"kind":"slide","id":"sl/vwez3e","slide":14,"title":"SONRAKİ ADIMLAR","textShapes":16}
+{"kind":"textbox","id":"sh/y90je9cv","slide":14,"text":"SONRAKİ ADIMLAR","textPreview":"SONRAKİ ADIMLAR","textChars":15,"textLines":1,"bbox":[72,42,700,28]}
+{"kind":"textbox","id":"sh/5wjudg7a","slide":14,"text":"Toplantıdan sonra odak, pilot güvenilirliğini artırmak olmalı","textPreview":"Toplantıdan sonra odak, pilot güvenilirliğini artırmak olmalı","textChars":61,"textLines":1,"bbox":[72,72,980,84]}
+{"kind":"shape","id":"sh/gbq1oryt","slide":14,"bbox":[327,299,48,0]}
+{"kind":"shape","id":"sh/n29gr2p8","slide":14,"bbox":[616,299,48,0]}
+{"kind":"shape","id":"sh/yhgn29gr","slide":14,"bbox":[905,299,48,0]}
+{"kind":"shape","id":"sh/58z25kb6","slide":14,"bbox":[86,210,241,178]}
+{"kind":"textbox","id":"sh/gn29gr2p","slide":14,"text":"1. Kapsam","textPreview":"1. Kapsam","textChars":9,"textLines":1,"bbox":[104,230,205,34]}
+{"kind":"textbox","id":"sh/neloj2t8","slide":14,"text":"Pilot kullanıcı soruları ve başarı kriterleri seçilir.","textPreview":"Pilot kullanıcı soruları ve başarı kriterleri seçilir.","textChars":54,"textLines":1,"bbox":[104,274,205,98]}
+{"kind":"shape","id":"sh/ytsvu9kn","slide":14,"bbox":[375,210,241,178]}
+{"kind":"textbox","id":"sh/83itgfml","slide":14,"text":"2. Ortam","textPreview":"2. Ortam","textChars":8,"textLines":1,"bbox":[393,230,205,34]}
+{"kind":"textbox","id":"sh/xobm58z2","slide":14,"text":"MSSQL, ODBC, Ollama ve opsiyonel remote provider netleştirilir.","textPreview":"MSSQL, ODBC, Ollama ve opsiyonel remote provider netleştirilir.","textChars":63,"textLines":1,"bbox":[393,274,205,98]}
+{"kind":"shape","id":"sh/qxs72x4n","slide":14,"bbox":[664,210,241,178]}
+{"kind":"textbox","id":"sh/fil0rqd4","slide":14,"text":"3. Veri","textPreview":"3. Veri","textChars":7,"textLines":1,"bbox":[682,230,205,34]}
+{"kind":"textbox","id":"sh/4fu18jqh","slide":14,"text":"İzinli view, kolon anlamları ve metrik kataloğu kilitlenir.","textPreview":"İzinli view, kolon anlamları ve metrik kataloğu kilitlenir.","textChars":59,"textLines":1,"bbox":[682,274,205,98]}
+{"kind":"shape","id":"sh/x0nuxc3y","slide":14,"bbox":[953,210,241,178]}
+{"kind":"textbox","id":"sh/m94fu18j","slide":14,"text":"4. Kabul","textPreview":"4. Kabul","textChars":8,"textLines":1,"bbox":[971,230,205,34]}
+{"kind":"textbox","id":"sh/fu18jqh0","slide":14,"text":"Canlı veriyle örnek soru seti çalıştırılır.","textPreview":"Canlı veriyle örnek soru seti çalıştırılır.","textChars":43,"textLines":1,"bbox":[971,274,205,98]}
+{"kind":"shape","id":"sh/4r65wjud","slide":14,"bbox":[170,466,420,110]}
+{"kind":"shape","id":"sh/xc3ylc7u","slide":14,"bbox":[170,466,6,110]}
+{"kind":"textbox","id":"sh/x4nap4r6","slide":14,"text":"Karar ihtiyacı","textPreview":"Karar ihtiyacı","textChars":14,"textLines":1,"bbox":[194,488,372,34]}
+{"kind":"textbox","id":"sh/8jqh0fep","slide":14,"text":"Pilot hangi kullanıcı grubu ve hangi rapor senaryolarıyla başlayacak?","textPreview":"Pilot hangi kullanıcı grubu ve hangi rapor senaryolarıyla başlayacak?","textChars":69,"textLines":1,"bbox":[194,530,372,30]}
+{"kind":"shape","id":"sh/fyxobm58","slide":14,"bbox":[690,466,420,110]}
+{"kind":"shape","id":"sh/qd4vmtwr","slide":14,"bbox":[690,466,6,110]}
+{"kind":"textbox","id":"sh/xczed8v6","slide":14,"text":"Teknik ihtiyaç","textPreview":"Teknik ihtiyaç","textChars":14,"textLines":1,"bbox":[714,488,372,34]}
+{"kind":"textbox","id":"sh/8v6psfil","slide":14,"text":"Production ortamında güvenli config, loglama ve model erişimi doğrulanmalı.","textPreview":"Production ortamında güvenli config, loglama ve model erişimi doğrulanmalı.","textChars":75,"textLines":1,"bbox":[714,530,372,30]}
+{"kind":"shape","id":"sh/fa9w3m94","slide":14,"bbox":[72,676,1136,0]}
+{"kind":"textbox","id":"sh/qpg3ex0n","slide":14,"text":"ASM AI Agent","textPreview":"ASM AI Agent","textChars":12,"textLines":1,"bbox":[72,688,240,20]}
+{"kind":"textbox","id":"sh/1gvy90je","slide":14,"text":"14","textPreview":"14","textChars":2,"textLines":1,"bbox":[1160,688,48,20]}
+{"kind":"notes","id":"nt/vwez3e","slide":14,"text":""}

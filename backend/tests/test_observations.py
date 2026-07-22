@@ -117,9 +117,10 @@ def test_consistent_upward_trend_observation():
 def test_mixed_trend_signal_observation():
     mixed = _CONSISTENT_UPWARD_TREND_METRICS.model_copy(
         update={
-            "trend_consistency": "mixed",
+            "trend_consistency": "mixed_or_fluctuating",
             "endpoint_direction": "downward",
             "slope_direction": "upward",
+            "monotonicity": "non_monotonic",
         }
     )
     analytics = _analytics(
@@ -127,6 +128,7 @@ def test_mixed_trend_signal_observation():
             **_analytics().metrics,
             "slope_direction_tr": "yükselişe",
             "endpoint_direction_tr": "düşüş",
+            "endpoint_direction_adjective_tr": "aşağı",
         },
         trend_metrics=mixed,
     )
@@ -134,9 +136,14 @@ def test_mixed_trend_signal_observation():
     observations = build_observations(analytics, [InsightRule.MIXED_TREND_SIGNAL])
 
     texts = [obs.text for obs in observations]
+    # AI-INTELLIGENCE-018 (item 7/8): non-monotonic never gets "consistent"/
+    # continuous-growth language — states the fluctuation and the overall
+    # endpoint direction plainly instead.
     assert any(
-        "yükselişe işaret ederken" in text and "düşüş görülmektedir" in text for text in texts
+        "Dalgalanmalara rağmen" in text and "aşağıdır" in text for text in texts
     )
+    forbidden = ("sürekli", "kesintisiz", "tutarlı yükseliş", "her ay arttı")
+    assert not any(term in text for text in texts for term in forbidden)
 
 
 def test_flat_trend_observation():

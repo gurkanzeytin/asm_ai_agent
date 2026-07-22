@@ -118,7 +118,7 @@ class FakeLLMProvider:
     [
         ("consistent_upward", InsightRule.CONSISTENT_UPWARD_TREND),
         ("consistent_downward", InsightRule.CONSISTENT_DOWNWARD_TREND),
-        ("mixed", InsightRule.MIXED_TREND_SIGNAL),
+        ("mixed_or_fluctuating", InsightRule.MIXED_TREND_SIGNAL),
         ("flat", InsightRule.FLAT_TREND),
         ("insufficient_data", InsightRule.INSUFFICIENT_COMPLETE_PERIODS),
     ],

@@ -465,6 +465,14 @@ class QueryAnalyzer:
         )
         explicit_dates = list(explicit_date_pattern.finditer(query_ascii))
         explicit_date_spans = [match.span() for match in explicit_dates]
+        month_year_spans = [
+            match.span()
+            for pattern in (
+                rf"\b(20\d{{2}}|19\d{{2}})\s+({month_alternatives})\b",
+                rf"\b({month_alternatives})\s+(20\d{{2}}|19\d{{2}})\b",
+            )
+            for match in re.finditer(pattern, query_ascii)
+        ]
         if len(explicit_dates) >= 2:
             for index in range(0, len(explicit_dates) - 1, 2):
                 first, second = explicit_dates[index], explicit_dates[index + 1]
@@ -512,7 +520,9 @@ class QueryAnalyzer:
         if "bu yil" in query_ascii:
             ranges.append(self._date_range("bu yil", date(today.year, 1, 1), today, "year"))
 
-        if "gecen yil" in query_ascii:
+        if "gecen yil" in query_ascii or re.search(
+            r"\b(?:bir\s+)?onceki\s+yil\w*\b", query_ascii
+        ):
             year = today.year - 1
             ranges.append(
                 self._date_range("gecen yil", date(year, 1, 1), date(year, 12, 31), "year")
@@ -566,7 +576,18 @@ class QueryAnalyzer:
             if re.search(rf"\b{self._strip_diacritics(month_name)}\s+ayinda\b", query_ascii):
                 ranges.append(self._month_range(f"{month_name} ayinda", today.year, month))
 
-        for match in re.finditer(r"\b(20\d{2}|19\d{2})\s+yilinda\b", query_ascii):
+        # Full calendar years, including Turkish case/possessive forms used by
+        # short follow-ups (``2024 yılının``, ``2024 yılı``, ``2024 için``,
+        # ``2024'te``).  Query normalization has already removed apostrophes.
+        for match in re.finditer(
+            rf"\b(20\d{{2}}|19\d{{2}})(?:\s+(?:yil\w*|icin|olan\w*|[dty][ae]))?\b"
+            rf"(?!\s+(?:{month_alternatives})\b)",
+            query_ascii,
+        ):
+            if self._overlaps_any(
+                match.span(), explicit_date_spans + month_year_spans
+            ):
+                continue
             year = int(match.group(1))
             ranges.append(
                 self._date_range(match.group(0), date(year, 1, 1), date(year, 12, 31), "year")
@@ -587,14 +608,6 @@ class QueryAnalyzer:
                 continue
             year, month = int(match.group(2)), months_ascii[match.group(1)]
             ranges.append(self._month_range(match.group(0), year, month))
-
-        # Bare year pairs joined by a comparison word.
-        for match in re.finditer(r"\b(20\d{2})\s+(?:ile|ve)\s+(20\d{2})\b(?!\s*yil)", query_ascii):
-            for year_text in (match.group(1), match.group(2)):
-                year = int(year_text)
-                ranges.append(
-                    self._date_range(year_text, date(year, 1, 1), date(year, 12, 31), "year")
-                )
 
         # Preserve repeated periods when the user explicitly states both sides.
         # Detector overlap is prevented at the matching sites above.

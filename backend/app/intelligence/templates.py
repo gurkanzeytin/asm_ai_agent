@@ -24,9 +24,12 @@ RULE_WORDINGS: dict[str, str] = {
     "CONSISTENT_DOWNWARD_TREND": (
         "Dönem genelinde ve uç dönemler arasında tutarlı bir düşüş görülmektedir."
     ),
+    # AI-INTELLIGENCE-018 (item 7/8): non-monotonic ("mixed_or_fluctuating")
+    # never gets "consistent"/continuous-growth language — states the
+    # dalgalanma explicitly and the overall endpoint direction plainly.
     "MIXED_TREND_SIGNAL": (
-        "Dönem genelindeki eğim {slope_direction_tr} işaret ederken, ilk ve son "
-        "karşılaştırılabilir dönem arasında {endpoint_direction_tr} görülmektedir."
+        "Dalgalanmalara rağmen dönem başından dönem sonuna genel yön "
+        "{endpoint_direction_adjective_tr}dır."
     ),
     "FLAT_TREND": "Değerler dönem boyunca büyük ölçüde yatay seyretmiştir.",
     "INSUFFICIENT_COMPLETE_PERIODS": (

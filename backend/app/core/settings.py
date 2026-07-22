@@ -341,7 +341,11 @@ class Settings(BaseSettings):
                 if key.strip().lower() not in {"encrypt", "trustservercertificate"}
             ]
             entry_keys = {key.lower() for key, _value in entries}
-            if self.DB_TRUSTED_CONNECTION and not {"uid", "user", "pwd", "password"} & entry_keys:
+            if (
+                self.DB_TRUSTED_CONNECTION
+                and "trusted_connection" not in entry_keys
+                and not {"uid", "user", "pwd", "password"} & entry_keys
+            ):
                 entries.append(("Trusted_Connection", "yes"))
             entries.extend([("Encrypt", "yes"), ("TrustServerCertificate", "yes")])
             query[odbc_index] = (

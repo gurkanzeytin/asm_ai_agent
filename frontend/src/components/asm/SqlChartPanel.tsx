@@ -18,6 +18,7 @@ import {
 } from "recharts";
 import { tr } from "@/locales/tr";
 import { trCompactNumberFormatter, trNumberFormatter } from "./chart-theme";
+import { uiTransition } from "@/lib/ui-motion";
 import {
   buildChartData,
   isChartDataLimited,
@@ -254,7 +255,7 @@ export function SqlChartPanel({ columns, rows, initialType = "bar", onCategorySe
               initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -5 }}
-              transition={{ duration: 0.2 }}
+              transition={uiTransition}
               className="absolute inset-2"
               aria-hidden="true"
             >

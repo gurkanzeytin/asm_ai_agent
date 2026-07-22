@@ -331,6 +331,17 @@ def _match_token(question_token: str, term_token: str, allow_prefix: bool) -> bo
     question_stem, term_stem = _stem(question_token), _stem(term_token)
     if question_stem == term_stem:
         return True
+    # Turkish final-k softening before a vowel suffix: ``uyruk`` ->
+    # ``uyruğu`` (folded/stemmed as ``uyrug``).  Applying this to both
+    # operands keeps the catalog synonym vocabulary authoritative instead of
+    # requiring every inflected spelling to be duplicated in resource files.
+    if (
+        len(question_stem) >= 4
+        and len(term_stem) >= 4
+        and question_stem[:-1] == term_stem[:-1]
+        and {question_stem[-1], term_stem[-1]} == {"g", "k"}
+    ):
+        return True
     return allow_prefix and len(term_stem) >= 4 and question_stem.startswith(term_stem)
 
 

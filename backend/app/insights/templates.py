@@ -33,6 +33,8 @@ _TREND_LABELS = {"upward": "yükseliş", "downward": "düşüş", "stable": "yat
 _CHANGE_CLASSIFICATION = {"increase": "arttı", "decrease": "azaldı", "no_change": "değişmedi"}
 _SLOPE_DIRECTION_TR = {"upward": "yükselişe", "downward": "düşüşe", "flat": "yatay seyre"}
 _ENDPOINT_DIRECTION_TR = {"upward": "yükseliş", "downward": "düşüş", "flat": "yatay seyir"}
+# Adjective form for "genel yön {X}dır" (item 7's allowed mixed-trend statement).
+_ENDPOINT_DIRECTION_ADJECTIVE_TR = {"upward": "yukarı", "downward": "aşağı", "flat": "yatay"}
 SINGLE_CATEGORY_LIMITATION = (
     "Seçilen kapsamda yalnızca bir kategori bulunduğu için kategoriler arası "
     "karşılaştırma yapılamadı."
@@ -105,14 +107,16 @@ def build_deterministic_narrative(
                 f"Dönem genelinde ve uç dönemler arasında tutarlı bir {direction_word} "
                 "görülmektedir."
             )
-        elif consistency == "mixed":
-            slope_text = _SLOPE_DIRECTION_TR.get(trend_metrics.slope_direction, "belirsiz")
-            endpoint_text = _ENDPOINT_DIRECTION_TR.get(
+        elif consistency == "mixed_or_fluctuating":
+            # AI-INTELLIGENCE-018 (item 7/8): non-monotonic never gets
+            # "consistent"/continuous-growth language — states the overall
+            # endpoint direction plainly while naming the fluctuation.
+            endpoint_adjective = _ENDPOINT_DIRECTION_ADJECTIVE_TR.get(
                 trend_metrics.endpoint_direction, "belirsiz"
             )
             highlights.append(
-                f"Dönem genelindeki eğim {slope_text} işaret ederken, ilk ve son "
-                f"karşılaştırılabilir dönem arasında {endpoint_text} görülmektedir."
+                "Dalgalanmalara rağmen dönem başından dönem sonuna genel yön "
+                f"{endpoint_adjective}dır."
             )
         elif consistency == "flat":
             highlights.append("Değerler dönem boyunca büyük ölçüde yatay seyretmiştir.")

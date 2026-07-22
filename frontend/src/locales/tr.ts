@@ -16,6 +16,7 @@ export const tr = {
     copyFailed: "Kopyalama başarısız",
     stop: "Durdur",
     clear: "Temizle",
+    noData: "Veri yok",
   },
 
   sidebar: {
@@ -88,6 +89,32 @@ export const tr = {
   chat: {
     placeholder: "Bir şey sorun...",
     thinking: "Düşünüyor…",
+    workflowStages: {
+      understanding: "Sorunuz anlaşılıyor…",
+      preparing_sql: "SQL sorgusu hazırlanıyor…",
+      validating_sql: "Sorgu güvenliği kontrol ediliyor…",
+      executing_sql: "Veriler getiriliyor…",
+      analyzing_data: "Veriler analiz ediliyor…",
+      reporting: "Rapor oluşturuluyor…",
+    },
+    errors: {
+      network: {
+        title: "Sunucuya ulaşılamıyor",
+        description: "Bağlantıyı ve API servisinin çalıştığını kontrol edip yeniden deneyin.",
+      },
+      query: {
+        title: "Sorgu tamamlanamadı",
+        description: "Soruyu daha açık veya daha dar bir kapsamla düzenleyip yeniden gönderin.",
+      },
+      server: {
+        title: "Yanıt oluşturulamadı",
+        description: "Sunucu isteği tamamlayamadı. Birkaç saniye sonra yeniden deneyin.",
+      },
+      invalid: {
+        title: "Yanıt okunamadı",
+        description: "Sunucudan beklenmeyen bir yanıt geldi. İsteği yeniden deneyin.",
+      },
+    },
     uploadFile: "Dosya yükle",
     uploadFileDescription: "Belge, görsel veya PDF ekleyin.",
     voiceInput: "Sesli giriş",
@@ -116,6 +143,9 @@ export const tr = {
     virtualized: "sanallaştırılmış",
     virtualizedTooltip: "Hızlı kaydırma için satır sanallaştırma etkin",
     searchRows: "Satırlarda ara",
+    openFullscreen: "Tam ekran incele",
+    fullscreenTitle: "SQL Sonucu - Geniş Görünüm",
+    fullscreenDescription: "Tabloyu, filtreleri ve grafikleri geniş çalışma alanında inceleyin.",
     columns: "Sütunlar",
     manageColumns: "Görünür sütunları yönet",
     showAllColumns: "Tüm sütunları göster",
@@ -169,7 +199,13 @@ export const tr = {
     of: "toplam",
     previousPage: "Önceki sayfa",
     nextPage: "Sonraki sayfa",
+    previous: "Önceki",
+    next: "Sonraki",
     page: "Sayfa",
+    knownTotalTruncated: (total: string, shown: number) =>
+      `Toplam ${total} sonuç bulundu; ilk ${shown} sonuç gösteriliyor.`,
+    unknownTotalTruncated: (shown: number) =>
+      `İlk ${shown} sonuç gösteriliyor. Daha fazla sonuç bulunmaktadır.`,
     sortedBy: (col: string, dir: "asc" | "desc") =>
       `${col} sütununa göre ${dir === "asc" ? "artan" : "azalan"} sıralandı`,
     sortCleared: "Sıralama kaldırıldı",

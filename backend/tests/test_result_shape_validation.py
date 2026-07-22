@@ -78,6 +78,18 @@ def test_empty_result_with_matching_columns_is_valid():
     assert verdict.valid is True
 
 
+def test_empty_result_without_repository_column_metadata_is_valid():
+    plan = QueryPlan(question="q", dimensions=["SubeAdi"], metrics=["appointment_count"])
+    result = _result([], [])
+
+    verdict = ResultValidator().check_shape(
+        result, plan, ["SubeAdi", "appointment_count"]
+    )
+
+    assert verdict.valid is True
+    assert verdict.actual_shape == "empty"
+
+
 _GROUPED_METRICS = [
     "appointment_count",
     "completed_appointment_rate",

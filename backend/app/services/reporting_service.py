@@ -1,6 +1,6 @@
 import logging
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from app.agent.state import AgentState
 from app.application_models.generated_report import GeneratedReport
@@ -9,9 +9,17 @@ from app.application_models.query_analysis import AmbiguityResult
 from app.application_models.workflow_metrics import WorkflowMetrics
 from app.application_models.workflow_result import WorkflowResult
 from app.context import ContextManager
+from app.context import analytical_signals as _analytical_signals
 from app.context.analysis_type import resolve_canonical_analysis_type
 from app.context.analytical_signals import FILTER_FAMILIES as _FILTER_FAMILIES
 from app.context.session_store import generate_session_id
+from app.planning.models import QueryPlan
+from app.services.answerability import AnswerabilityInput
+from app.services.workflow_progress import (
+    ProgressCallback,
+    reset_progress_callback,
+    set_progress_callback,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +66,7 @@ class ReportingService:
     def __init__(
         self,
         agent_graph: Any,
-        context_manager: Optional[ContextManager] = None,
+        context_manager: ContextManager | None = None,
     ) -> None:
         """Initializes the service with the pre-compiled LangGraph state machine.
 
@@ -70,8 +78,22 @@ class ReportingService:
         self._agent_graph = agent_graph
         self._context_manager = context_manager or ContextManager()
 
+    @staticmethod
+    def _pending_value_clarification_field(query_plan_dto):
+        """Returns the first `resolved_filters` entry still awaiting clarification
+        (AI-INTELLIGENCE-016/017), or None. Deterministic order (dict insertion)."""
+        if query_plan_dto is None:
+            return None
+        for resolved_filter in query_plan_dto.resolved_filters.values():
+            if resolved_filter.clarification_required:
+                return resolved_filter
+        return None
+
     async def run_workflow(
-        self, question: str, session_id: Optional[str] = _UNSET
+        self,
+        question: str,
+        session_id: str | None = _UNSET,
+        progress_callback: ProgressCallback | None = None,
     ) -> WorkflowResult:
         """Runs the full agent graph pipeline and returns a typed WorkflowResult.
 
@@ -94,7 +116,9 @@ class ReportingService:
         workflow_id = str(uuid.uuid4())
         if session_id is _UNSET:
             session_id = generate_session_id()
-        logger.info(f"ReportingService: Starting workflow run [{workflow_id}] for question: {question!r}")
+        logger.info(
+            f"ReportingService: Starting workflow run [{workflow_id}] for question: {question!r}"
+        )
 
         # Conversational context resolution (PRODUCT-001): rewrite follow-up
         # questions using session context before the NLU pipeline runs.
@@ -114,14 +138,69 @@ class ReportingService:
             else:
                 pipeline_question = resolution.resolved_question
 
+        answerability_context_signals: list[str] = []
+        answerability_input_source = "raw_question"
+        if resolution is not None and resolution.context_applied:
+            answerability_input_source = "resolved_context"
+            answerability_context_signals.extend(
+                f"inherited_entity:{entity}"
+                for entity in self._context_manager.entity_types(session_id)
+            )
+            answerability_context_signals.extend(
+                f"inherited_metric:{metric}"
+                for metric in resolution.resolved_signals.metrics
+            )
+            explicit_date = self._context_manager.extract_date(question)
+            if explicit_date:
+                answerability_context_signals.append(f"explicit_date:{explicit_date}")
+
+        # AI-INTELLIGENCE-018 (item 2): typed answerability decision contract
+        # — a short follow-up is evaluated against the RESOLVED analytical
+        # context (metrics/dimensions actually merged this turn), not raw
+        # text alone or a loosely-typed signal-string list.
+        answerability_input = None
+        if resolution is not None:
+            answerability_input = AnswerabilityInput(
+                raw_question=question,
+                resolved_question=pipeline_question,
+                has_valid_prior_context=resolution.context_applied,
+                resolved_metrics=list(resolution.resolved_signals.metrics),
+                resolved_dimensions=list(resolution.resolved_signals.dimensions),
+                resolved_date_range=(
+                    self._context_manager.extract_date(question)
+                    or (resolution.inherited.get("date") if resolution.context_applied else None)
+                ),
+                context_operation=(
+                    resolution.follow_up_signals[0] if resolution.follow_up_signals else None
+                ),
+                pending_clarification=resolution.pending_clarification_resolved,
+            )
+
         initial_state = AgentState(
             question=pipeline_question,
+            raw_question=question,
             workflow_id=workflow_id,
             ambiguity=seeded_ambiguity,
+            answerability_input_source=answerability_input_source,
+            answerability_context_signals=answerability_context_signals,
+            answerability_input=answerability_input,
+            forced_filter_override=(resolution.filter_override if resolution else {}),
+            retained_query_plan=(
+                QueryPlan.model_validate(resolution.retained_query_plan_snapshot)
+                if resolution is not None and resolution.retained_query_plan_snapshot
+                else None
+            ),
+            context_follow_up_detected=(
+                resolution.follow_up_detected if resolution is not None else False
+            ),
         )
 
-        # Run compiled LangGraph workflow pipeline — domain exceptions propagate upward
-        final_state = await self._agent_graph.ainvoke(initial_state)
+        # ContextVar keeps progress request-scoped while the graph is shared.
+        progress_token = set_progress_callback(progress_callback)
+        try:
+            final_state = await self._agent_graph.ainvoke(initial_state)
+        finally:
+            reset_progress_callback(progress_token)
 
         generated_sql_dto = final_state.get("generated_sql")
         query_result_dto = final_state.get("query_result")
@@ -173,29 +252,64 @@ class ReportingService:
                     analytics_type=analytics_dto.analytics_type if analytics_dto else None,
                     outcome=outcome,
                 )
-                self._context_manager.update(
+                memory_updated = self._context_manager.update(
                     resolution,
                     session_id,
                     canonical_analysis_type=canonical_analysis_type,
                     query_plan=query_plan_dto,
                 )
-                memory_updated = True
-            elif outcome == AgentOutcome.ASK_CLARIFICATION.value and semantic_frame_dto is not None:
-                # Bounded pending clarification (Part 7): an ambiguous ranking
-                # phrase ("en iyi", "en verimli", ...) the semantic engine
-                # already flagged (app.semantics.ontology.AMBIGUOUS_PHRASES) —
-                # reused verbatim, never re-detected here. Touches only
+            elif outcome == AgentOutcome.ASK_CLARIFICATION.value:
+                # Bounded pending clarification (Part 7): touches only
                 # pending_clarification; every other valid context field is
                 # left completely untouched.
-                ambiguities = getattr(semantic_frame_dto, "ambiguities", None) or []
-                if ambiguities:
-                    first = ambiguities[0]
+                pending_value_field = self._pending_value_clarification_field(query_plan_dto)
+                if pending_value_field is not None:
+                    # AI-INTELLIGENCE-016/017: an ambiguous/no-match grounded
+                    # value mention (app.planning.value_resolver). Persist
+                    # enough typed context (item 7) that a later "hepsini" /
+                    # ordinal / explicit reply can resume the ORIGINAL
+                    # analytical request without losing its intent.
                     self._context_manager.set_pending_clarification(
                         session_id,
-                        field="ranking_metric",
-                        reason=first.reason,
-                        choices=[],
+                        field=f"value_filter:{pending_value_field.field}",
+                        reason=pending_value_field.clarification_message or "ambiguous value",
+                        choices=pending_value_field.alternatives,
+                        original_question=pipeline_question,
+                        candidate_values=pending_value_field.alternatives,
+                        original_analysis_type=(
+                            query_plan_dto.analysis_type if query_plan_dto else None
+                        ),
+                        original_metrics=query_plan_dto.metrics if query_plan_dto else [],
+                        original_dimensions=query_plan_dto.dimensions if query_plan_dto else [],
+                        original_date_expression=(
+                            query_plan_dto.date_filters[0].expression
+                            if query_plan_dto and query_plan_dto.date_filters
+                            else None
+                        ),
+                        original_filters=(
+                            {
+                                field: fr.values
+                                for field, fr in query_plan_dto.resolved_filters.items()
+                                if fr.grounded and field != pending_value_field.field
+                            }
+                            if query_plan_dto
+                            else {}
+                        ),
                     )
+                elif semantic_frame_dto is not None:
+                    # An ambiguous ranking phrase ("en iyi", "en verimli", ...)
+                    # the semantic engine already flagged
+                    # (app.semantics.ontology.AMBIGUOUS_PHRASES) — reused
+                    # verbatim, never re-detected here.
+                    ambiguities = getattr(semantic_frame_dto, "ambiguities", None) or []
+                    if ambiguities:
+                        first = ambiguities[0]
+                        self._context_manager.set_pending_clarification(
+                            session_id,
+                            field="ranking_metric",
+                            reason=first.reason,
+                            choices=[],
+                        )
             memory_turn_count = self._context_manager.turn_count(session_id)
             pending_clarification = self._context_manager.get_pending_clarification(session_id)
         else:
@@ -284,6 +398,7 @@ class ReportingService:
         else:
             # Fall back to settings-configured provider
             from app.core.config import settings
+
             active_provider = settings.LLM_PROVIDER
             if active_provider == "gemini":
                 active_model = settings.GEMINI_MODEL
@@ -291,16 +406,23 @@ class ReportingService:
                 active_model = settings.OLLAMA_MODEL
 
         logger.info(
-            f"ReportingService: Workflow [{workflow_id}] executed using Provider [{active_provider}] Model [{active_model}]"
+            "ReportingService: Workflow [%s] executed using Provider [%s] Model [%s]",
+            workflow_id,
+            active_provider,
+            active_model,
         )
 
-        logger.info(
-            f"ReportingService: Workflow [{workflow_id}] errors: {errors or 'none'}"
-        )
+        logger.info(f"ReportingService: Workflow [{workflow_id}] errors: {errors or 'none'}")
 
         return WorkflowResult(
             workflow_id=workflow_id,
             question=question,
+            raw_question=question,
+            resolved_question=resolution.resolved_question if resolution else question,
+            answerability_input_source=final_state.get(
+                "answerability_input_source", answerability_input_source
+            ),
+            answerability_signals=final_state.get("answerability_signals", []),
             generated_sql=generated_sql_dto.sql if generated_sql_dto else None,
             query_result=query_result_dto,
             generated_report=generated_report_dto,
@@ -335,7 +457,16 @@ class ReportingService:
                 if resolution
                 else {}
             ),
-            resolved_time_grain=resolution.resolved_signals.time_grain if resolution else None,
+            # AI-INTELLIGENCE-018 (item 6): the QueryPlan's own
+            # grouping_granularity (already resolved during planning, and the
+            # one actually used to build/execute this turn's SQL) is
+            # authoritative — falls back to the pre-graph raw-text/inherited
+            # signal only when no plan was built at all (e.g. clarification).
+            resolved_time_grain=(
+                _analytical_signals.granularity_to_time_grain(query_plan_dto.grouping_granularity)
+                if query_plan_dto is not None and query_plan_dto.grouping_granularity
+                else (resolution.resolved_signals.time_grain if resolution else None)
+            ),
             resolved_ranking=resolution.resolved_signals.ranking if resolution else None,
             resolved_limit=resolution.resolved_signals.limit if resolution else None,
             pending_clarification_field=(

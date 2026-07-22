@@ -40,6 +40,8 @@ class ContextManager:
         try:
             context = self._store.get(session_id)
             result = self._resolver.resolve(question, context)
+            if result.follow_up_detected and context.query_plan_snapshot is not None:
+                result.retained_query_plan_snapshot = dict(context.query_plan_snapshot)
         except Exception as error:  # degrade, never break the pipeline
             logger.error("ContextManager.resolve failed: %s", error)
             return ResolutionResult(
@@ -76,7 +78,7 @@ class ContextManager:
         session_id: str = DEFAULT_SESSION_ID,
         canonical_analysis_type: str | None = None,
         query_plan: "QueryPlan | None" = None,
-    ) -> None:
+    ) -> bool:
         """Records the interaction and refreshes the session filters. Never raises.
 
         Args:
@@ -101,14 +103,19 @@ class ContextManager:
         """
         try:
             if resolution.clarification_needed:
-                return
+                return False
 
             signals = self._extractor.extract(resolution.resolved_question)
 
             def _mutate(context) -> None:
                 # Latest explicit statement replaces the previous filter of the
                 # same type (context expiration rule). Untouched types persist.
-                if signals.date_expression:
+                if query_plan is not None and query_plan.date_filters:
+                    # Exact successful-plan date context is authoritative. In
+                    # particular, never reduce "2026 Ocak" to a month-only raw
+                    # text match and silently lose its year.
+                    context.date_expression = query_plan.date_filters[0].expression
+                elif signals.date_expression:
                     context.date_expression = signals.date_expression
                 if signals.department:
                     context.department = signals.department
@@ -137,6 +144,13 @@ class ContextManager:
                         follow_up_detected=resolution.follow_up_detected,
                         folded_question=folded_question,
                     )
+                    # AI-INTELLIGENCE-016: an organization-wide scope phrase
+                    # ("tüm şubeler", "tüm aile sağlığı merkezleri", ...) must
+                    # clear an inherited branch filter even on a follow-up —
+                    # the generic merge rule would otherwise re-inherit it
+                    # (current is legitimately empty, not "no signal").
+                    if query_plan.scope == "all" and merged.branch_filters:
+                        merged = merged.model_copy(update={"branch_filters": []})
                 else:
                     merged = resolution.resolved_signals
 
@@ -153,6 +167,9 @@ class ContextManager:
                 context.service_filters = merged.service_filters
                 context.category_filters = merged.category_filters
                 context.source_filters = merged.source_filters
+
+                if query_plan is not None:
+                    context.query_plan_snapshot = query_plan.model_dump(mode="json")
 
                 # A successful new turn always supersedes any stale pending
                 # clarification, whether or not it was the answer to it.
@@ -201,8 +218,10 @@ class ContextManager:
                     "context_time_grain": context.time_grain,
                 },
             )
+            return True
         except Exception as error:  # degrade, never break the pipeline
             logger.error("ContextManager.update failed: %s", error)
+            return False
 
     def set_pending_clarification(
         self,
@@ -210,15 +229,37 @@ class ContextManager:
         field: str,
         reason: str,
         choices: list[str] | None = None,
+        original_question: str | None = None,
+        candidate_values: list[str] | None = None,
+        original_analysis_type: str | None = None,
+        original_metrics: list[str] | None = None,
+        original_dimensions: list[str] | None = None,
+        original_date_expression: str | None = None,
+        original_filters: dict[str, list[str]] | None = None,
     ) -> None:
         """Sets a bounded pending clarification (Part 7) without touching any
         other field in the session's context — never overwrites the last
-        valid analytical state with incomplete clarification data. Never raises."""
+        valid analytical state with incomplete clarification data. Never raises.
+
+        The optional `original_*`/`candidate_values` arguments (AI-INTELLIGENCE-017)
+        snapshot the analytical request that raised a grounded-value clarification
+        (see app.planning.value_resolver), so a reply ("hepsini", "ilkini", an
+        explicit value) can resume planning without losing the original intent.
+        """
         try:
 
             def _mutate(context) -> None:
                 context.pending_clarification = PendingClarification(
-                    field=field, reason=reason, choices=choices or []
+                    field=field,
+                    reason=reason,
+                    choices=choices or [],
+                    original_question=original_question,
+                    candidate_values=candidate_values or [],
+                    original_analysis_type=original_analysis_type,
+                    original_metrics=original_metrics or [],
+                    original_dimensions=original_dimensions or [],
+                    original_date_expression=original_date_expression,
+                    original_filters=original_filters or {},
                 )
 
             self._store.update(session_id, _mutate)
@@ -250,3 +291,11 @@ class ContextManager:
     def get_pending_clarification(self, session_id: str) -> PendingClarification | None:
         """Returns the session's current pending clarification state, if any (diagnostics)."""
         return self._store.get(session_id).pending_clarification
+
+    def entity_types(self, session_id: str) -> list[str]:
+        """Read-only typed entity snapshot used for request diagnostics."""
+        return list(self._store.get(session_id).entity_types)
+
+    def extract_date(self, question: str) -> str | None:
+        """Expose the canonical context extractor without duplicating date rules."""
+        return self._extractor.extract(question).date_expression

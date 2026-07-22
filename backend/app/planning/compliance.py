@@ -28,6 +28,38 @@ _FOLD_TABLE = str.maketrans(
 
 _AGGREGATES = {"COUNT": "count(", "SUM": "sum(", "AVG": "avg("}
 
+# AI-INTELLIGENCE-016: fields resolved via app.planning.value_resolver whose
+# grounding is checked generically here. branch/department keep their own
+# dedicated checks above/below for backward compatibility; appointment_status
+# is excluded because it already has an independent, pre-existing grounded
+# mechanism (curated app/resources/view_semantics.json status_filters ->
+# plan.extra_filters), unrelated to this resolver.
+_GROUNDABLE_FIELD_COLUMNS: dict[str, str] = {
+    "service": "HizmetAdi",
+    "category": "KategoriAdi",
+    "appointment_source": "GenelRandevuKaynakAdi",
+    "appointment_type": "RandevuTipiAdi",
+    "nationality": "Uyruk",
+    "gender": "CinsiyetId",
+}
+_PLANNED_FILTER_COLUMNS = {
+    "RandevuDurumu",
+    "CinsiyetId",
+    "Uyruk",
+    "RandevuTipiAdi",
+    "HizmetAdi",
+    "KategoriAdi",
+    "GenelRandevuKaynakAdi",
+    "GenelRandevuBolumAdi",
+    "SubeAdi",
+    "DoktorId",
+}
+_SIMPLE_PLANNED_FILTER = re.compile(
+    r"^\s*\[?(?P<column>[A-Za-z_][A-Za-z0-9_]*)\]?\s*=\s*"
+    r"(?:(?:N)?'(?P<text>(?:''|[^'])*)'|(?P<number>-?\d+(?:\.\d+)?))\s*$",
+    re.IGNORECASE,
+)
+
 
 class PlanComplianceValidator:
     """Verifies that generated SQL implements every QueryPlan constraint (AG-022).
@@ -55,9 +87,78 @@ class PlanComplianceValidator:
                 )
 
         if plan.department_filter:
-            folded_department = plan.department_filter.translate(_FOLD_TABLE).lower()
-            if folded_department not in folded_sql:
+            if not any(
+                self._contains_filter_predicate(sql, column, plan.department_filter)
+                for column in ("GenelRandevuBolumAdi", "bolum_adi")
+            ):
                 missing.append(f"department filter '{plan.department_filter}'")
+
+        # AI-INTELLIGENCE-015: a branch (SubeAdi) VALUE filter may only ever
+        # come from a grounded plan.branch_filters entry — never from a
+        # generic organizational phrase ("tüm aile sağlığı merkezleri") or the
+        # LLM's own free-text guess. Grouping by SubeAdi (GROUP BY) is
+        # unaffected; only an actual predicate (=, LIKE, IN) is checked.
+        if not plan.branch_filters and re.search(
+            r"subeadi\s*(?:=|like|in\s*\()", folded_sql
+        ):
+            missing.append(
+                "ungrounded SubeAdi value filter (plan.branch_filters is empty — "
+                "a generic scope phrase or free-text guess must never become a "
+                "branch value predicate)"
+            )
+        if plan.branch_filters:
+            if not all(
+                self._contains_filter_predicate(sql, "SubeAdi", value)
+                for value in plan.branch_filters
+            ):
+                missing.append(f"branch filter {sorted(plan.branch_filters)}")
+
+        # Curated status predicates and other allow-listed simple extra
+        # filters are planned constraints too. They must be rendered as real
+        # predicates, using Unicode T-SQL literals when the value is non-ASCII;
+        # merely mentioning the value elsewhere in SQL is not compliant.
+        for extra_filter in plan.extra_filters:
+            parsed = self._parse_planned_filter(extra_filter)
+            if parsed is None:
+                continue
+            column, value = parsed
+            if not self._contains_filter_predicate(sql, column, value):
+                missing.append(f"planned filter {column} = {value!r}")
+
+        # An explicit single-day date ("bugün"/"dün"/"yarın") must never be
+        # rendered as a relative DATEADD lookback offset (e.g. the LLM
+        # inventing 'DATEADD(day, -90, ...)' for 'bugünkü') — the resolved
+        # date is already a literal boundary in the plan.
+        for date_filter in plan.date_filters:
+            if date_filter.start_date == date_filter.end_date and re.search(
+                r"dateadd\s*\(\s*day\s*,\s*-\d+", folded_sql
+            ):
+                missing.append(
+                    f"explicit single-day date '{date_filter.expression}' must not be "
+                    "rendered as a relative DATEADD lookback offset"
+                )
+
+        # AI-INTELLIGENCE-016: a value filter on any of these columns may only
+        # come from a grounded plan.resolved_filters entry — same discipline
+        # as the SubeAdi guard above, generalized to the other resolver fields.
+        for gfield, gcolumn in _GROUNDABLE_FIELD_COLUMNS.items():
+            folded_column = gcolumn.translate(_FOLD_TABLE).lower()
+            has_predicate = bool(
+                re.search(rf"{folded_column}\s*(?:=|like|in\s*\()", folded_sql)
+            )
+            resolved = plan.resolved_filters.get(gfield)
+            is_grounded = bool(resolved and resolved.grounded and resolved.values)
+            if has_predicate and not is_grounded:
+                missing.append(
+                    f"ungrounded {gcolumn} value filter (no grounded "
+                    f"resolved_filters['{gfield}'] entry)"
+                )
+            if is_grounded:
+                if not all(
+                    self._contains_filter_predicate(sql, gcolumn, value)
+                    for value in resolved.values
+                ):
+                    missing.append(f"{gfield} filter {sorted(resolved.values)}")
 
         if plan.aggregation:
             aggregation = plan.aggregation.upper()
@@ -215,6 +316,40 @@ class PlanComplianceValidator:
             },
         )
         return result
+
+    def _parse_planned_filter(self, expression: str) -> tuple[str, str] | None:
+        match = _SIMPLE_PLANNED_FILTER.fullmatch(expression)
+        if match is None:
+            return None
+        column = next(
+            (
+                candidate
+                for candidate in _PLANNED_FILTER_COLUMNS
+                if candidate.lower() == match.group("column").lower()
+            ),
+            None,
+        )
+        if column is None:
+            return None
+        value = match.group("number")
+        if value is None:
+            value = (match.group("text") or "").replace("''", "'")
+        return column, value
+
+    def _contains_filter_predicate(self, sql: str, column: str, value: str) -> bool:
+        escaped_value = re.escape(value.replace("'", "''"))
+        if re.fullmatch(r"-?\d+(?:\.\d+)?", value):
+            literal = rf"(?:N?'{escaped_value}'|{escaped_value})"
+        else:
+            unicode_prefix = "N" if any(ord(character) > 127 for character in value) else "N?"
+            literal = rf"{unicode_prefix}'{escaped_value}'"
+        return bool(
+            re.search(
+                rf"\b{re.escape(column)}\b\s*(?:=\s*|IN\s*\([^)]*?)" + literal,
+                sql,
+                re.IGNORECASE,
+            )
+        )
 
     def _select_clause(self, folded_sql: str) -> str:
         match = re.search(r"select\s+(.*?)\s+from\b", folded_sql, re.DOTALL)

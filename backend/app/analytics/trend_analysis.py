@@ -107,6 +107,13 @@ class TrendMetrics(BaseModel):
     endpoint_direction: str | None = None  # upward | downward | flat
     slope: float | None = None
     slope_direction: str | None = None  # upward | downward | flat
+    # AI-INTELLIGENCE-018 (item 7): adjacent-pair monotonicity — independent
+    # of endpoint_direction/slope_direction, which both only ever compare two
+    # aggregate summaries (first-vs-last, overall regression) and can agree
+    # with each other while the series still fluctuated in between (e.g.
+    # [12, 15, 9, 13, 13, 19]: endpoint/slope both "upward", yet 15->9 is a
+    # clear drop) — monotonic_up | monotonic_down | non_monotonic | flat.
+    monotonicity: str = "insufficient_data"
     trend_consistency: str = "insufficient_data"
     volatility: float | None = None
     first_comparable_period: str | None = None
@@ -128,6 +135,26 @@ def _relative_direction(delta: float, baseline: float) -> str:
     if abs(change) <= _STABILITY_THRESHOLD:
         return "flat"
     return "upward" if change > 0 else "downward"
+
+
+def _monotonicity(values: list[float]) -> str:
+    """Classifies adjacent-pair (non-zero) direction agreement.
+
+    'monotonic_up'/'monotonic_down' require EVERY non-zero adjacent change to
+    point the same way (a strict rule, deliberately — see module/item 7
+    docstring: no partial-majority relaxation implemented). A series with no
+    non-zero change at all is 'flat'; any mix of up/down changes is
+    'non_monotonic'.
+    """
+    diffs = [b - a for a, b in zip(values, values[1:], strict=False)]
+    nonzero = [d for d in diffs if d != 0]
+    if not nonzero:
+        return "flat"
+    if all(d > 0 for d in nonzero):
+        return "monotonic_up"
+    if all(d < 0 for d in nonzero):
+        return "monotonic_down"
+    return "non_monotonic"
 
 
 def _linear_slope(values: list[float]) -> float:
@@ -180,14 +207,20 @@ def compute_trend_metrics(
     mean_value = statistics.fmean(comparable_values)
     slope_direction = _relative_direction(slope, mean_value)
 
-    if endpoint_direction == slope_direction == "flat":
+    # AI-INTELLIGENCE-018 (item 7): trend_consistency is now derived purely
+    # from adjacent-pair MONOTONICITY, never from endpoint/slope agreement —
+    # two aggregate two-point comparisons can agree ("upward") on a series
+    # that still fluctuated wildly in between. endpoint_direction/
+    # slope_direction remain independent, separately reported fields.
+    monotonicity = _monotonicity(comparable_values)
+    if monotonicity == "flat":
         consistency = "flat"
-    elif endpoint_direction == slope_direction == "upward":
+    elif monotonicity == "monotonic_up":
         consistency = "consistent_upward"
-    elif endpoint_direction == slope_direction == "downward":
+    elif monotonicity == "monotonic_down":
         consistency = "consistent_downward"
     else:
-        consistency = "mixed"
+        consistency = "mixed_or_fluctuating"
 
     volatility = None
     if mean_value != 0:
@@ -199,6 +232,7 @@ def compute_trend_metrics(
         endpoint_direction=endpoint_direction,
         slope=round(slope, 4),
         slope_direction=slope_direction,
+        monotonicity=monotonicity,
         trend_consistency=consistency,
         volatility=volatility,
         first_comparable_period=comparable_labels[0],

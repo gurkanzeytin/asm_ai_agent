@@ -23,7 +23,7 @@ from app.context.merge_policy import (
     merge_scalar_field,
 )
 from app.context.session_store import SessionStore
-from app.planning.models import QueryPlan
+from app.planning.models import PlannedDimension, QueryPlan
 
 
 def _ask(manager: ContextManager, question: str, session_id: str = "s1"):
@@ -141,10 +141,32 @@ class TestFromQueryPlan:
         signals = from_query_plan(plan)
         assert signals.dimensions == ["branch", "department"]
 
-    def test_unmapped_column_skipped(self):
+    def test_all_supported_dimension_columns_are_mapped(self):
         plan = self._plan(dimensions=["SubeAdi", "RandevuTipiAdi"])
         signals = from_query_plan(plan)
-        assert signals.dimensions == ["branch"]
+        assert signals.dimensions == ["branch", "appointment_type"]
+
+    def test_complete_phase1_dimension_vocabulary_is_preserved(self):
+        columns = {
+            "DoktorId": "doctor",
+            "GenelRandevuBolumAdi": "department",
+            "SubeAdi": "branch",
+            "CinsiyetId": "gender",
+            "Uyruk": "nationality",
+            "RandevuTipiAdi": "appointment_type",
+            "HizmetAdi": "service",
+            "KategoriAdi": "category",
+            "GenelRandevuKaynakAdi": "source",
+            "RandevuDurumu": "status",
+        }
+        plan = self._plan(
+            dimensions=list(columns),
+            planned_dimensions=[
+                PlannedDimension(column=column, canonical_name=canonical)
+                for column, canonical in columns.items()
+            ],
+        )
+        assert from_query_plan(plan).dimensions == list(columns.values())
 
     def test_metrics_passed_through_verbatim(self):
         plan = self._plan(metrics=["appointment_count", "completed_appointment_rate"])

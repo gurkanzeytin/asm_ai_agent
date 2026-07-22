@@ -44,6 +44,19 @@ _VOLUME_RANKING_MARKERS = ("yogun", "en cok randevu", "en fazla randevu")
 
 _NEGATION_PATTERN = re.compile(r"\b(olmayan|bulunmayan|almayan)\w*\b|\bhic\b")
 
+# Generic organization-wide scope phrases ("tüm aile sağlığı merkezleri", "bütün
+# şubeler", "kurum genelinde", ...). These NEVER name a real branch value —
+# they mean "no branch filter, every record in scope" — and must never be
+# treated as a literal SubeAdi value (see AI-INTELLIGENCE-015 / PlanComplianceValidator).
+# "tum"/"butun" + an organizational noun (merkez/sube/hastane), anywhere within
+# a short span, or the standalone "genelinde"/"kurum genelinde" wording.
+_GENERIC_SCOPE_ALL_PATTERN = re.compile(
+    r"\b(?:tum|butun)\b(?:\s+\w+){0,4}?\s+(?:merkez\w*|sube\w*|hastane\w*|lokasyon\w*)\b"
+    r"|\b(?:merkez\w*|sube\w*|hastane\w*|lokasyon\w*)(?:\s+\w+){0,4}?\s+(?:tum\w*|butun\w*)\b"
+    r"|\bkurum\s+genelinde\b"
+    r"|\bgenelinde\b"
+)
+
 # "X bazında / X'e göre" grouping wording: the word before the marker names the dimension.
 _GROUP_BY_PATTERN = re.compile(r"(\w+)\s+(?:baz(?:inda|li)\b|gore\b)")
 
@@ -97,6 +110,13 @@ class QueryPlanner:
         folded = self._extractor.fold(question)
         signals = self._extractor.extract(question)
         table_map = {table.name: table for table in tables}
+        generic_scope_phrase = self._detect_generic_scope(folded)
+        scope = "all" if generic_scope_phrase else "filtered"
+        scope_assumptions = (
+            ["Genel kapsam: belirli bir şube filtresi uygulanmadı (tüm şubeler dahil)."]
+            if generic_scope_phrase
+            else []
+        )
 
         # REASONING-001: when a semantic frame is provided it is the
         # authoritative interpretation — the planner organizes, it does not
@@ -274,6 +294,9 @@ class QueryPlanner:
                 date_filters=date_filters,
                 periods=periods,
                 department_filter=signals.department,
+                scope=scope,
+                branch_filters=[],
+                generic_scope_phrase_detected=generic_scope_phrase,
                 extra_filters=extra_filters,
                 aggregation=aggregation,
                 ranking=ranking,
@@ -302,7 +325,7 @@ class QueryPlanner:
                 baseline_period=strategy.baseline_period if strategy else None,
                 cohort=strategy.cohort if strategy else None,
                 minimum_sample_size=strategy.minimum_sample_size if strategy else None,
-                assumptions=strategy.assumptions if strategy else [],
+                assumptions=(strategy.assumptions if strategy else []) + scope_assumptions,
                 planner_ms=(time.perf_counter() - start) * 1000,
             )
             self._log_plan(plan)
@@ -317,6 +340,9 @@ class QueryPlanner:
             date_filters=date_filters,
             periods=self._comparison_periods(analysis, date_filters, signals.analysis_type),
             department_filter=signals.department,
+            scope=scope,
+            branch_filters=[],
+            generic_scope_phrase_detected=generic_scope_phrase,
             extra_filters=extra_filters,
             aggregation=aggregation,
             ranking=ranking,
@@ -326,6 +352,7 @@ class QueryPlanner:
             join_path=join_path,
             projection=projection,
             distinct=distinct,
+            assumptions=scope_assumptions,
             planner_ms=(time.perf_counter() - start) * 1000,
         )
         self._log_plan(plan)
@@ -700,6 +727,18 @@ class QueryPlanner:
             filters.append("NEGATION: exclude matching rows (NOT EXISTS or LEFT JOIN ... IS NULL)")
         return filters
 
+    def _detect_generic_scope(self, folded_question: str) -> str | None:
+        """Returns the matched generic organization-wide scope wording, or None.
+
+        This is a SCOPE signal only ('no specific branch, whole organization')
+        — it never produces a branch value filter. A real branch value may
+        only ever come from a grounded catalog/database lookup (see
+        QueryPlan.branch_filters docstring); no such lookup exists in this
+        codebase today, so branch_filters stays empty regardless of this match.
+        """
+        match = _GENERIC_SCOPE_ALL_PATTERN.search(folded_question)
+        return match.group(0).strip() if match else None
+
     # ── Relationship planning ────────────────────────────────────────────
 
     def _join_path(
@@ -823,6 +862,21 @@ class QueryPlanner:
                 "query_plan": plan.model_dump(),
                 "planner_ms": plan.planner_ms,
                 "constraint_count": plan.constraint_count(),
+                # AI-INTELLIGENCE-015 diagnostics — safe (dates/flags/column
+                # names only, never patient-level data).
+                "explicit_date_expression": (
+                    plan.date_filters[0].expression if plan.date_filters else None
+                ),
+                "resolved_date_range": (
+                    f"{plan.date_filters[0].start_date}..{plan.date_filters[0].end_date}"
+                    if plan.date_filters
+                    else None
+                ),
+                "scope_mode": plan.scope,
+                "branch_dimension_requested": "SubeAdi" in plan.dimensions,
+                "branch_filter_values": plan.branch_filters,
+                "branch_filter_grounded": bool(plan.branch_filters),
+                "generic_scope_phrase_detected": plan.generic_scope_phrase_detected,
             },
         )
 
@@ -850,13 +904,40 @@ def format_plan_for_prompt(plan: QueryPlan) -> str:
     else:
         for date_filter in plan.date_filters:
             column = date_filter.column or "the date column"
-            if date_filter.start_date == date_filter.end_date:
-                lines.append(f"- Filter: {column} = '{date_filter.start_date}'")
-            else:
-                lines.append(
-                    f"- Filter: {column} BETWEEN '{date_filter.start_date}' "
-                    f"AND '{date_filter.end_date}'"
-                )
+            # Half-open range even for a single explicit day ("bugün"): the date
+            # column is DATETIME, so an exact '=' equality would silently match
+            # almost nothing. Never render as a relative DATEADD lookback offset
+            # either — this IS the explicit, already-resolved date; it must
+            # appear as its own literal boundary, not be re-derived by the LLM.
+            lines.append(
+                f"- Filter: {column} >= '{date_filter.start_date}' AND "
+                f"{column} < DATEADD(day, 1, '{date_filter.end_date}')"
+            )
+    if plan.scope == "all":
+        lines.append(
+            "- Scope: organization-wide — the question used a generic phrase "
+            f"('{plan.generic_scope_phrase_detected}'), NOT a specific branch name. "
+            "Do NOT add a SubeAdi filter (no WHERE/LIKE on SubeAdi values)."
+        )
+    if plan.branch_filters:
+        values = ", ".join(f"'{value}'" for value in plan.branch_filters)
+        lines.append(f"- Filter: SubeAdi IN ({values})")
+    if plan.resolved_filters:
+        # AI-INTELLIGENCE-016: grounded filters for fields other than branch
+        # (which is rendered above) — department is rendered via the legacy
+        # `department_filter` line below to avoid a duplicate predicate.
+        from app.database_intelligence.value_catalog import FIELD_COLUMNS
+
+        for field_name, resolved in plan.resolved_filters.items():
+            if field_name in ("branch", "department"):
+                continue
+            if not resolved.grounded or not resolved.values:
+                continue
+            column, _tier = FIELD_COLUMNS.get(field_name, (None, None))
+            if not column:
+                continue
+            values = ", ".join(f"'{value}'" for value in resolved.values)
+            lines.append(f"- Filter: {column} IN ({values})")
     if plan.department_filter:
         lines.append(f"- Filter: department name = '{plan.department_filter}'")
     for extra in plan.extra_filters:

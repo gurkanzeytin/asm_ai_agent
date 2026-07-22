@@ -31,7 +31,10 @@ import {
   Trash2,
   ListChecks,
   Rows3,
+  Maximize2,
+  AlertTriangle,
 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -58,6 +61,16 @@ import { SqlSummaryStats } from "./SqlSummaryStats";
 import { tr } from "@/locales/tr";
 import { chartTypeFromRecommendation } from "./sql-chart-data";
 import { formatSqlCell } from "@/lib/sql-cell-format";
+import { resolveColumnMetadata, type ColumnMetadata } from "@/lib/presentation";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { uiTransition } from "@/lib/ui-motion";
+import { DEFAULT_TABLE_PAGE_SIZE, MAX_UI_ROWS_PER_PAGE } from "@/lib/result-limits";
 
 const LazySqlChartPanel = lazy(() =>
   import("./SqlChartPanel").then((module) => ({ default: module.SqlChartPanel })),
@@ -66,9 +79,25 @@ const LazySqlChartPanel = lazy(() =>
 export interface SqlResult {
   columns: string[];
   rows: Array<Record<string, string | number | null>>;
+  /** Backend-supplied presentation metadata (label/format/unit) per raw column key. */
+  columnMetadata?: ColumnMetadata[];
+  /** This turn's resolved metric/dimension ids, used for label resolution priority. */
+  resolvedMetrics?: string[];
+  resolvedDimensions?: string[];
   query?: string;
   durationMs?: number;
   visualization?: string | null;
+  /** Technical execution metadata; never interpreted as business KPIs. */
+  technicalRowCount?: number;
+  resultShape?: string;
+  sourceRecordCount?: number | null;
+  resultGroupCount?: number | null;
+  returnedRowCount?: number;
+  displayedRowCount?: number;
+  resultTruncated?: boolean;
+  hasMore?: boolean;
+  totalCount?: number | null;
+  appliedLimit?: number;
 }
 
 interface Props {
@@ -80,6 +109,7 @@ interface Props {
   rowHeight?: number;
   /** Max viewport height for virtualized scroll area. */
   virtualHeight?: number;
+  allowFullscreen?: boolean;
 }
 
 type SortDir = "asc" | "desc" | null;
@@ -101,10 +131,11 @@ interface RowMeta {
 
 export function SqlResultsTable({
   data,
-  pageSize = 8,
+  pageSize = DEFAULT_TABLE_PAGE_SIZE,
   virtualizeThreshold = 100,
   rowHeight = 32,
   virtualHeight = 420,
+  allowFullscreen = true,
 }: Props) {
   const recommendedChartType = chartTypeFromRecommendation(data.visualization);
   const [query, setQuery] = useState("");
@@ -119,6 +150,7 @@ export function SqlResultsTable({
   const [showStats, setShowStats] = useState(false);
   const [showChart, setShowChart] = useState(Boolean(recommendedChartType));
   const [density, setDensity] = useState<TableDensity>("normal");
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
 
   // Filters & column management
   const [filters, setFilters] = useState<FilterRule[]>([]);
@@ -131,6 +163,10 @@ export function SqlResultsTable({
   );
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [sqlTableName, setSqlTableName] = useState("results");
+  const safePageSize = Math.min(Math.max(1, pageSize), MAX_UI_ROWS_PER_PAGE);
+  const safeRows = useMemo(() => data.rows.slice(0, MAX_UI_ROWS_PER_PAGE), [data.rows]);
+  const clientTrimmed = data.rows.length > safeRows.length;
+  const isTruncated = Boolean(data.resultTruncated || data.hasMore || clientTrimmed);
 
   const tableId = useId();
   const searchId = useId();
@@ -156,12 +192,27 @@ export function SqlResultsTable({
       return next;
     });
     setSelectedRows(new Set());
-  }, [data.columns, data.rows.length]);
+  }, [data.columns, safeRows.length]);
 
   const visibleColumns = useMemo(
     () => columnOrder.filter((c) => columnVisibility[c] && data.columns.includes(c)),
     [columnOrder, columnVisibility, data.columns],
   );
+
+  // Presentation metadata (Türkçe label/format/unit) per raw column key.
+  // Raw keys (`data.columns`) remain the source of truth for row access,
+  // sorting, filtering, and exports — only header text and cell formatting
+  // read from this map (AI-INTELLIGENCE-013).
+  const columnMeta = useMemo<Record<string, ColumnMetadata>>(() => {
+    const resolved = resolveColumnMetadata(
+      data.columns,
+      data.columnMetadata,
+      data.resolvedMetrics,
+      data.resolvedDimensions,
+    );
+    return Object.fromEntries(resolved.map((m) => [m.key, m]));
+  }, [data.columns, data.columnMetadata, data.resolvedMetrics, data.resolvedDimensions]);
+  const columnLabel = (col: string) => columnMeta[col]?.label || col;
 
   const matchFilter = (
     value: string | number | null,
@@ -194,7 +245,7 @@ export function SqlResultsTable({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const rowsWithIdx: RowMeta[] = data.rows.map((row, idx) => ({ row, idx }));
+    const rowsWithIdx: RowMeta[] = safeRows.map((row, idx) => ({ row, idx }));
     return rowsWithIdx.filter(({ row }) => {
       const globalMatch =
         !q ||
@@ -206,7 +257,7 @@ export function SqlResultsTable({
       const filterMatch = filters.every((f) => matchFilter(row[f.column], f.operator, f.value));
       return globalMatch && filterMatch;
     });
-  }, [data, query, filters]);
+  }, [data.columns, safeRows, query, filters]);
 
   const sorted = useMemo(() => {
     if (!sortKey || !sortDir || !visibleColumns.includes(sortKey)) return filtered;
@@ -223,11 +274,11 @@ export function SqlResultsTable({
   }, [filtered, sortKey, sortDir, visibleColumns]);
 
   const isVirtualized = sorted.length > virtualizeThreshold;
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(sorted.length / safePageSize));
   const safePage = Math.min(page, totalPages);
   const pageRows = isVirtualized
     ? sorted
-    : sorted.slice((safePage - 1) * pageSize, safePage * pageSize);
+    : sorted.slice((safePage - 1) * safePageSize, safePage * safePageSize);
 
   const virtualizer = useVirtualizer({
     count: isVirtualized ? sorted.length : 0,
@@ -306,8 +357,12 @@ export function SqlResultsTable({
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
 
+  // Export/copy headers use Türkçe display labels; row data always reads
+  // raw values via visibleColumns (row[c]) — labels never touch data access.
+  const visibleColumnLabels = visibleColumns.map(columnLabel);
+
   const toCsv = (rows: RowMeta[]) => {
-    const header = ["#", ...visibleColumns].map(escapeCsv).join(",");
+    const header = ["#", ...visibleColumnLabels].map(escapeCsv).join(",");
     const body = rows
       .map(({ row }, i) => [i + 1, ...visibleColumns.map((c) => escapeCsv(row[c]))].join(","))
       .join("\n");
@@ -315,7 +370,7 @@ export function SqlResultsTable({
   };
 
   const toTsv = (rows: RowMeta[]) => {
-    const header = ["#", ...visibleColumns].join("\t");
+    const header = ["#", ...visibleColumnLabels].join("\t");
     const body = rows
       .map(({ row }, i) => [i + 1, ...visibleColumns.map((c) => row[c] ?? "")].join("\t"))
       .join("\n");
@@ -585,7 +640,8 @@ export function SqlResultsTable({
   const renderCells = (meta: RowMeta) => (
     <>
       {visibleColumns.map((c, colIdx) => {
-        const formatted = formatSqlCell(c, meta.row[c]);
+        const colMeta = columnMeta[c];
+        const formatted = formatSqlCell(c, meta.row[c], colMeta?.format, colMeta?.unit);
         return (
           <td
             key={c}
@@ -625,6 +681,7 @@ export function SqlResultsTable({
       {visibleColumns.map((col, colIdx) => {
         const isActive = sortKey === col;
         const Icon = !isActive ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
+        const label = columnLabel(col);
         const nextLabel = !isActive
           ? "artan sırala"
           : sortDir === "asc"
@@ -644,30 +701,34 @@ export function SqlResultsTable({
               colIdx === 0 && "sticky left-16 z-[2] bg-background/95 backdrop-blur",
               draggingCol === col && "opacity-60",
             )}
-            style={{ width: columnWidths[col], minWidth: columnWidths[col] }}
+            style={{
+              width: columnWidths[col],
+              minWidth: Math.max(90, columnWidths[col] ?? 90),
+            }}
           >
-            <div className="flex h-full w-full items-center pr-5">
+            <div className="flex h-full w-full min-w-0 items-center pr-5">
               <button
                 type="button"
                 onClick={() => toggleSort(col)}
-                aria-label={tr.sqlTable.sortAction(col, nextLabel)}
-                className="inline-flex flex-1 items-center gap-1.5 px-3 py-2.5 text-left transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60"
+                aria-label={tr.sqlTable.sortAction(label, nextLabel)}
+                title={label}
+                className="inline-flex min-w-0 flex-1 items-center gap-1.5 px-3 py-2.5 text-left transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60"
               >
                 <GripVertical
-                  className="h-3 w-3 cursor-grab text-muted-foreground/30 active:cursor-grabbing"
+                  className="h-3 w-3 shrink-0 cursor-grab text-muted-foreground/30 active:cursor-grabbing"
                   aria-hidden="true"
                 />
-                {col}
+                <span className="min-w-0 flex-1 truncate">{label}</span>
                 <Icon
                   aria-hidden="true"
                   className={cn(
-                    "h-3 w-3 transition",
+                    "h-3 w-3 shrink-0 transition",
                     isActive ? "text-primary" : "text-muted-foreground/50",
                   )}
                 />
               </button>
               <FilterPopover
-                column={col}
+                label={label}
                 onApply={(op, val) => addFilter(col, op, val)}
                 existing={filters.find((f) => f.column === col)}
                 onClear={() => {
@@ -688,409 +749,401 @@ export function SqlResultsTable({
   );
 
   const hasActiveFilters = filters.length > 0 || query.trim() !== "";
+  const truncationNotice = isTruncated
+    ? data.totalCount != null
+      ? tr.sqlTable.knownTotalTruncated(data.totalCount.toLocaleString("tr-TR"), safeRows.length)
+      : tr.sqlTable.unknownTotalTruncated(safeRows.length)
+    : null;
 
   return (
-    <div className="glass mt-3 overflow-hidden rounded-lg">
-      <span className="sr-only" aria-live="polite" aria-atomic="true">
-        {announcement}
-      </span>
+    <>
+      <div className="glass mt-3 overflow-hidden rounded-lg">
+        <span className="sr-only" aria-live="polite" aria-atomic="true">
+          {announcement}
+        </span>
 
-      {/* Toolbar */}
-      <div className="border-b border-border/60 px-3 py-2.5">
-        <div className="flex items-center gap-3">
-          <div className="flex min-w-0 items-center gap-2 pr-2 text-xs font-semibold text-muted-foreground">
-            <Database className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-            <span>{tr.sqlTable.title}</span>
-            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
-              {sorted.length} {tr.sqlTable.rows}
-            </span>
-            {isVirtualized && (
-              <span
-                className="rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground"
-                title={tr.sqlTable.virtualizedTooltip}
-              >
-                {tr.sqlTable.virtualized}
+        {/* Toolbar */}
+        <div className="border-b border-border/60 px-3 py-2.5">
+          <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-2 pr-2 text-xs font-semibold text-muted-foreground">
+              <Database className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+              <span>{tr.sqlTable.title}</span>
+              <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                {sorted.length} {tr.sqlTable.rows}
               </span>
-            )}
-            {data.durationMs != null && (
-              <span className="text-[11px] font-normal text-muted-foreground/80">
-                / {data.durationMs} ms
-              </span>
-            )}
-          </div>
+              {isVirtualized && (
+                <span
+                  className="rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground"
+                  title={tr.sqlTable.virtualizedTooltip}
+                >
+                  {tr.sqlTable.virtualized}
+                </span>
+              )}
+              {data.durationMs != null && (
+                <span className="text-[11px] font-normal text-muted-foreground/80">
+                  / {data.durationMs} ms
+                </span>
+              )}
+            </div>
 
-          <div className="relative ml-auto shrink-0">
-            <label htmlFor={searchId} className="sr-only">
-              {tr.sqlTable.searchRows}
-            </label>
-            <Search
-              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <input
-              id={searchId}
-              type="search"
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setPage(1);
-              }}
-              placeholder={tr.sqlTable.searchRows}
-              aria-controls={tableId}
-              className="h-8 w-40 rounded-lg border border-border bg-background/50 pl-8 pr-2 text-xs placeholder:text-muted-foreground/70 focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-            />
-          </div>
-        </div>
-
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                aria-label={tr.sqlTable.manageColumns}
-                className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background/50 px-2.5 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-              >
-                <Settings2 className="h-3.5 w-3.5" aria-hidden="true" />
-                {tr.sqlTable.columns}
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <div className="max-h-60 overflow-auto p-1">
-                {data.columns.map((c) => (
-                  <DropdownMenuItem
-                    key={c}
-                    onSelect={(e: Event) => {
-                      e.preventDefault();
-                      toggleColumnVisibility(c);
-                    }}
-                    className="flex cursor-pointer items-center gap-2"
-                  >
-                    <Checkbox checked={columnVisibility[c]} aria-hidden="true" />
-                    <span className="truncate text-xs">{c}</span>
-                  </DropdownMenuItem>
-                ))}
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={showAllColumns} className="text-xs">
-                {tr.sqlTable.showAllColumns}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <button
-            type="button"
-            onClick={cycleDensity}
-            aria-label={tr.sqlTable.changeDensity}
-            title={`${tr.sqlTable.density}: ${tr.sqlTable.densities[density]}`}
-            className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-background/50 text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-          >
-            <Rows3 className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-
-          <button
-            type="button"
-            onClick={copyTable}
-            aria-label={tr.sqlTable.copyTable}
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background/50 px-2.5 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-          >
-            {copied ? (
-              <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" />
-            ) : (
-              <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-            )}
-            {tr.sqlTable.copy}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowStats((v) => !v)}
-            aria-pressed={showStats}
-            aria-label={tr.sqlTable.toggleStats}
-            className={cn(
-              "flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
-              showStats
-                ? "bg-primary/15 text-primary"
-                : "bg-background/50 text-muted-foreground hover:bg-accent hover:text-foreground",
-            )}
-          >
-            <Sigma className="h-3.5 w-3.5" aria-hidden="true" />
-            {tr.sqlTable.stats}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowChart((v) => !v)}
-            aria-pressed={showChart}
-            aria-label={tr.sqlTable.toggleChart}
-            className={cn(
-              "flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
-              showChart
-                ? "bg-primary/15 text-primary"
-                : "bg-background/50 text-muted-foreground hover:bg-accent hover:text-foreground",
-            )}
-          >
-            <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" />
-            {tr.sqlTable.chart}
-          </button>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                aria-label={tr.sqlTable.exportResults}
-                className="flex h-8 items-center gap-1.5 rounded-lg bg-primary/15 px-2.5 text-xs font-medium text-primary transition hover:bg-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-              >
-                <Download className="h-3.5 w-3.5" aria-hidden="true" />
-                {tr.sqlTable.export}
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuItem onSelect={() => exportAll("csv")} className="gap-2 text-xs">
-                <Download className="h-3.5 w-3.5" />
-                {tr.sqlTable.exportCsv}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => exportAll("json")} className="gap-2 text-xs">
-                <FileJson className="h-3.5 w-3.5" />
-                {tr.sqlTable.exportJson}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <div className="px-2 py-1.5">
-                <label className="mb-1 block text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {tr.sqlTable.tableName}
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              {allowFullscreen && (
+                <button
+                  type="button"
+                  onClick={() => setFullscreenOpen(true)}
+                  aria-label={tr.sqlTable.openFullscreen}
+                  title={tr.sqlTable.openFullscreen}
+                  className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-background/50 text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                >
+                  <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              )}
+              <div className="relative shrink-0">
+                <label htmlFor={searchId} className="sr-only">
+                  {tr.sqlTable.searchRows}
                 </label>
-                <Input
-                  value={sqlTableName}
-                  onChange={(e) => setSqlTableName(e.target.value)}
-                  className="h-7 text-xs"
-                  placeholder="sonuclar"
-                  onClick={(e) => e.stopPropagation()}
+                <Search
+                  className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <input
+                  id={searchId}
+                  type="search"
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setPage(1);
+                  }}
+                  placeholder={tr.sqlTable.searchRows}
+                  aria-controls={tableId}
+                  className="h-8 w-40 rounded-lg border border-border bg-background/50 pl-8 pr-2 text-xs placeholder:text-muted-foreground/70 focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                 />
               </div>
-              <DropdownMenuItem onSelect={() => exportAll("sql")} className="gap-2 text-xs">
-                <FileCode className="h-3.5 w-3.5" />
-                {tr.sqlTable.exportSql}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-
-      {/* Active filters bar */}
-      {hasActiveFilters && (
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-border/40 bg-background/30 px-3 py-2">
-          <Filter className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
-          {filters.map((f) => (
-            <span
-              key={f.id}
-              className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary"
-            >
-              {f.column} {tr.sqlTable.operators[f.operator]} {f.value}
-              <button
-                type="button"
-                onClick={() => removeFilter(f.id)}
-                aria-label={tr.sqlTable.removeFilter(f.column)}
-                className="rounded-full p-0.5 hover:bg-primary/20"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          ))}
-          {query.trim() && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-accent/40 px-2 py-0.5 text-[11px] text-muted-foreground">
-              {tr.sqlTable.searchFilter(query)}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="ml-auto text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-          >
-            {tr.sqlTable.clearAllFilters}
-          </button>
-        </div>
-      )}
-
-      {/* Bulk selection bar */}
-      {selectedRows.size > 0 && (
-        <div className="flex items-center justify-between gap-2 border-b border-border/40 bg-primary/10 px-3 py-2">
-          <div className="flex items-center gap-2 text-xs text-primary">
-            <ListChecks className="h-3.5 w-3.5" aria-hidden="true" />
-            <span className="font-medium">{tr.sqlTable.selectedRows(selectedRows.size)}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <Button variant="ghost" size="sm" onClick={copySelected} className="h-7 gap-1 text-xs">
-              <Copy className="h-3.5 w-3.5" />
-              {tr.sqlTable.copy}
-            </Button>
+
+          {truncationNotice && (
+            <div
+              role="status"
+              className="mt-2 flex items-start gap-2 rounded-md border border-warning/35 bg-warning/10 px-3 py-2 text-[11px] text-foreground"
+            >
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+              <span>{truncationNotice}</span>
+            </div>
+          )}
+
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs">
-                  <Download className="h-3.5 w-3.5" />
-                  {tr.sqlTable.export}
-                </Button>
+                <button
+                  type="button"
+                  aria-label={tr.sqlTable.manageColumns}
+                  className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background/50 px-2.5 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                >
+                  <Settings2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  {tr.sqlTable.columns}
+                </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => exportSelected("csv")} className="text-xs">
-                  CSV
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => exportSelected("json")} className="text-xs">
-                  JSON
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => exportSelected("sql")} className="text-xs">
-                  SQL INSERT
+              <DropdownMenuContent align="end" className="w-48">
+                <div className="max-h-60 overflow-auto p-1">
+                  {data.columns.map((c) => (
+                    <DropdownMenuItem
+                      key={c}
+                      onSelect={(e: Event) => {
+                        e.preventDefault();
+                        toggleColumnVisibility(c);
+                      }}
+                      className="flex cursor-pointer items-center gap-2"
+                    >
+                      <Checkbox checked={columnVisibility[c]} aria-hidden="true" />
+                      <span className="truncate text-xs" title={columnLabel(c)}>
+                        {columnLabel(c)}
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={showAllColumns} className="text-xs">
+                  {tr.sqlTable.showAllColumns}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearSelection}
-              className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
+
+            <button
+              type="button"
+              onClick={cycleDensity}
+              aria-label={tr.sqlTable.changeDensity}
+              title={`${tr.sqlTable.density}: ${tr.sqlTable.densities[density]}`}
+              className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-background/50 text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
             >
-              <Trash2 className="h-3.5 w-3.5" />
-              {tr.sqlTable.clearSelection}
-            </Button>
+              <Rows3 className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+
+            <button
+              type="button"
+              onClick={copyTable}
+              aria-label={tr.sqlTable.copyTable}
+              className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background/50 px-2.5 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+            >
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              {tr.sqlTable.copy}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowStats((v) => !v)}
+              aria-pressed={showStats}
+              aria-label={tr.sqlTable.toggleStats}
+              className={cn(
+                "flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+                showStats
+                  ? "bg-primary/15 text-primary"
+                  : "bg-background/50 text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              <Sigma className="h-3.5 w-3.5" aria-hidden="true" />
+              {tr.sqlTable.stats}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowChart((v) => !v)}
+              aria-pressed={showChart}
+              aria-label={tr.sqlTable.toggleChart}
+              className={cn(
+                "flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+                showChart
+                  ? "bg-primary/15 text-primary"
+                  : "bg-background/50 text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" />
+              {tr.sqlTable.chart}
+            </button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={tr.sqlTable.exportResults}
+                  className="flex h-8 items-center gap-1.5 rounded-lg bg-primary/15 px-2.5 text-xs font-medium text-primary transition hover:bg-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                >
+                  <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                  {tr.sqlTable.export}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem onSelect={() => exportAll("csv")} className="gap-2 text-xs">
+                  <Download className="h-3.5 w-3.5" />
+                  {tr.sqlTable.exportCsv}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => exportAll("json")} className="gap-2 text-xs">
+                  <FileJson className="h-3.5 w-3.5" />
+                  {tr.sqlTable.exportJson}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <div className="px-2 py-1.5">
+                  <label className="mb-1 block text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {tr.sqlTable.tableName}
+                  </label>
+                  <Input
+                    value={sqlTableName}
+                    onChange={(e) => setSqlTableName(e.target.value)}
+                    className="h-7 text-xs"
+                    placeholder="sonuclar"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+                <DropdownMenuItem onSelect={() => exportAll("sql")} className="gap-2 text-xs">
+                  <FileCode className="h-3.5 w-3.5" />
+                  {tr.sqlTable.exportSql}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
-      )}
 
-      {showStats && <SqlSummaryStats columns={visibleColumns} rows={sorted.map((m) => m.row)} />}
-      {showChart && (
-        <Suspense fallback={<div className="h-72 animate-pulse bg-muted/20" />}>
-          <LazySqlChartPanel
-            columns={visibleColumns}
-            rows={sorted.map((item) => item.row)}
-            initialType={recommendedChartType ?? undefined}
-            onCategorySelect={(column, value) => addFilter(column, "eq", value)}
-          />
-        </Suspense>
-      )}
-
-      {/* Table */}
-      {isVirtualized ? (
-        <div
-          ref={scrollRef}
-          role="region"
-          aria-label={tr.sqlTable.scrollableResults}
-          tabIndex={-1}
-          className="overflow-auto"
-          style={{ maxHeight: virtualHeight }}
-        >
-          <table
-            id={tableId}
-            className="w-full text-xs"
-            role="table"
-            aria-rowcount={sorted.length}
-            aria-colcount={visibleColumns.length + 1}
-            style={{ tableLayout: "fixed" }}
-          >
-            <caption className="sr-only">
-              {tr.sqlTable.captionVirtual(sorted.length, visibleColumns.length)}
-            </caption>
-            <thead className="sticky top-0 z-10 bg-background/80 backdrop-blur">{headerRow}</thead>
-            <tbody
-              style={{
-                display: "block",
-                position: "relative",
-                height: virtualizer.getTotalSize(),
-              }}
+        {/* Active filters bar */}
+        {hasActiveFilters && (
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-border/40 bg-background/30 px-3 py-2">
+            <Filter className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+            {filters.map((f) => (
+              <span
+                key={f.id}
+                className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary"
+              >
+                {columnLabel(f.column)} {tr.sqlTable.operators[f.operator]} {f.value}
+                <button
+                  type="button"
+                  onClick={() => removeFilter(f.id)}
+                  aria-label={tr.sqlTable.removeFilter(f.column)}
+                  className="rounded-full p-0.5 hover:bg-primary/20"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            {query.trim() && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-accent/40 px-2 py-0.5 text-[11px] text-muted-foreground">
+                {tr.sqlTable.searchFilter(query)}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="ml-auto text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
             >
-              {virtualizer.getVirtualItems().map((v) => {
-                const meta = sorted[v.index];
-                const isFocused = focusedRow === v.index;
-                return (
-                  <tr
-                    key={v.key}
-                    id={`${tableId}-row-${v.index}`}
-                    data-index={v.index}
-                    role="button"
-                    tabIndex={0}
-                    aria-rowindex={v.index + 1}
-                    aria-label={tr.sqlTable.viewRowDetails(v.index + 1)}
-                    onClick={() => openRow(v.index)}
-                    onFocus={() => setFocusedRow(v.index)}
-                    onKeyDown={(e) => onRowKeyDown(e, v.index, v.index)}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: v.size,
-                      transform: `translateY(${v.start}px)`,
-                      display: "table",
-                      tableLayout: "fixed",
-                    }}
-                    className={cn(
-                      "cursor-pointer transition hover:bg-primary/5 focus-visible:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60",
-                      isFocused && "bg-primary/5",
-                    )}
-                  >
-                    <td
-                      className={cn(
-                        "sticky left-0 z-[1] w-16 min-w-16 border-b border-border/40 bg-background/95 px-2 backdrop-blur",
-                        cellPadding,
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-1">
-                        <Checkbox
-                          checked={selectedRows.has(meta.idx)}
-                          aria-label={tr.sqlTable.selectRow(v.index + 1)}
-                          onCheckedChange={() => toggleSelectRow(meta.idx)}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <span
-                          aria-hidden="true"
-                          className="font-mono text-[10px] text-muted-foreground/70"
-                        >
-                          {v.index + 1}
-                        </span>
-                      </div>
-                    </td>
-                    {renderCells(meta)}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table
-            id={tableId}
-            className="w-full text-xs"
-            role="table"
-            aria-rowcount={sorted.length}
-            aria-colcount={visibleColumns.length + 1}
-            style={{ tableLayout: "fixed" }}
+              {tr.sqlTable.clearAllFilters}
+            </button>
+          </div>
+        )}
+
+        {/* Bulk selection bar */}
+        {selectedRows.size > 0 && (
+          <div className="flex items-center justify-between gap-2 border-b border-border/40 bg-primary/10 px-3 py-2">
+            <div className="flex items-center gap-2 text-xs text-primary">
+              <ListChecks className="h-3.5 w-3.5" aria-hidden="true" />
+              <span className="font-medium">{tr.sqlTable.selectedRows(selectedRows.size)}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={copySelected}
+                className="h-7 gap-1 text-xs"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                {tr.sqlTable.copy}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs">
+                    <Download className="h-3.5 w-3.5" />
+                    {tr.sqlTable.export}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => exportSelected("csv")} className="text-xs">
+                    CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => exportSelected("json")} className="text-xs">
+                    JSON
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => exportSelected("sql")} className="text-xs">
+                    SQL INSERT
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearSelection}
+                className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {tr.sqlTable.clearSelection}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <AnimatePresence initial={false}>
+          {showStats && (
+            <motion.div
+              key="stats"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={uiTransition}
+              className="overflow-hidden"
+            >
+              <SqlSummaryStats columns={visibleColumns} rows={sorted.map((m) => m.row)} />
+            </motion.div>
+          )}
+          {showChart && (
+            <motion.div
+              key="chart"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={uiTransition}
+              className="overflow-hidden"
+            >
+              <Suspense fallback={<div className="h-72 animate-pulse bg-muted/20" />}>
+                <LazySqlChartPanel
+                  columns={visibleColumns}
+                  rows={sorted.map((item) => item.row)}
+                  initialType={recommendedChartType ?? undefined}
+                  onCategorySelect={(column, value) => addFilter(column, "eq", value)}
+                />
+              </Suspense>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Table */}
+        {isVirtualized ? (
+          <div
+            ref={scrollRef}
+            role="region"
+            aria-label={tr.sqlTable.scrollableResults}
+            tabIndex={-1}
+            className="overflow-auto"
+            style={{ maxHeight: virtualHeight }}
           >
-            <caption className="sr-only">
-              {tr.sqlTable.caption(sorted.length, visibleColumns.length)}
-            </caption>
-            <thead>{headerRow}</thead>
-            <tbody>
-              {pageRows.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={visibleColumns.length + 1}
-                    className="px-3 py-8 text-center text-xs text-muted-foreground"
-                  >
-                    {tr.sqlTable.noMatchingRows}
-                  </td>
-                </tr>
-              ) : (
-                pageRows.map((meta, i) => {
-                  const absIdx = (safePage - 1) * pageSize + i;
+            <table
+              id={tableId}
+              className="w-full text-xs"
+              role="table"
+              aria-rowcount={sorted.length}
+              aria-colcount={visibleColumns.length + 1}
+              style={{ tableLayout: "fixed" }}
+            >
+              <caption className="sr-only">
+                {tr.sqlTable.captionVirtual(sorted.length, visibleColumns.length)}
+              </caption>
+              <thead className="sticky top-0 z-10 bg-background/80 backdrop-blur">
+                {headerRow}
+              </thead>
+              <tbody
+                style={{
+                  display: "block",
+                  position: "relative",
+                  height: virtualizer.getTotalSize(),
+                }}
+              >
+                {virtualizer.getVirtualItems().map((v) => {
+                  const meta = sorted[v.index];
+                  const isFocused = focusedRow === v.index;
                   return (
                     <tr
-                      key={i}
-                      ref={(el) => {
-                        rowRefs.current[i] = el;
-                      }}
+                      key={v.key}
+                      id={`${tableId}-row-${v.index}`}
+                      data-index={v.index}
                       role="button"
                       tabIndex={0}
-                      aria-label={tr.sqlTable.viewRowDetails(absIdx + 1)}
-                      onClick={() => openRow(absIdx)}
-                      onKeyDown={(e) => onRowKeyDown(e, i, absIdx)}
-                      className="cursor-pointer transition hover:bg-primary/5 focus-visible:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60"
+                      aria-rowindex={v.index + 1}
+                      aria-label={tr.sqlTable.viewRowDetails(v.index + 1)}
+                      onClick={() => openRow(v.index)}
+                      onFocus={() => setFocusedRow(v.index)}
+                      onKeyDown={(e) => onRowKeyDown(e, v.index, v.index)}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        height: v.size,
+                        transform: `translateY(${v.start}px)`,
+                        display: "table",
+                        tableLayout: "fixed",
+                      }}
+                      className={cn(
+                        "cursor-pointer transition hover:bg-primary/5 focus-visible:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60",
+                        isFocused && "bg-primary/5",
+                      )}
                     >
                       <td
                         className={cn(
@@ -1101,7 +1154,7 @@ export function SqlResultsTable({
                         <div className="flex items-center justify-between gap-1">
                           <Checkbox
                             checked={selectedRows.has(meta.idx)}
-                            aria-label={tr.sqlTable.selectRow(absIdx + 1)}
+                            aria-label={tr.sqlTable.selectRow(v.index + 1)}
                             onCheckedChange={() => toggleSelectRow(meta.idx)}
                             onClick={(e) => e.stopPropagation()}
                           />
@@ -1109,85 +1162,177 @@ export function SqlResultsTable({
                             aria-hidden="true"
                             className="font-mono text-[10px] text-muted-foreground/70"
                           >
-                            {absIdx + 1}
+                            {v.index + 1}
                           </span>
                         </div>
                       </td>
                       {renderCells(meta)}
                     </tr>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Footer / Pagination */}
-      {isVirtualized ? (
-        <div className="flex items-center justify-between gap-2 border-t border-border/60 px-3 py-2 text-[11px] text-muted-foreground">
-          <div>
-            <span className="font-medium text-foreground">{sorted.length.toLocaleString()}</span>{" "}
-            {tr.sqlTable.scrollToLoadMore}
+                })}
+              </tbody>
+            </table>
           </div>
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
-            {tr.sqlTable.virtualizedRendering}
-          </div>
-        </div>
-      ) : (
-        <nav
-          aria-label={tr.sqlTable.pagination}
-          className="flex items-center justify-between gap-2 border-t border-border/60 px-3 py-2 text-[11px] text-muted-foreground"
-        >
-          <div>
-            {tr.sqlTable.showing}{" "}
-            <span className="font-medium text-foreground">
-              {sorted.length === 0 ? 0 : (safePage - 1) * pageSize + 1}–
-              {Math.min(safePage * pageSize, sorted.length)}
-            </span>{" "}
-            {tr.sqlTable.of} <span className="font-medium text-foreground">{sorted.length}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              disabled={safePage <= 1}
-              aria-disabled={safePage <= 1}
-              aria-label={tr.sqlTable.previousPage}
-              onClick={goPrev}
-              className="grid h-7 w-7 place-items-center rounded-md border border-border bg-background/50 text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-40"
+        ) : (
+          <div className="overflow-x-auto">
+            <table
+              id={tableId}
+              className="w-full text-xs"
+              role="table"
+              aria-rowcount={sorted.length}
+              aria-colcount={visibleColumns.length + 1}
+              style={{ tableLayout: "fixed" }}
             >
-              <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-            <div className="px-2 text-foreground" aria-live="polite">
-              <span className="sr-only">{tr.sqlTable.page} </span>
-              {safePage}
-              <span aria-hidden="true"> / </span>
-              <span className="sr-only"> {tr.sqlTable.of} </span>
-              {totalPages}
+              <caption className="sr-only">
+                {tr.sqlTable.caption(sorted.length, visibleColumns.length)}
+              </caption>
+              <thead>{headerRow}</thead>
+              <tbody>
+                {pageRows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={visibleColumns.length + 1}
+                      className="px-3 py-8 text-center text-xs text-muted-foreground"
+                    >
+                      {tr.sqlTable.noMatchingRows}
+                    </td>
+                  </tr>
+                ) : (
+                  pageRows.map((meta, i) => {
+                    const absIdx = (safePage - 1) * safePageSize + i;
+                    return (
+                      <tr
+                        key={i}
+                        ref={(el) => {
+                          rowRefs.current[i] = el;
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={tr.sqlTable.viewRowDetails(absIdx + 1)}
+                        onClick={() => openRow(absIdx)}
+                        onKeyDown={(e) => onRowKeyDown(e, i, absIdx)}
+                        className="cursor-pointer transition hover:bg-primary/5 focus-visible:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60"
+                      >
+                        <td
+                          className={cn(
+                            "sticky left-0 z-[1] w-16 min-w-16 border-b border-border/40 bg-background/95 px-2 backdrop-blur",
+                            cellPadding,
+                          )}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <Checkbox
+                              checked={selectedRows.has(meta.idx)}
+                              aria-label={tr.sqlTable.selectRow(absIdx + 1)}
+                              onCheckedChange={() => toggleSelectRow(meta.idx)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <span
+                              aria-hidden="true"
+                              className="font-mono text-[10px] text-muted-foreground/70"
+                            >
+                              {absIdx + 1}
+                            </span>
+                          </div>
+                        </td>
+                        {renderCells(meta)}
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Footer / Pagination */}
+        {isVirtualized ? (
+          <div className="flex items-center justify-between gap-2 border-t border-border/60 px-3 py-2 text-[11px] text-muted-foreground">
+            <div>
+              <span className="font-medium text-foreground">{sorted.length.toLocaleString()}</span>{" "}
+              {tr.sqlTable.scrollToLoadMore}
             </div>
-            <button
-              type="button"
-              disabled={safePage >= totalPages}
-              aria-disabled={safePage >= totalPages}
-              aria-label={tr.sqlTable.nextPage}
-              onClick={goNext}
-              className="grid h-7 w-7 place-items-center rounded-md border border-border bg-background/50 text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
+              {tr.sqlTable.virtualizedRendering}
+            </div>
           </div>
-        </nav>
-      )}
+        ) : (
+          <nav
+            aria-label={tr.sqlTable.pagination}
+            className="flex items-center justify-between gap-2 border-t border-border/60 px-3 py-2 text-[11px] text-muted-foreground"
+          >
+            <div>
+              {tr.sqlTable.showing}{" "}
+              <span className="font-medium text-foreground">
+                {sorted.length === 0 ? 0 : (safePage - 1) * safePageSize + 1}–
+                {Math.min(safePage * safePageSize, sorted.length)}
+              </span>{" "}
+              {tr.sqlTable.of} <span className="font-medium text-foreground">{sorted.length}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={safePage <= 1}
+                aria-disabled={safePage <= 1}
+                aria-label={tr.sqlTable.previousPage}
+                onClick={goPrev}
+                className="flex h-7 items-center gap-1 rounded-md border border-border bg-background/50 px-2 text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>{tr.sqlTable.previous}</span>
+              </button>
+              <div className="px-2 text-foreground" aria-live="polite">
+                {tr.sqlTable.page} {safePage}
+                <span aria-hidden="true"> / </span>
+                <span className="sr-only"> {tr.sqlTable.of} </span>
+                {totalPages}
+              </div>
+              <button
+                type="button"
+                disabled={safePage >= totalPages}
+                aria-disabled={safePage >= totalPages}
+                aria-label={tr.sqlTable.nextPage}
+                onClick={goNext}
+                className="flex h-7 items-center gap-1 rounded-md border border-border bg-background/50 px-2 text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <span>{tr.sqlTable.next}</span>
+                <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          </nav>
+        )}
 
-      <SqlRowDrawer
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        columns={visibleColumns}
-        row={selectedRow}
-        rowIndex={selectedIndex}
-        totalRows={sorted.length}
-      />
-    </div>
+        <SqlRowDrawer
+          open={drawerOpen}
+          onOpenChange={setDrawerOpen}
+          columns={visibleColumns}
+          row={selectedRow}
+          rowIndex={selectedIndex}
+          totalRows={sorted.length}
+        />
+      </div>
+      {allowFullscreen && (
+        <Dialog open={fullscreenOpen} onOpenChange={setFullscreenOpen}>
+          <DialogContent className="h-[calc(100vh-3rem)] max-w-[calc(100vw-3rem)] gap-0 overflow-hidden p-0">
+            <DialogHeader className="shrink-0 border-b border-border px-5 py-4">
+              <DialogTitle className="text-base">{tr.sqlTable.fullscreenTitle}</DialogTitle>
+              <DialogDescription className="text-xs">
+                {tr.sqlTable.fullscreenDescription}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="min-h-0 overflow-auto p-3">
+              <SqlResultsTable
+                data={data}
+                pageSize={Math.max(safePageSize, 12)}
+                virtualizeThreshold={virtualizeThreshold}
+                rowHeight={rowHeight}
+                virtualHeight={Math.max(virtualHeight, 560)}
+                allowFullscreen={false}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 }
 
@@ -1196,12 +1341,13 @@ function makeId() {
 }
 
 function FilterPopover({
-  column,
+  label,
   onApply,
   existing,
   onClear,
 }: {
-  column: string;
+  /** Türkçe display label; the raw column key is captured by `onApply`'s closure. */
+  label: string;
   onApply: (operator: FilterOperator, value: string) => void;
   existing?: FilterRule;
   onClear: () => void;
@@ -1227,7 +1373,7 @@ function FilterPopover({
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={tr.sqlTable.filterColumn(column)}
+          aria-label={tr.sqlTable.filterColumn(label)}
           className={cn(
             "mr-1 rounded p-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
             existing ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground",
@@ -1238,7 +1384,7 @@ function FilterPopover({
       </PopoverTrigger>
       <PopoverContent className="w-56 p-3" align="end">
         <div className="mb-2 text-xs font-semibold text-foreground">
-          {tr.sqlTable.filterTitle(column)}
+          {tr.sqlTable.filterTitle(label)}
         </div>
         <Select value={operator} onValueChange={(v) => setOperator(v as FilterOperator)}>
           <SelectTrigger className="h-8 text-xs">

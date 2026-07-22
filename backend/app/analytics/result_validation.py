@@ -99,6 +99,19 @@ class ResultValidator:
         if not expected_aliases:
             return ResultShapeVerdict(valid=True)
 
+        # An empty result set has no row keys from which the current repository
+        # can reconstruct cursor metadata.  It is nevertheless a valid query
+        # outcome: with no rows there is no contradictory shape to reject, and
+        # the report pipeline will resolve it as NO_RESULT_GUIDANCE.  Preserve
+        # strict alias checks whenever at least one row was returned.
+        if result.row_count == 0 and not result.rows:
+            expected_shape = "grouped" if plan and plan.dimensions else "scalar"
+            return ResultShapeVerdict(
+                valid=True,
+                expected_shape=expected_shape,
+                actual_shape="empty",
+            )
+
         expected_by_lower = {alias.lower(): alias for alias in expected_aliases}
         actual_by_lower = {column.lower(): column for column in result.columns}
         missing = [

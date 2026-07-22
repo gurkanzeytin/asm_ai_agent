@@ -42,12 +42,63 @@ class ReportRequest(BaseModel):
 # Response sub-schemas
 # ─────────────────────────────────────────────
 
+class ColumnMetadataSchema(BaseModel):
+    """Presentation metadata for a single QueryResult column (AI-INTELLIGENCE-013).
+
+    Additive only: `key` always matches an entry in `QueryResultSchema.columns`
+    and every row's raw key — data access, sorting, filtering, and exports
+    must keep using `key`, never `label`.
+    """
+
+    key: str = Field(..., description="Raw canonical column key (matches columns[]/row keys).")
+    label: str = Field(..., description="Türkçe display label for this column.")
+    format: str = Field(
+        ...,
+        description="Presentation format hint: text, integer, decimal, percentage, duration, "
+        "date, or datetime. Never mutates the raw value.",
+    )
+    unit: Optional[str] = Field(
+        default=None, description="Display unit for the formatted value (e.g. '%', 'dakika')."
+    )
+
+
 class QueryResultSchema(BaseModel):
     """Transport-layer representation of the database execution result set."""
 
     columns: List[str] = Field(..., description="Ordered list of result column names.")
     rows: List[Dict[str, Any]] = Field(..., description="List of result row dictionaries.")
-    row_count: int = Field(..., description="Total number of rows returned by the query.")
+    row_count: int = Field(
+        ...,
+        description="Backward-compatible alias of returned_row_count at the API boundary.",
+    )
+    source_record_count: Optional[int] = Field(
+        default=None, description="Underlying source records only when genuinely known."
+    )
+    result_group_count: Optional[int] = Field(
+        default=None, description="Complete analytical group count when genuinely known."
+    )
+    returned_row_count: int = Field(
+        default=0, description="Rows serialized in this API response (maximum 500)."
+    )
+    displayed_row_count: int = Field(
+        default=0, description="Rows intended for one visible UI page (maximum 100)."
+    )
+    result_truncated: bool = Field(
+        default=False, description="Whether rows were omitted at any safety boundary."
+    )
+    applied_limit: int = Field(default=500, description="API serialization row cap.")
+    has_more: bool = Field(
+        default=False, description="Whether additional rows are known to exist."
+    )
+    total_count: Optional[int] = Field(
+        default=None, description="Exact total only when already known; never estimated."
+    )
+    column_metadata: List[ColumnMetadataSchema] = Field(
+        default_factory=list,
+        description="Presentation metadata (Türkçe label/format/unit) per column, in `columns` "
+        "order. Additive only — `columns` and `rows` keep their raw canonical keys unchanged "
+        "for data access, sorting, filtering, and exports.",
+    )
 
 
 class ReportSchema(BaseModel):
@@ -98,6 +149,34 @@ class AnalyticsSchema(BaseModel):
     insights: Dict[str, Any] = Field(default_factory=dict, description="Structured summary fields prepared for future insight generation.")
     visualization: Optional[VisualizationSchema] = Field(default=None, description="Recommended visualization metadata.")
     row_count: int = Field(default=0, description="Number of rows analyzed.")
+    technical_row_count: int = Field(
+        default=0, description="Physical SQL rows returned; technical metadata only."
+    )
+    business_record_count: Optional[int] = Field(
+        default=None, description="Business record count only when the result represents raw records."
+    )
+    result_shape: str = Field(default="empty", description="Plan-aware semantic result shape.")
+    aggregate_result: bool = False
+    displayable_kpis: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Authoritative business KPI cards safe for user-facing presentation.",
+    )
+    metric_summaries: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Per-metric aggregate summaries (metric_id -> total/average/min/max/top/"
+        "bottom dimension/label), present only for multi-metric requests.",
+    )
+    comparison_category_count: Optional[int] = Field(
+        default=None, description="CATEGORICAL results only: number of distinct groups compared."
+    )
+    comparison_sufficient: Optional[bool] = Field(
+        default=None,
+        description="CATEGORICAL results only: whether enough categories existed for a "
+        "meaningful comparison.",
+    )
+    comparison_limitation_reason: Optional[str] = Field(
+        default=None, description="Deterministic explanation when comparison_sufficient is false."
+    )
 
 
 class InsightSchema(BaseModel):
@@ -194,6 +273,10 @@ class ReportResponse(BaseModel):
     success: bool = Field(..., description="Indicates whether the workflow completed without errors.")
     workflow_id: Optional[str] = Field(default=None, description="Unique identifier for the workflow execution run.")
     question: str = Field(..., description="The original user question echoed back.")
+    raw_question: Optional[str] = None
+    resolved_question: Optional[str] = None
+    answerability_input_source: str = "raw_question"
+    answerability_signals: List[str] = Field(default_factory=list)
     generated_sql: Optional[str] = Field(default=None, description="SQL statement generated and executed during the workflow.")
     query_result: Optional[QueryResultSchema] = Field(default=None, description="Structured database result set.")
     report: Optional[ReportSchema] = Field(default=None, description="Generated narrative report.")
@@ -343,6 +426,7 @@ __all__ = [
     "ReportRequest",
     "ReportResponse",
     "QueryResultSchema",
+    "ColumnMetadataSchema",
     "ReportSchema",
     "MetadataSchema",
     "TimingSchema",

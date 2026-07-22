@@ -41,7 +41,9 @@ _DATE_PATTERNS = [
     (rf"\bonceki\s+{_NUMBER_WORD}\s+(?:gun|hafta|ay|yil)\w*", None),
     (r"\bgecen\s+hafta\b", "gecen hafta"),
     (r"\bgecen\s+ay\b", "gecen ay"),
-    (r"\bgecen\s+yil\b", "gecen yil"),
+    (r"\bbir\s+onceki\s+yil\w*\b", "bir onceki yil"),
+    (r"\bonceki\s+yil\w*\b", "onceki yil"),
+    (r"\bgecen\s+yil\w*\b", "gecen yil"),
     (r"\bbu\s+hafta\b", "bu hafta"),
     (r"\bbu\s+ay\w*\b", "bu ay"),
     (r"\bbu\s+yil\b", "bu yil"),
@@ -49,7 +51,13 @@ _DATE_PATTERNS = [
     (r"\bdun\b", "dun"),
     (r"\byarin\b", "yarin"),
     (rf"\b(?:{_MONTH_NAMES})\s+ayinda\b", None),
-    (r"\b(?:19|20)\d{2}\s+yilinda\b", None),
+    # Calendar-year expressions used both in complete questions and short
+    # elliptical follow-ups.  Punctuation/apostrophes have already been
+    # replaced with spaces by ``_fold``.
+    (
+        r"\b(?:19|20)\d{2}(?:\s+(?:yil\w*|icin|olan\w*|[dty][ae]))?\b",
+        None,
+    ),
 ]
 
 # Folded department keyword -> canonical display name (values as stored in the
@@ -160,6 +168,18 @@ _FILLER_TOKENS = {
     "sey",
     "seyi",
     "olarak",
+    "gore",
+    "olan",
+    "olani",
+    "yil",
+    "yili",
+    "yilinin",
+    "yilina",
+    "yilinda",
+    "te",
+    "ta",
+    "e",
+    "a",
     "da",
     "de",
 }

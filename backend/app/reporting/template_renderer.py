@@ -19,6 +19,8 @@ from app.reporting.presentation import (
     label_for,
 )
 from app.reporting.report_classifier import ReportType
+from app.shared.result_limits import DEFAULT_GROUPED_RESULT_LIMIT
+from app.shared.result_window import cap_query_result, result_notice
 
 COMPARISON_CONTRACT_FALLBACK = (
     "# Karşılaştırma Yapılamadı\n\n"
@@ -212,10 +214,19 @@ class TemplateReportRenderer:
         row = query_result.rows[0]
         label, value = next(iter(row.items()))
         rendered_value = _render_cell(label, value)
+        is_count_metric = label.lower().endswith(("_count", "_sayisi")) or label.lower() in {
+            "count",
+            "row_count",
+        }
+        summary = (
+            f"Sorguya göre toplam {rendered_value} kayıt bulunmaktadır."
+            if is_count_metric
+            else f"{label_for(label)} {rendered_value} olarak hesaplanmıştır."
+        )
         markdown = (
             "# Sorgu Sonucu\n\n"
             f"**{label_for(label)}:** {rendered_value}\n\n"
-            f"Sorguya göre toplam {rendered_value} kayıt bulunmaktadır."
+            f"{summary}"
         )
         return TemplateRenderResult("Sorgu Sonucu", markdown, "single_value")
 
@@ -231,6 +242,7 @@ class TemplateReportRenderer:
         return TemplateRenderResult("Sorgu Sonucu", "\n".join(lines), "single_row")
 
     def _render_table(self, query_result: QueryResult) -> TemplateRenderResult:
+        query_result = cap_query_result(query_result, DEFAULT_GROUPED_RESULT_LIMIT)
         columns = query_result.columns or _columns_from_rows(query_result.rows)
         header = "| " + " | ".join(label_for(col) for col in columns) + " |"
         separator = "| " + " | ".join("---" for _ in columns) + " |"
@@ -242,7 +254,7 @@ class TemplateReportRenderer:
             [
                 "# Sorgu Sonucu",
                 "",
-                f"Toplam {format_number(query_result.row_count)} kayıt listelenmiştir.",
+                result_notice(query_result),
                 "",
                 header,
                 separator,

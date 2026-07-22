@@ -15,10 +15,22 @@ from typing import TYPE_CHECKING, Any
 
 from app.analytics import calculators
 from app.analytics.intent_detector import AnalyticsIntentDetector
-from app.analytics.models import AnalyticsIntent, AnalyticsResult, DataShape, MetricSummary
+from app.analytics.models import (
+    AnalyticsIntent,
+    AnalyticsResult,
+    DataShape,
+    DisplayableKPI,
+    MetricSummary,
+    ResultShape,
+)
 from app.analytics.trend_analysis import TrendMetrics, compute_trend_metrics
 from app.analytics.visualization_selector import VisualizationSelector
 from app.application_models.workflow_models import QueryResult
+from app.reporting.presentation import (
+    build_column_metadata,
+    get_analysis_type_label,
+    get_metric_label,
+)
 
 if TYPE_CHECKING:
     from app.planning.models import QueryPlan
@@ -58,6 +70,9 @@ _MAX_DISTRIBUTION_CATEGORIES = 12
 # dative case; "arasında {Y} görülmektedir" needs the plain noun).
 _SLOPE_DIRECTION_TR = {"upward": "yükselişe", "downward": "düşüşe", "flat": "yatay seyre"}
 _ENDPOINT_DIRECTION_TR = {"upward": "yükseliş", "downward": "düşüş", "flat": "yatay seyir"}
+# Adjective form for "genel yön {X}dır" (AI-INTELLIGENCE-018 item 7's allowed
+# mixed/fluctuating-trend statement — never "sürekli"/"tutarlı" language).
+_ENDPOINT_DIRECTION_ADJECTIVE_TR = {"upward": "yukarı", "downward": "aşağı", "flat": "yatay"}
 
 
 class AnalyticsEngine:
@@ -83,6 +98,7 @@ class AnalyticsEngine:
         intents = self.intent_detector.detect(question)
         metric_column, label_column, temporal_column = self._profile_columns(query_result, question)
         data_shape = self._classify_shape(query_result, metric_column, temporal_column, plan)
+        result_shape = self._classify_result_shape(query_result, data_shape, plan)
 
         values = self._numeric_values(query_result, metric_column)
         labels = self._labels(query_result, label_column or temporal_column)
@@ -102,8 +118,22 @@ class AnalyticsEngine:
         )
 
         metric_summaries = self._compute_metric_summaries(
-            plan, query_result, metric_aliases, labels
+            plan, query_result, metric_aliases, labels, result_shape
         )
+        displayable_kpis = self._displayable_kpis(
+            plan, query_result, metric_aliases, result_shape
+        )
+        if result_shape in {
+            ResultShape.SCALAR_AGGREGATE,
+            ResultShape.MULTI_METRIC_SCALAR_AGGREGATE,
+        }:
+            # A returned aggregate cell is already a business statistic. Never
+            # calculate a second distribution (count/total/median/min/max) over it.
+            metrics = _ComputedMetrics(
+                scalar={item.key: item.value for item in displayable_kpis},
+                trend_metrics=None,
+            )
+            insights = {item.key: item.value for item in displayable_kpis}
 
         comparison_category_count = None
         comparison_sufficient = None
@@ -120,6 +150,7 @@ class AnalyticsEngine:
         duration_ms = (time.perf_counter() - start_time) * 1000
         result = AnalyticsResult(
             analytics_type=analytics_type,
+            analytics_type_label=get_analysis_type_label(analytics_type),
             intents=intents,
             data_shape=data_shape,
             metrics=metrics.scalar,
@@ -128,6 +159,18 @@ class AnalyticsEngine:
             metric_column=metric_column,
             label_column=label_column or temporal_column,
             row_count=query_result.row_count,
+            technical_row_count=query_result.row_count,
+            business_record_count=(
+                query_result.row_count
+                if result_shape == ResultShape.RAW_RECORD_ROWS
+                else None
+            ),
+            result_shape=result_shape,
+            aggregate_result=result_shape in {
+                ResultShape.SCALAR_AGGREGATE,
+                ResultShape.MULTI_METRIC_SCALAR_AGGREGATE,
+            },
+            displayable_kpis=displayable_kpis,
             duration_ms=duration_ms,
             metric_summaries=metric_summaries,
             trend_metrics=metrics.trend_metrics,
@@ -146,6 +189,7 @@ class AnalyticsEngine:
         query_result: QueryResult,
         metric_aliases: dict[str, str] | None,
         labels: list[str],
+        result_shape: ResultShape,
     ) -> dict[str, MetricSummary]:
         if not plan or not plan.metrics:
             return {}
@@ -163,16 +207,60 @@ class AnalyticsEngine:
             if labeled:
                 ranked = calculators.rank(labeled)
                 top_dimension, bottom_dimension = ranked[0][0], ranked[-1][0]
+            is_scalar = result_shape in {
+                ResultShape.SCALAR_AGGREGATE,
+                ResultShape.MULTI_METRIC_SCALAR_AGGREGATE,
+            }
             summaries[metric_id] = MetricSummary(
                 metric_id=metric_id,
-                total=calculators.total(values),
-                average=calculators.average(values),
-                minimum=calculators.minimum(values),
-                maximum=calculators.maximum(values),
-                top_dimension=top_dimension,
-                bottom_dimension=bottom_dimension,
+                metric_label=get_metric_label(metric_id),
+                total=None if is_scalar else calculators.total(values),
+                average=None if is_scalar else calculators.average(values),
+                minimum=None if is_scalar else calculators.minimum(values),
+                maximum=None if is_scalar else calculators.maximum(values),
+                top_dimension=None if is_scalar else top_dimension,
+                bottom_dimension=None if is_scalar else bottom_dimension,
+                value=values[0] if is_scalar else None,
+                format=self._metric_presentation(metric_id)[0],
+                unit=self._metric_presentation(metric_id)[1],
             )
         return summaries
+
+    def _displayable_kpis(
+        self,
+        plan: "QueryPlan | None",
+        query_result: QueryResult,
+        metric_aliases: dict[str, str] | None,
+        result_shape: ResultShape,
+    ) -> list[DisplayableKPI]:
+        if result_shape not in {
+            ResultShape.SCALAR_AGGREGATE,
+            ResultShape.MULTI_METRIC_SCALAR_AGGREGATE,
+        } or not plan or not query_result.rows:
+            return []
+        aliases = metric_aliases or {}
+        row = query_result.rows[0]
+        items: list[DisplayableKPI] = []
+        for metric_id in plan.metrics:
+            column = aliases.get(metric_id, metric_id)
+            value = row.get(column)
+            if value is None:
+                continue
+            fmt, unit = self._metric_presentation(metric_id)
+            items.append(
+                DisplayableKPI(
+                    key=metric_id,
+                    label=get_metric_label(metric_id),
+                    value=value,
+                    format=fmt,
+                    unit=unit,
+                )
+            )
+        return items
+
+    def _metric_presentation(self, metric_id: str) -> tuple[str, str | None]:
+        metadata = build_column_metadata([metric_id], resolved_metrics=[metric_id])[0]
+        return str(metadata["format"]), metadata["unit"]
 
     # ── Result profiling ───────────────────────────────────────────────────────
 
@@ -279,6 +367,30 @@ class AnalyticsEngine:
             return DataShape.CATEGORICAL
         return DataShape.TABULAR
 
+    def _classify_result_shape(
+        self,
+        query_result: QueryResult,
+        data_shape: DataShape,
+        plan: "QueryPlan | None",
+    ) -> ResultShape:
+        if query_result.row_count == 0:
+            return ResultShape.EMPTY
+        metric_count = len(plan.metrics) if plan else 0
+        dimension_count = len(plan.dimensions) if plan else 0
+        if metric_count and not dimension_count and query_result.row_count == 1:
+            return (
+                ResultShape.SCALAR_AGGREGATE
+                if metric_count == 1
+                else ResultShape.MULTI_METRIC_SCALAR_AGGREGATE
+            )
+        if data_shape == DataShape.TIME_SERIES:
+            return ResultShape.TIME_SERIES
+        if dimension_count:
+            return ResultShape.CATEGORICAL_GROUPED_RESULT
+        if metric_count:
+            return ResultShape.GROUPED_ROWS
+        return ResultShape.RAW_RECORD_ROWS
+
     def _numeric_values(self, query_result: QueryResult, metric_column: str | None) -> list[float]:
         if not metric_column:
             return []
@@ -347,6 +459,7 @@ class AnalyticsEngine:
             metrics["endpoint_direction"] = trend_metrics.endpoint_direction
             metrics["slope"] = trend_metrics.slope
             metrics["slope_direction"] = trend_metrics.slope_direction
+            metrics["monotonicity"] = trend_metrics.monotonicity
             metrics["trend_consistency"] = trend_metrics.trend_consistency
             metrics["volatility"] = trend_metrics.volatility
             metrics["comparable_period_count"] = trend_metrics.comparable_period_count
@@ -361,6 +474,9 @@ class AnalyticsEngine:
             # already-computed direction verdict.
             metrics["slope_direction_tr"] = _SLOPE_DIRECTION_TR.get(trend_metrics.slope_direction)
             metrics["endpoint_direction_tr"] = _ENDPOINT_DIRECTION_TR.get(
+                trend_metrics.endpoint_direction
+            )
+            metrics["endpoint_direction_adjective_tr"] = _ENDPOINT_DIRECTION_ADJECTIVE_TR.get(
                 trend_metrics.endpoint_direction
             )
 

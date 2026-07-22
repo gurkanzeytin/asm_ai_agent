@@ -7,6 +7,8 @@ from app.analytics.analytics_engine import AnalyticsEngine
 from app.analytics.result_contracts import TypedResultNormalizer
 from app.analytics.result_reasoning import ResultReasoner
 from app.analytics.result_validation import ResultValidator
+from app.services.result_safety import enrich_result_counts, is_unsafe_analytical_detail
+from app.shared.result_limits import OVERSIZED_ANALYTICAL_RESULT_MESSAGE
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +62,25 @@ class AnalyzeResultsNode(IAgentNode):
                 }
             )
 
+        if is_unsafe_analytical_detail(state.query_result, state.query_plan):
+            logger.warning(
+                "AnalyzeResultsNode blocked oversized identifier-bearing analytical detail."
+            )
+            duration = (time.perf_counter() - start_time) * 1000
+            guarded_result = state.query_result.model_copy(
+                update={"unsafe_detail_output": True}
+            )
+            return state.model_copy(
+                update={
+                    "query_result": guarded_result,
+                    "analytics_blocked_reason": OVERSIZED_ANALYTICAL_RESULT_MESSAGE,
+                    "current_node": "analyze_results",
+                    "completed_nodes": state.completed_nodes + ["analyze_results"],
+                    "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "analyze_results": duration},
+                }
+            )
+
         try:
             # Analyze against the NLU-normalized question when available so
             # analytical wording matches the same canonical vocabulary as SQL.
@@ -80,6 +101,7 @@ class AnalyzeResultsNode(IAgentNode):
             analytics_result = self.analytics_engine.analyze(
                 question, query_result, plan=state.query_plan, metric_aliases=metric_aliases
             )
+            query_result = enrich_result_counts(query_result, analytics_result)
 
             # AI-INTELLIGENCE-008: deterministic result reasoning (baseline delta,
             # low-sample flags, top findings) rides on the analytics insights dict
@@ -124,6 +146,7 @@ class AnalyzeResultsNode(IAgentNode):
 
             return state.model_copy(
                 update={
+                    "query_result": query_result,
                     "analytics": analytics_result,
                     "current_node": "analyze_results",
                     "completed_nodes": state.completed_nodes + ["analyze_results"],

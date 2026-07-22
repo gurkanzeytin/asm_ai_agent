@@ -67,8 +67,34 @@ class PlannedDimension(BaseModel):
     canonical_name: str | None = Field(
         default=None,
         description="Canonical dimension vocabulary name (branch|doctor|department|status|"
-        "service|category|source|date), when resolvable.",
+        "service|category|source|appointment_type|gender|nationality|date), when resolvable.",
     )
+
+
+class ResolvedFilterPlan(BaseModel):
+    """One field's grounded filter resolution (AI-INTELLIGENCE-016).
+
+    Produced only by `app.planning.value_resolver.ValueResolver` against real
+    distinct database values — never from rewritten free text. `values` is
+    empty unless `grounded` is True; an ungrounded/ambiguous mention carries
+    `clarification_required=True` and `alternatives` instead of a guessed value.
+    """
+
+    field: str = Field(..., description="branch|doctor|department|service|category|"
+        "appointment_source|appointment_status|appointment_type|nationality|gender.")
+    values: list[str] = Field(default_factory=list, description="Grounded canonical values.")
+    source: str = Field(default="grounded_value_resolver", description="Resolution source.")
+    confidence: float = Field(default=0.0, description="0-1 match confidence.")
+    grounded: bool = Field(default=False, description="True only when `values` is a real match.")
+    match_type: str | None = Field(
+        default=None, description="exact|normalized_exact|alias|prefix|fuzzy|no_match|ambiguous."
+    )
+    original_text: str | None = Field(
+        default=None, description="Raw text mention that was resolved."
+    )
+    clarification_required: bool = Field(default=False)
+    clarification_message: str | None = Field(default=None)
+    alternatives: list[str] = Field(default_factory=list, description="Safe candidate options.")
 
 
 class QueryPlan(BaseModel):
@@ -103,6 +129,30 @@ class QueryPlan(BaseModel):
     )
     department_filter: str | None = Field(
         default=None, description="Department name constraint, as stored in the database."
+    )
+    scope: str = Field(
+        default="filtered",
+        description="'all' when the question used a generic organization-wide phrase "
+        "('tüm şubeler', 'kurum genelinde', ...) — no branch VALUE filter may be produced. "
+        "'filtered' otherwise (the default: no scope claim either way).",
+    )
+    branch_filters: list[str] = Field(
+        default_factory=list,
+        description="Grounded branch (SubeAdi) values only. Never populated from a generic "
+        "organizational phrase or free-text guess — only from a real grounded catalog/database "
+        "lookup or an exact match against a validated known branch value. Empty means "
+        "'no branch value filter', not 'unknown branch'.",
+    )
+    generic_scope_phrase_detected: str | None = Field(
+        default=None,
+        description="The matched generic-scope wording (e.g. 'tüm aile sağlığı merkezleri'), "
+        "for diagnostics; None when no such phrase was detected.",
+    )
+    resolved_filters: dict[str, ResolvedFilterPlan] = Field(
+        default_factory=dict,
+        description="Typed, grounded filter resolutions keyed by field name "
+        "(AI-INTELLIGENCE-016). Source of truth for value filters other than "
+        "branch_filters/department_filter — never derived from rewritten free text.",
     )
     extra_filters: list[str] = Field(
         default_factory=list,

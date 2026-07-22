@@ -9,7 +9,12 @@ from app.context.models import (
     ExtractedSignals,
     ResolutionResult,
 )
-from app.semantics.view_mapping import fold as _fold
+
+# Reuse the context extractor's length-preserving fold directly. Importing
+# through ``app.semantics`` here eagerly initializes the semantic engine and,
+# during application bootstrap, creates a planning -> context -> semantics ->
+# services -> planning cycle before the graph can even start.
+_fold = ContextExtractor().fold
 
 logger = logging.getLogger(__name__)
 
@@ -51,11 +56,26 @@ _INVERSION_PAIRS: list[tuple[str, str]] = [
 ]
 CONFIDENCE_NEGATION_FOLLOWUP = 0.93
 
+# Constraint-editing verbs are inherently relational when a valid analytical
+# plan exists in memory: they modify that plan rather than introduce a new
+# standalone analysis.  Keep this narrow so a complete independent question
+# that merely shares a dimension never inherits stale context.
+_CONSTRAINT_EDIT_MARKERS = (
+    "sadece",
+    "sinirla",
+    "sinirlandir",
+    "filtrele",
+    "ayir",
+)
+
 _CLARIFICATION_MULTIPLE = (
     "Daha önce birden fazla konu konuşuldu. Hangisini kastettiğinizi belirtir misiniz?"
 )
 _CLARIFICATION_NONE = (
     "Bu ifadenin neyi kastettiğini anlayamadım. Sorunuzu biraz daha açık yazabilir misiniz?"
+)
+_CLARIFICATION_DATE_WITHOUT_CONTEXT = (
+    "Bu tarih için hangi randevu analizini görmek istediğinizi belirtir misiniz?"
 )
 
 # The single status term documented as verified NOT to exist in the data
@@ -98,6 +118,34 @@ class ContextResolver:
         )
         result.overridden_fields = self._overridden_fields(signals, context)
 
+        # AI-INTELLIGENCE-017 (item 8): a reply to a pending GROUNDED VALUE
+        # clarification ("hepsini", "ilkini", an explicit candidate) must be
+        # evaluated FIRST — before the unsupported-status guard, before
+        # pronoun/date/negation follow-up handling, and (structurally, since
+        # this whole resolve() call happens before AgentState/the graph is
+        # even built) before AnswerabilityGuard/out-of-scope routing. A
+        # context-resolvable clarification reply must never fall through to
+        # out-of-scope detection.
+        if (
+            context.pending_clarification
+            and context.pending_clarification.field.startswith("value_filter:")
+        ):
+            pending_resolution = self._resolve_pending_value_clarification(
+                question, context.pending_clarification
+            )
+            if pending_resolution is not None:
+                resolved_question, filter_override = pending_resolution
+                result.resolved_question = resolved_question
+                result.filter_override = filter_override
+                result.pending_clarification_resolved = True
+                result.applied = True
+                result.confidence = 1.0
+                result.follow_up_signals.append("pending_value_clarification_resolved")
+                result.inherited["previous_question"] = (
+                    context.pending_clarification.original_question or ""
+                )
+                return self._finalize(result, question, context, signals)
+
         # Unsupported status (Part 9): never silently ground an unsupported
         # value or produce a filter that can never match a row — surface a
         # clarification instead, offering the real canonical status vocabulary.
@@ -138,15 +186,31 @@ class ContextResolver:
 
         # Date-only follow-up ("Peki geçen ay?") re-runs the previous question
         # with the new temporal filter — comparison/trend continuation.
-        if signals.is_date_only_followup and context.last_question:
+        if signals.is_date_only_followup and self._has_inheritable_analysis(context):
+            new_date = self._resolve_relative_year(
+                signals.date_expression or "", context.date_expression
+            )
             result.resolved_question = self._swap_date(
-                context.last_question, signals.date_expression or ""
+                context.last_question or "", new_date
             )
             result.inherited["previous_question"] = context.last_question
-            result.inherited["date"] = signals.date_expression or ""
+            result.inherited["entity_types"] = ",".join(context.entity_types)
+            result.inherited["metrics"] = ",".join(context.metrics)
+            result.inherited["date"] = new_date
             result.confidence = CONFIDENCE_DATE_FOLLOWUP
             result.applied = True
             result.follow_up_signals.append("date_only_followup")
+            return self._finalize(result, question, context, signals)
+
+        # A date fragment is conversationally incomplete, not out of domain.
+        # Without a successful analytical anchor there is no safe subject or
+        # metric to invent, so route it to the existing clarification outcome.
+        if signals.is_date_only_followup:
+            result.clarification_needed = True
+            result.clarification_question = self._date_clarification(
+                signals.date_expression
+            )
+            result.confidence = 0.0
             return self._finalize(result, question, context, signals)
 
         resolved = question
@@ -259,6 +323,7 @@ class ContextResolver:
         `resolve()` return path passes through, so the merge always reflects
         the final follow-up verdict."""
         current_signals = _analytical_signals.from_raw_text(question, department=signals.department)
+        folded_question = self._extractor.fold(question)
 
         # Elliptical dimension/analytical follow-up ("Doktor bazında?",
         # "Şubelere göre?") — short, has no date/pronoun, and "bazında"/"göre"
@@ -276,12 +341,68 @@ class ContextResolver:
         ):
             result.follow_up_signals.append("elliptical_analytical_followup")
 
+        # AI-INTELLIGENCE-018 (item 1/3): a fully-worded ADDITIVE/REPLACEMENT
+        # follow-up ("Bir de gerçekleşme oranını ekle.") has too many content
+        # tokens to count as elliptical, but is still unambiguously a
+        # follow-up — without this, `merge_metrics()`'s own additive-marker
+        # branch (which fires regardless of `follow_up_detected`) could pull
+        # in the inherited metric while every OTHER family (dimensions, date,
+        # ...) stayed un-inherited because `follow_up_detected` never went True.
+        if (
+            not result.follow_up_signals
+            and not current_signals.is_empty()
+            and not context.is_empty()
+            and _merge_policy.has_strong_followup_marker(folded_question)
+        ):
+            result.follow_up_signals.append("additive_or_replacement_followup")
+
+        if (
+            not result.follow_up_signals
+            and not context.is_empty()
+            and any(marker in folded_question for marker in _CONSTRAINT_EDIT_MARKERS)
+        ):
+            result.follow_up_signals.append("constraint_edit_followup")
+
+        # "Top 10 departments" does not state what is being ranked.  When a
+        # successful prior plan supplies that metric, it is a genuine ranking
+        # continuation; a fully specified ranking question with its own metric
+        # remains independent.
+        if (
+            not result.follow_up_signals
+            and not context.is_empty()
+            and current_signals.ranking is not None
+            and not current_signals.metrics
+            and bool(context.metrics)
+        ):
+            result.follow_up_signals.append("implicit_metric_ranking_followup")
+
+        # AI-INTELLIGENCE-018 (item 1): a strong-marker additive/replacement
+        # follow-up must become SELF-CONTAINED text, the same way the
+        # existing date-only-followup branch replays `context.last_question`
+        # with a swapped date — otherwise the planner (which independently
+        # re-derives dimensions/metrics from raw `state.question` text, with
+        # no access to `resolved_signals`) never sees the inherited branch
+        # dimension or prior metric and can't build the right QueryPlan/SQL.
+        # Deliberately scoped to ONLY the new strong-marker signal, not the
+        # pre-existing generic `elliptical_analytical_followup` — that one
+        # already fires for genuinely independent short questions that merely
+        # happen to be short (e.g. a new department's own doctor listing),
+        # where concatenating the prior question would corrupt the text.
+        if (
+            result.follow_up_signals
+            and _merge_policy.has_strong_followup_marker(folded_question)
+            and context.last_question
+            and result.resolved_question == question
+        ):
+            result.resolved_question = (
+                f"{context.last_question.rstrip('.')}. {question}".strip()
+            )
+            result.inherited["previous_question"] = context.last_question
+
         result.follow_up_detected = bool(result.follow_up_signals)
         result.follow_up_confidence = result.confidence
-        result.context_applied = result.applied
 
         inherited_signals = context.analytical_signals()
-        folded_question = self._extractor.fold(question)
         resolved_signals, explicit_fields, removed_fields = (
             _merge_policy.merge_analytical_signals(
                 current=current_signals,
@@ -293,7 +414,75 @@ class ContextResolver:
         result.resolved_signals = resolved_signals
         result.explicit_fields = explicit_fields
         result.removed_fields = removed_fields
+
+        # AI-INTELLIGENCE-018 (item 3): context_applied must reflect ACTUAL
+        # semantic inheritance, not just the narrower pronoun/date-only/
+        # negation branches that already set result.applied above. Any family
+        # where the merged result differs from what the current turn's own
+        # text alone would produce means a prior-turn value was retained,
+        # extended, or replaced — genuine context use. An independent full
+        # question never triggers this: merge_list_field/merge_metrics always
+        # return the current turn's own (non-empty) values unchanged when the
+        # current turn already states them explicitly, so resolved==current.
+        if not result.applied and not context.is_empty():
+            merged_uses_context = any(
+                getattr(resolved_signals, family) != getattr(current_signals, family)
+                for family in (
+                    "dimensions",
+                    "metrics",
+                    "ranking",
+                    "limit",
+                    "time_grain",
+                    "comparison_targets",
+                    *_analytical_signals.FILTER_FAMILIES,
+                )
+            )
+            if merged_uses_context:
+                result.applied = True
+                if "context_merge_applied" not in result.follow_up_signals:
+                    result.follow_up_signals.append("context_merge_applied")
+
+        result.context_applied = result.applied
         return result
+
+    def _resolve_pending_value_clarification(
+        self, question: str, pending
+    ) -> tuple[str, dict[str, list[str]]] | None:
+        """Resolves a reply to a pending grounded-value clarification (item 5/7).
+
+        Returns (resolved_question, filter_override) where `resolved_question`
+        replays the ORIGINAL analytical question (so the full pipeline resumes
+        with the right dimension/metric/date intact) and `filter_override`
+        short-circuits AI-INTELLIGENCE-016 extraction/resolution for the
+        pending field this turn (AgentState.forced_filter_override) — an
+        empty list means "clear this filter family" (an 'all' reply), a
+        one-item list means the chosen grounded value. Returns None when the
+        reply matches neither an 'all' phrase, an ordinal, nor a candidate —
+        the turn then falls through to normal (non-pending) resolution.
+        """
+        from app.planning.value_resolver import (
+            ALL_REPLY_PATTERN,
+            ORDINAL_REPLY_INDEX,
+            resolve_value,
+        )
+
+        bare_field = pending.field.split(":", 1)[-1]
+        original_question = pending.original_question or question
+        folded = _fold(question)
+
+        if ALL_REPLY_PATTERN.search(folded):
+            return original_question, {bare_field: []}
+
+        for word, index in ORDINAL_REPLY_INDEX.items():
+            if word in folded and 0 <= index < len(pending.candidate_values):
+                return original_question, {bare_field: [pending.candidate_values[index]]}
+
+        if pending.candidate_values:
+            matched = resolve_value(bare_field, question, pending.candidate_values)
+            if matched.grounded and matched.matched_value:
+                return original_question, {bare_field: [matched.matched_value]}
+
+        return None
 
     def _resolves_pending_ranking_metric(self, question: str) -> bool:
         from app.semantics import catalog
@@ -377,6 +566,40 @@ class ContextResolver:
         else:
             swapped = f"{new_date} {folded_previous}"
         return re.sub(r"\s+", " ", swapped).strip()
+
+    def _has_inheritable_analysis(self, context: ConversationContext) -> bool:
+        """A date-only continuation needs both a subject and analytical meaning."""
+        return bool(
+            context.last_question
+            and context.entity_types
+            and (context.metrics or context.analysis_type)
+        )
+
+    def _resolve_relative_year(
+        self, expression: str, reference_expression: str | None
+    ) -> str:
+        """Resolve 'bir önceki yıl' against the active calendar-year anchor.
+
+        Other relative expressions retain their normal QueryAnalyzer semantics
+        (for example ``geçen yıl`` is relative to today's calendar year).
+        """
+        folded = self._extractor.fold(expression)
+        if folded not in {"bir onceki yil", "onceki yil"}:
+            return expression
+        if reference_expression:
+            match = re.search(r"\b((?:19|20)\d{2})\b", reference_expression)
+            if match:
+                return f"{int(match.group(1)) - 1} yilinda"
+        return "gecen yil"
+
+    def _date_clarification(self, expression: str | None) -> str:
+        match = re.search(r"\b((?:19|20)\d{2})\b", expression or "")
+        if match:
+            return (
+                f"{match.group(1)} yılı için hangi randevu analizini görmek "
+                "istediğinizi belirtir misiniz?"
+            )
+        return _CLARIFICATION_DATE_WITHOUT_CONTEXT
 
     def _clarification(
         self, result: ResolutionResult, context: ConversationContext

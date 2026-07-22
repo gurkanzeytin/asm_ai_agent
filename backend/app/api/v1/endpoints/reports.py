@@ -1,25 +1,31 @@
+import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_reporting_service
+from app.api.exception_handlers import classify_exception
 from app.application_models.workflow_result import WorkflowResult
 from app.context.session_store import generate_session_id
+from app.reporting.presentation import build_column_metadata
 from app.schemas.report import (
     AnalyticsSchema,
     InsightSchema,
+    IntentSchema,
+    MetadataSchema,
     ObservationItemSchema,
     ObservationsSchema,
-    MetadataSchema,
     QueryResultSchema,
     ReportRequest,
     ReportResponse,
     ReportSchema,
     TimingSchema,
-    IntentSchema,
     VisualizationSchema,
 )
 from app.services.reporting_service import ReportingService
+from app.services.result_safety import api_result_window
+from app.services.workflow_streaming import stream_workflow
 
 router = APIRouter()
 
@@ -33,10 +39,24 @@ def _map_to_response(result: WorkflowResult) -> ReportResponse:
     query_result_schema = None
     if result.query_result:
         qr = result.query_result
+        window = api_result_window(qr, result.analytics)
         query_result_schema = QueryResultSchema(
             columns=qr.columns,
-            rows=qr.rows,
-            row_count=qr.row_count,
+            rows=window.rows,
+            row_count=window.returned_row_count,
+            source_record_count=window.source_record_count,
+            result_group_count=window.result_group_count,
+            returned_row_count=window.returned_row_count,
+            displayed_row_count=window.displayed_row_count,
+            result_truncated=window.result_truncated,
+            applied_limit=window.applied_limit,
+            has_more=window.has_more,
+            total_count=window.total_count,
+            column_metadata=build_column_metadata(
+                qr.columns,
+                resolved_metrics=result.resolved_metrics,
+                resolved_dimensions=result.resolved_dimensions,
+            ),
         )
 
     report_schema = None
@@ -105,6 +125,18 @@ def _map_to_response(result: WorkflowResult) -> ReportResponse:
             insights=an.insights,
             visualization=visualization_schema,
             row_count=an.row_count,
+            technical_row_count=an.technical_row_count,
+            business_record_count=an.business_record_count,
+            result_shape=an.result_shape.value,
+            aggregate_result=an.aggregate_result,
+            displayable_kpis=[item.model_dump() for item in an.displayable_kpis],
+            metric_summaries={
+                metric_id: summary.model_dump()
+                for metric_id, summary in an.metric_summaries.items()
+            },
+            comparison_category_count=an.comparison_category_count,
+            comparison_sufficient=an.comparison_sufficient,
+            comparison_limitation_reason=an.comparison_limitation_reason,
         )
 
     insight_schema = None
@@ -154,6 +186,10 @@ def _map_to_response(result: WorkflowResult) -> ReportResponse:
         success=len(result.errors) == 0,
         workflow_id=result.workflow_id,
         question=result.question,
+        raw_question=result.raw_question,
+        resolved_question=result.resolved_question,
+        answerability_input_source=result.answerability_input_source,
+        answerability_signals=result.answerability_signals,
         generated_sql=result.generated_sql,
         query_result=query_result_schema,
         report=report_schema,
@@ -223,3 +259,37 @@ async def generate_report(
         request.question, session_id=request.session_id or generate_session_id()
     )
     return _map_to_response(result)
+
+
+@router.post(
+    "/stream",
+    summary="Generate a report with workflow progress",
+    response_class=StreamingResponse,
+)
+async def generate_report_stream(
+    request: ReportRequest,
+    reporting_service: Annotated[ReportingService, Depends(get_reporting_service)],
+) -> StreamingResponse:
+    """Streams real graph stages and the final response as newline-delimited JSON."""
+
+    session_id = request.session_id or generate_session_id()
+
+    async def events():
+        async for event in stream_workflow(reporting_service, request.question, session_id):
+            if event.kind == "progress":
+                payload = {"type": "progress", "stage": event.stage}
+            elif event.kind == "complete" and event.result is not None:
+                payload = {
+                    "type": "complete",
+                    "data": _map_to_response(event.result).model_dump(mode="json"),
+                }
+            else:
+                _, code, message = classify_exception(event.error or RuntimeError())
+                payload = {"type": "error", "error_code": code, "message": message}
+            yield json.dumps(payload, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(
+        events(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

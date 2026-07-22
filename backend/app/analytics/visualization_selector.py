@@ -12,6 +12,7 @@ from app.analytics.models import (
     VisualizationRecommendation,
     VisualizationType,
 )
+from app.reporting.presentation import get_visualization_label
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,21 @@ class VisualizationSelector:
         self.max_pie_categories = max_pie_categories
 
     def select(
+        self,
+        data_shape: DataShape,
+        intents: list[AnalyticsIntent],
+        row_count: int,
+        category_count: int = 0,
+        metric_count: int = 1,
+    ) -> VisualizationRecommendation:
+        recommendation = self._select(data_shape, intents, row_count, category_count, metric_count)
+        # Presentation metadata only: attach the Türkçe etiket, canonical
+        # `type` is untouched and remains what all switching logic uses.
+        return recommendation.model_copy(
+            update={"type_label": get_visualization_label(recommendation.type.value)}
+        )
+
+    def _select(
         self,
         data_shape: DataShape,
         intents: list[AnalyticsIntent],

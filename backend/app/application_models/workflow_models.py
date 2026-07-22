@@ -18,6 +18,42 @@ class QueryResult(BaseModel):
     success: bool = Field(..., description="Flag indicating whether query execution was successful.")
     executed_at: datetime = Field(..., description="Timestamp showing when query execution occurred.")
     database_provider: str = Field(..., description="Target database engine provider name.")
+    source_record_count: Optional[int] = Field(
+        default=None,
+        description="Underlying business-record count only when genuinely known.",
+    )
+    result_group_count: Optional[int] = Field(
+        default=None,
+        description="Number of analytical groups only when the complete group set is known.",
+    )
+    returned_row_count: Optional[int] = Field(
+        default=None,
+        description="Rows retained at the current execution/presentation boundary.",
+    )
+    displayed_row_count: Optional[int] = Field(
+        default=None,
+        description="Rows intended for one user-visible page.",
+    )
+    result_truncated: bool = Field(
+        default=False,
+        description="Whether any upstream or current boundary removed additional rows.",
+    )
+    applied_limit: Optional[int] = Field(
+        default=None,
+        description="Hard row limit applied at the current boundary.",
+    )
+    has_more: bool = Field(
+        default=False,
+        description="Whether at least one additional row is known to exist.",
+    )
+    total_count: Optional[int] = Field(
+        default=None,
+        description="Exact total only when already known; never triggers an implicit COUNT query.",
+    )
+    unsafe_detail_output: bool = Field(
+        default=False,
+        description="Oversized identifier-bearing analytical detail blocked from presentation.",
+    )
 
 
 class WorkflowExecutionResult(BaseModel):

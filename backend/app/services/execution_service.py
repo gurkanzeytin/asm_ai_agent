@@ -1,12 +1,16 @@
-from datetime import datetime, timezone
 import logging
 import time
+from datetime import datetime, timezone
 
 from app.application_models.workflow_models import QueryResult
 from app.core.config import settings
 from app.repositories.interfaces import IAnalyticalRepository
 from app.services.exceptions import QueryExecutionException
 from app.services.interfaces import IExecutionService
+from app.shared.result_limits import (
+    DEFAULT_TABLE_PAGE_SIZE,
+    MAX_DATABASE_FETCH_ROWS,
+)
 from app.sql_validator.interfaces import ISQLValidator
 
 logger = logging.getLogger(__name__)
@@ -42,8 +46,11 @@ class ExecutionService(IExecutionService):
 
         # 3. Trigger execution on the repository
         try:
-            rows = await self.repository.execute_readonly_query(sql)
+            fetched_rows = await self.repository.execute_readonly_query(sql)
             duration_ms = (time.perf_counter() - start_time) * 1000
+
+            has_more = len(fetched_rows) > MAX_DATABASE_FETCH_ROWS
+            rows = fetched_rows[:MAX_DATABASE_FETCH_ROWS]
 
             # Dynamic columns parse mapping
             columns = list(rows[0].keys()) if rows else []
@@ -65,6 +72,12 @@ class ExecutionService(IExecutionService):
                 success=True,
                 executed_at=executed_at,
                 database_provider=provider,
+                returned_row_count=row_count,
+                displayed_row_count=min(row_count, DEFAULT_TABLE_PAGE_SIZE),
+                result_truncated=has_more,
+                applied_limit=MAX_DATABASE_FETCH_ROWS,
+                has_more=has_more,
+                total_count=None,
             )
 
         except Exception as e:

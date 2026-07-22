@@ -42,6 +42,30 @@ class DataShape(StrEnum):
     TABULAR = "tabular"
 
 
+class ResultShape(StrEnum):
+    """Business-semantic shape of the executed plan (not merely row layout)."""
+
+    RAW_RECORD_ROWS = "raw_record_rows"
+    GROUPED_ROWS = "grouped_rows"
+    SCALAR_AGGREGATE = "scalar_aggregate"
+    MULTI_METRIC_SCALAR_AGGREGATE = "multi_metric_scalar_aggregate"
+    TIME_SERIES = "time_series"
+    CATEGORICAL_GROUPED_RESULT = "categorical_grouped_result"
+    EMPTY = "empty"
+
+
+class DisplayableKPI(BaseModel):
+    """A business KPI explicitly safe for user-facing presentation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    key: str
+    label: str
+    value: Any
+    format: str = "decimal"
+    unit: str | None = None
+
+
 class VisualizationType(StrEnum):
     """Supported visualization recommendations (metadata only, no rendering)."""
 
@@ -61,6 +85,9 @@ class VisualizationRecommendation(BaseModel):
 
     type: VisualizationType
     reason: str
+    # Presentation metadata only: Türkçe etiket for `type`. `type` remains
+    # the canonical value frontend/backend logic switches on.
+    type_label: str | None = None
 
 
 class MetricSummary(BaseModel):
@@ -79,6 +106,13 @@ class MetricSummary(BaseModel):
     maximum: float | None = None
     top_dimension: str | None = None
     bottom_dimension: str | None = None
+    # Presentation metadata only (AI-INTELLIGENCE-012): the Türkçe display
+    # label for `metric_id`. `metric_id` remains the source of truth used by
+    # code/tests; `metric_label` is what user-facing surfaces render.
+    metric_label: str | None = None
+    value: float | None = None
+    format: str | None = None
+    unit: str | None = None
 
 
 class AnalyticsResult(BaseModel):
@@ -92,6 +126,9 @@ class AnalyticsResult(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     analytics_type: str
+    # Presentation metadata only: Türkçe etiket for `analytics_type`.
+    # `analytics_type` remains the canonical value.
+    analytics_type_label: str | None = None
     intents: list[AnalyticsIntent] = Field(default_factory=list)
     data_shape: DataShape = DataShape.EMPTY
     metrics: dict[str, Any] = Field(default_factory=dict)
@@ -100,6 +137,11 @@ class AnalyticsResult(BaseModel):
     metric_column: str | None = None
     label_column: str | None = None
     row_count: int = 0
+    technical_row_count: int = 0
+    business_record_count: int | None = None
+    result_shape: ResultShape = ResultShape.EMPTY
+    aggregate_result: bool = False
+    displayable_kpis: list[DisplayableKPI] = Field(default_factory=list)
     duration_ms: float = 0.0
     metric_summaries: dict[str, MetricSummary] = Field(default_factory=dict)
 

@@ -67,7 +67,11 @@ class AnalyzeIntentNode(IAgentNode):
 
             # AG-022: schema-domain coverage verdict, consumed by the intent
             # router to divert unanswerable questions to guidance instead of SQL.
-            answerability = self.answerability_guard.assess(state.question)
+            answerability = self.answerability_guard.assess(
+                state.question,
+                state.answerability_context_signals,
+                context=state.answerability_input,
+            )
 
             duration = (time.perf_counter() - start_time) * 1000
             logger.info("AnalyzeIntentNode completed successfully.")
@@ -77,6 +81,7 @@ class AnalyzeIntentNode(IAgentNode):
                     "intent": intent_result,
                     "semantic_frame": semantic_frame,
                     "answerable": answerability.answerable,
+                    "answerability_signals": answerability.signals,
                     # A pre-seeded ambiguity (e.g. from the conversational
                     # context resolver) takes precedence over local detection.
                     "ambiguity": state.ambiguity or ambiguity,

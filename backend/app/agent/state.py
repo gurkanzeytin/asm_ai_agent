@@ -13,12 +13,18 @@ from app.application_models.workflow_models import QueryResult
 from app.database_intelligence.models import DatabaseContext
 from app.planning.models import QueryPlan
 from app.semantics.models import SemanticFrame
+from app.services.answerability import AnswerabilityInput
 
 
 class AgentState(BaseModel):
     """Strongly typed Pydantic state passed across workflow nodes."""
 
     question: str = Field(..., description="The user query input question.")
+    raw_question: str | None = Field(
+        default=None,
+        description="Current user text before conversational rewriting; used to identify "
+        "which QueryPlan fields are explicit on this turn.",
+    )
     database_context: Optional[DatabaseContext] = Field(
         default=None, description="Discovered database tables/views context."
     )
@@ -85,6 +91,15 @@ class AgentState(BaseModel):
         default=None,
         description="Deterministic query plan built between NLU and SQL generation (AG-022).",
     )
+    retained_query_plan: QueryPlan | None = Field(
+        default=None,
+        description="Latest successful QueryPlan for this session, supplied only for a "
+        "genuine follow-up and merged before SQL generation.",
+    )
+    context_follow_up_detected: bool = Field(
+        default=False,
+        description="Authoritative context-layer follow-up verdict controlling plan inheritance.",
+    )
     semantic_frame: Optional[SemanticFrame] = Field(
         default=None,
         description="Structured semantic interpretation of the question (REASONING-001).",
@@ -99,6 +114,23 @@ class AgentState(BaseModel):
         default=None,
         description="Answerability guard verdict: whether the question maps onto the schema domain.",
     )
+    answerability_input_source: str = Field(
+        default="raw_question",
+        description="Whether answerability evaluated raw text or resolved conversational context.",
+    )
+    answerability_signals: List[str] = Field(
+        default_factory=list,
+        description="Deterministic domain/date/metric signals used by the answerability guard.",
+    )
+    answerability_context_signals: List[str] = Field(
+        default_factory=list,
+        description="Trusted typed signals supplied by conversational context resolution.",
+    )
+    answerability_input: Optional["AnswerabilityInput"] = Field(
+        default=None,
+        description="AI-INTELLIGENCE-018 typed answerability decision contract, built once "
+        "in ReportingService from the resolved conversational context.",
+    )
     sql_retry_count: int = Field(
         default=0,
         description="Number of execution-failure SQL rewrite retries already used.",
@@ -106,5 +138,12 @@ class AgentState(BaseModel):
     last_execution_error: Optional[str] = Field(
         default=None,
         description="Database error from the last failed execution, fed back to SQL regeneration.",
+    )
+    forced_filter_override: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="AI-INTELLIGENCE-017: fields resolved by a pending-clarification "
+        "reply this turn (e.g. 'hepsini' -> {field: []}, an explicit/ordinal choice "
+        "-> {field: [value]}). ResolveFilterValuesNode applies these directly and "
+        "never re-extracts/re-resolves them from question text.",
     )
 

@@ -160,8 +160,15 @@ class TestOutOfScopeNode:
         state = await node.execute(AgentState(question="Bitcoin fiyatı?"))
         assert state.outcome == AgentOutcome.OUT_OF_SCOPE.value
         assert state.generated_report is not None
-        assert "Randevular" in state.generated_report.markdown
-        assert "Örnek sorular" in state.generated_report.markdown
+        markdown = state.generated_report.markdown
+        # AI-INTELLIGENCE-018 (item 4): capability list is now derived from
+        # the real catalog (randevu-domain metric/dimension names), not a
+        # hardcoded "Randevular" bullet.
+        assert "randevu" in markdown.lower()
+        assert "Örnek sorular" in markdown
+        # Never advertises domains absent from dbo.vw_RandevuRaporu.
+        for unsupported in ("reçete", "fatura", "laboratuvar", "yatış"):
+            assert unsupported not in markdown.lower()
         assert not state.errors
 
 

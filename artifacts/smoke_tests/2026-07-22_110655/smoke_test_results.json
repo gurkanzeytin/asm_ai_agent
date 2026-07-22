@@ -1,0 +1,1370 @@
+{
+  "generated_at": "2026-07-22T11:06:55+03:00",
+  "summary": {
+    "scenario_count": 6,
+    "turn_count": 8,
+    "pass": 5,
+    "partial": 0,
+    "fail": 3,
+    "pass_rate": 62.5,
+    "average_duration_seconds": 13.4351625,
+    "category_breakdown": {
+      "Bağlam": {
+        "PASS": 3,
+        "FAIL": 1
+      },
+      "Dağılım": {
+        "PASS": 1
+      },
+      "Filtre": {
+        "FAIL": 1
+      },
+      "Karşılaştırma": {
+        "PASS": 1
+      },
+      "Trend": {
+        "FAIL": 1
+      }
+    },
+    "provider_breakdown": {
+      "deterministic": 4,
+      "nvidia": 3,
+      "static": 1
+    },
+    "slowest": [
+      {
+        "scenario_id": "05_grounded_branch",
+        "turn_number": 1,
+        "duration_seconds": 33.5003
+      },
+      {
+        "scenario_id": "04_complex_multi_metric",
+        "turn_number": 1,
+        "duration_seconds": 23.8655
+      },
+      {
+        "scenario_id": "03_monthly_trend",
+        "turn_number": 1,
+        "duration_seconds": 19.6497
+      },
+      {
+        "scenario_id": "09_year_only_followup",
+        "turn_number": 1,
+        "duration_seconds": 11.0101
+      },
+      {
+        "scenario_id": "09_year_only_followup",
+        "turn_number": 2,
+        "duration_seconds": 10.0257
+      }
+    ],
+    "critical_failures": 4,
+    "major_failures": 4
+  },
+  "results": [
+    {
+      "timestamp": "2026-07-22T11:04:55+03:00",
+      "scenario_id": "01_basic_distribution",
+      "scenario_title": "Randevu Durumu Dağılımı",
+      "category": "Dağılım",
+      "turn_number": 1,
+      "question": "Randevu durumlarının dağılımını göster.",
+      "session_id": "0b5b3ea5-7c98-4e48-b621-ac9139366321",
+      "http_status": 200,
+      "response_outcome": "EXECUTE_SQL",
+      "report_text": "# Sorgu Sonucu\n\nToplam 5 kayıt listelenmiştir.\n\n| Randevudurumu | Toplam Randevu |\n| --- | --- |\n| Gerçekleşti | 1.137.937 |\n| Giriş Yapılmış | 184.324 |\n| Gelmedi | 170.702 |\n| İşlem Sürmekte | 142.347 |\n| Beklemede | 48.566 |\n\n**Sorgulanan metrikler**\n- **Toplam Randevu**: toplam 1.68388e+06, ortalama 336775, en yüksek: Gerçekleşti, en düşük: Beklemede\n\n**Öne çıkan bulgular**\n- En yüksek değer Gerçekleşti grubunda (1137937); en düşük Beklemede (48566).\n- Gruplar arasında belirgin fark var: en yüksek değer en düşüğün 23.4 katı.",
+      "generated_sql": "SELECT RandevuDurumu AS RandevuDurumu, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\n\nGROUP BY RandevuDurumu\nORDER BY appointment_count DESC;",
+      "sql_source": null,
+      "query_row_count": 5,
+      "query_columns": [
+        "RandevuDurumu",
+        "appointment_count"
+      ],
+      "first_row_keys": [
+        "RandevuDurumu",
+        "appointment_count"
+      ],
+      "safe_aggregate_summaries": {
+        "metrics": {
+          "count": 5,
+          "total": 1683876.0,
+          "average": 336775.2,
+          "median": 170702.0,
+          "minimum": 48566.0,
+          "maximum": 1137937.0,
+          "highest_value": 1137937.0,
+          "lowest_value": 48566.0,
+          "top_category": "Gerçekleşti",
+          "bottom_category": "Beklemede"
+        },
+        "kpis": []
+      },
+      "analytics_type": "distribution",
+      "result_shape": "categorical_grouped_result",
+      "metric_ids": [
+        "appointment_count"
+      ],
+      "dimension_ids": [
+        "status"
+      ],
+      "context_applied": false,
+      "inherited_fields": [],
+      "provider": "deterministic",
+      "model": "templates",
+      "fallback_used": false,
+      "total_duration_seconds": 4.7085,
+      "stage_timings": {
+        "analyze_intent_ms": 12.35520001500845,
+        "analyze_results_ms": 1.8958000000566244,
+        "generate_insights_ms": 1.0355999984312803,
+        "generate_observations_ms": 0.27829999453388155,
+        "retrieve_context_ms": 1740.2363999863155,
+        "generate_sql_ms": 18.867100006900728,
+        "validate_sql_ms": 0.000100000761449337,
+        "execute_sql_ms": 2932.6286999857984,
+        "generate_report_ms": 1.1300000187475234,
+        "insight_llm_ms": 0.0,
+        "observation_llm_ms": null,
+        "llm_total_ms": 0.6043000030331314,
+        "total_ms": 4708.513000019593
+      },
+      "errors": [],
+      "stack_trace": null,
+      "assertions": [
+        {
+          "kind": "outcome",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "EXECUTE_SQL",
+          "actual": "EXECUTE_SQL",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "analysis_type",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": "distribution",
+          "actual": "distribution",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "provider_model",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": {
+            "provider": "template|deterministic",
+            "model_contains": null
+          },
+          "actual": {
+            "providers": [
+              "deterministic",
+              "deterministic",
+              "template"
+            ],
+            "models": [
+              "templates",
+              "table"
+            ]
+          },
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "metrics",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": [
+            "appointment_count"
+          ],
+          "actual": [
+            "appointment_count"
+          ],
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "dimensions",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": [
+            "status"
+          ],
+          "actual": [
+            "status"
+          ],
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "context_applied",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": false,
+          "actual": false,
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "sql_clause",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "contains GROUP BY RandevuDurumu",
+          "actual": "SELECT RandevuDurumu AS RandevuDurumu, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\n\nGROUP BY RandevuDurumu\nORDER BY appointment_count DESC;",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "sql_clause",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "not_contains WHERE RandevuDurumu =",
+          "actual": "SELECT RandevuDurumu AS RandevuDurumu, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\n\nGROUP BY RandevuDurumu\nORDER BY appointment_count DESC;",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "visible_text",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "not_contains Bu Soru Veri Kapsamı Dışında",
+          "actual": "# Sorgu Sonucu\n\nToplam 5 kayıt listelenmiştir.\n\n| Randevudurumu | Toplam Randevu |\n| --- | --- |\n| Gerçekleşti | 1.137.937 |\n| Giriş Yapılmış | 184.324 |\n| Gelmedi | 170.702 |\n| İşlem Sürmekte | 142.347 |\n| Beklemede | 48.566 |\n\n**Sorgulanan metrikler**\n- **Toplam Randevu**: toplam 1.68388e+06, ortalama 336775, en yüksek: Gerçekleşti, en düşük: Beklemede\n\n**Öne çıkan bulgular**\n- En yüksek değer Gerçekleşti grubunda (1137937); en düşük Beklemede (48566).\n- Gruplar arasında belirgin fark var: en yüksek değer en düşüğün 23.4 katı.\nToplam 1.683.876 kayıttan 1.137.937 tanesi (%67,6) 'Gerçekleşti' durumunda. Kalan 545.939 kayıt: 184.324 'Giriş Yapılmış', 170.702 'Gelmedi', 142.347 'İşlem Sürmekte', 48.566 'Beklemede'.\nDağılım Analizi\nToplam 1.683.876 kayıttan 1.137.937 tanesi (%67,6) 'Gerçekleşti' durumunda. Kalan 545.939 kayıt: 184.324 'Giriş Yapılmış', 170.702 'Gelmedi', 142.347 'İşlem Sürmekte', 48.566 'Beklemede'.\nEn yüksek değer 'Gerçekleşti' grubunda.\n'Gerçekleşti' toplamın %67,6 kadarını oluşturuyor.\nKalan 4 kategori toplamın %32,4 kadarını paylaşıyor.\nSıralamada ilk sırada 'Gerçekleşti' (1.137.937) yer alıyor.\nİkinci sıradaki 'Giriş Yapılmış' ile farkı 953.613.\nSonuç kümesindeki toplam: 1.683.876.\nOrtalama değer: 336.775,2.\nDeğerler 48.566 ile 1.137.937 arasında.\n'Gerçekleşti' toplamın yarısından fazlasını oluşturuyor.\n'Gerçekleşti' ortalamanın belirgin biçimde üzerinde.",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "duration",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": "<= 30.0",
+          "actual": 4.7085,
+          "diagnostic": "Beklenti karşılandı."
+        }
+      ],
+      "verdict": "PASS",
+      "unavailable_fields": [
+        "sql_source",
+        "server_stack_trace"
+      ]
+    },
+    {
+      "timestamp": "2026-07-22T11:05:18+03:00",
+      "scenario_id": "03_monthly_trend",
+      "scenario_title": "Aylık Eğilim",
+      "category": "Trend",
+      "turn_number": 1,
+      "question": "Son 6 aydaki randevu eğilimini kısaca yorumla.",
+      "session_id": "00c6bbec-a7db-4e7a-b226-98b0547d0c8c",
+      "http_status": 200,
+      "response_outcome": "EXECUTE_SQL",
+      "report_text": "# Aylık Randevu Sayısı Eğilim Analizi\n\n## Sorgu Sonucu\nAylık Randevu Sayısı son 6 tam dönemde (Ocak 2026 - Haziran 2026) tutarlı bir yükseliş trendi göstermekte, ortalama 12.57 randevudan 58.33% artışla 19 randevuya ulaşmıştır. Temmuz 2026 verisi (7 randevu) dönem henüz tamamlanmadığı için trend karşılaştırmasından hariç tutulmuştur.\n\n## Öne Çıkan Bulgular\n- Aylık Randevu Sayısı Haziran 2026'da 19 ile en yüksek seviyesine, Temmuz 2026'da 7 ile en düşük seviyesine ulaşmıştır\n- Son 6 tam dönemde (Ocak-Haziran 2026) tutarlı yükseliş trendi (%58.33 artış) gözlemlenmiştir\n- Trend analizi için Temmuz 2026 verisi (kısmi dönem) karşılaştırmadan çıkarılmıştır\n- Aylık Randevu Sayısı Ocak 2026'dan Haziran 2026'ya kadar sürekli artış göstermekte, volatilite %22.53 seviyesindedir\n- Eğim katsayısı 0.9429 ile aylık ortalama yaklaşık 1 randevu artış hızı işaret etmektedir\n\n## Olası Açıklamalar\n- Temmuz 2026'daki düşüş (7 randevu) dönem henüz tamamlanmadığı için trend kırılması olarak değerlendirilmemeli, olası veri eksikliğinden kaynaklanabilir\n- Sadece 6 tam dönemlik veri ile uzun vadeli trend kalıcılığı hakkında kesin yargı sınırlıdır\n- 2026-07-01 dönemi henüz tamamlanmadığı için eğilim hesabında tam dönemlerle birlikte değerlendirilmemiştir.\n\n## Veri\nToplam 7 kayıt listelenmiştir.\n\n| Period Start | Aylık Randevu Sayısı |\n| --- | --- |\n| 2026-01-01 | 12 |\n| 2026-02-01 | 15 |\n| 2026-03-01 | 9 |\n| 2026-04-01 | 13 |\n| 2026-05-01 | 13 |\n| 2026-06-01 | 19 |\n| 2026-07-01 | 7 |\n\n**Sorgulanan metrikler**\n- **Aylık Randevu Sayısı**: toplam 88, ortalama 12.57, en yüksek: 2026-06-01, en düşük: 2026-07-01\n\n**Öne çıkan bulgular**\n- En yüksek değer 2026-06-01 grubunda (19); en düşük 2026-07-01 (7).\n\n**Varsayımlar ve Sınırlamalar**\n- 2026-07-01 dönemi henüz tamamlanmadığı için eğilim hesabında tam dönemlerle birlikte değerlendirilmemiştir.",
+      "generated_sql": "SELECT DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1) AS period_start, COUNT(*) AS monthly_appointment_count\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2026-01-22' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-22')\nGROUP BY DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1)\nORDER BY period_start ASC;",
+      "sql_source": null,
+      "query_row_count": 7,
+      "query_columns": [
+        "period_start",
+        "monthly_appointment_count"
+      ],
+      "first_row_keys": [
+        "monthly_appointment_count",
+        "period_start"
+      ],
+      "safe_aggregate_summaries": {
+        "metrics": {
+          "count": 7,
+          "total": 88.0,
+          "average": 12.57,
+          "median": 13.0,
+          "minimum": 7.0,
+          "maximum": 19.0,
+          "highest_value": 19.0,
+          "lowest_value": 7.0,
+          "highest_period": "2026-06-01",
+          "lowest_period": "2026-07-01",
+          "largest_change": "2026-07-01",
+          "difference": 7.0,
+          "percentage_change": 58.33,
+          "growth_rate": 58.33,
+          "trend_direction": "upward",
+          "endpoint_change": 7.0,
+          "endpoint_percentage_change": 58.33,
+          "endpoint_direction": "upward",
+          "slope": 0.9429,
+          "slope_direction": "upward",
+          "trend_consistency": "consistent_upward",
+          "volatility": 22.53,
+          "comparable_period_count": 6,
+          "first_comparable_period": "2026-01-01",
+          "last_comparable_period": "2026-06-01",
+          "comparison_excluded_partial_period": true,
+          "slope_direction_tr": "yükselişe",
+          "endpoint_direction_tr": "yükseliş"
+        },
+        "kpis": []
+      },
+      "analytics_type": "trend",
+      "result_shape": "time_series",
+      "metric_ids": [
+        "monthly_appointment_count"
+      ],
+      "dimension_ids": [],
+      "context_applied": false,
+      "inherited_fields": [],
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "fallback_used": false,
+      "total_duration_seconds": 19.6497,
+      "stage_timings": {
+        "analyze_intent_ms": 10.561800008872524,
+        "analyze_results_ms": 0.8918999810703099,
+        "generate_insights_ms": 18969.362000003457,
+        "generate_observations_ms": 0.3252000024076551,
+        "retrieve_context_ms": 650.2246000163723,
+        "generate_sql_ms": 4.060200008098036,
+        "validate_sql_ms": 0.000500003807246685,
+        "execute_sql_ms": 13.29289999557659,
+        "generate_report_ms": 0.9282000246457756,
+        "insight_llm_ms": 18967.251599999145,
+        "observation_llm_ms": null,
+        "llm_total_ms": 18967.523700004676,
+        "total_ms": 19649.70690003247
+      },
+      "errors": [],
+      "stack_trace": null,
+      "assertions": [
+        {
+          "kind": "outcome",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "EXECUTE_SQL",
+          "actual": "EXECUTE_SQL",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "analysis_type",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": "trend|time_series",
+          "actual": "trend",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "provider_model",
+          "passed": false,
+          "severity": "MAJOR",
+          "expected": {
+            "provider": "ollama|local_llm",
+            "model_contains": "qwen"
+          },
+          "actual": {
+            "providers": [
+              "nvidia",
+              "remote_llm",
+              "insight_reuse"
+            ],
+            "models": [
+              "nvidia/nemotron-3-ultra-550b-a55b",
+              "nvidia/nemotron-3-ultra-550b-a55b"
+            ]
+          },
+          "diagnostic": "Provider veya model yönlendirmesi beklentiyle eşleşmiyor."
+        },
+        {
+          "kind": "metrics",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": [
+            "monthly_appointment_count"
+          ],
+          "actual": [
+            "monthly_appointment_count"
+          ],
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "context_applied",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": false,
+          "actual": false,
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "sql_clause",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "contains GROUP BY",
+          "actual": "SELECT DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1) AS period_start, COUNT(*) AS monthly_appointment_count\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2026-01-22' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-22')\nGROUP BY DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1)\nORDER BY period_start ASC;",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "visible_text",
+          "passed": true,
+          "severity": "MINOR",
+          "expected": "not_contains monthly_appointment_count",
+          "actual": "# Aylık Randevu Sayısı Eğilim Analizi\n\n## Sorgu Sonucu\nAylık Randevu Sayısı son 6 tam dönemde (Ocak 2026 - Haziran 2026) tutarlı bir yükseliş trendi göstermekte, ortalama 12.57 randevudan 58.33% artışla 19 randevuya ulaşmıştır. Temmuz 2026 verisi (7 randevu) dönem henüz tamamlanmadığı için trend karşılaştırmasından hariç tutulmuştur.\n\n## Öne Çıkan Bulgular\n- Aylık Randevu Sayısı Haziran 2026'da 19 ile en yüksek seviyesine, Temmuz 2026'da 7 ile en düşük seviyesine ulaşmıştır\n- Son 6 tam dönemde (Ocak-Haziran 2026) tutarlı yükseliş trendi (%58.33 artış) gözlemlenmiştir\n- Trend analizi için Temmuz 2026 verisi (kısmi dönem) karşılaştırmadan çıkarılmıştır\n- Aylık Randevu Sayısı Ocak 2026'dan Haziran 2026'ya kadar sürekli artış göstermekte, volatilite %22.53 seviyesindedir\n- Eğim katsayısı 0.9429 ile aylık ortalama yaklaşık 1 randevu artış hızı işaret etmektedir\n\n## Olası Açıklamalar\n- Temmuz 2026'daki düşüş (7 randevu) dönem henüz tamamlanmadığı için trend kırılması olarak değerlendirilmemeli, olası veri eksikliğinden kaynaklanabilir\n- Sadece 6 tam dönemlik veri ile uzun vadeli trend kalıcılığı hakkında kesin yargı sınırlıdır\n- 2026-07-01 dönemi henüz tamamlanmadığı için eğilim hesabında tam dönemlerle birlikte değerlendirilmemiştir.\n\n## Veri\nToplam 7 kayıt listelenmiştir.\n\n| Period Start | Aylık Randevu Sayısı |\n| --- | --- |\n| 2026-01-01 | 12 |\n| 2026-02-01 | 15 |\n| 2026-03-01 | 9 |\n| 2026-04-01 | 13 |\n| 2026-05-01 | 13 |\n| 2026-06-01 | 19 |\n| 2026-07-01 | 7 |\n\n**Sorgulanan metrikler**\n- **Aylık Randevu Sayısı**: toplam 88, ortalama 12.57, en yüksek: 2026-06-01, en düşük: 2026-07-01\n\n**Öne çıkan bulgular**\n- En yüksek değer 2026-06-01 grubunda (19); en düşük 2026-07-01 (7).\n\n**Varsayımlar ve Sınırlamalar**\n- 2026-07-01 dönemi henüz tamamlanmadığı için eğilim hesabında tam dönemlerle birlikte değerlendirilmemiştir.\nAylık Randevu Sayısı son 6 tam dönemde (Ocak 2026 - Haziran 2026) tutarlı bir yükseliş trendi göstermekte, ortalama 12.57 randevudan 58.33% artışla 19 randevuya ulaşmıştır. Temmuz 2026 verisi (7 randevu) dönem henüz tamamlanmadığı için trend karşılaştırmasından hariç tutulmuştur.\nAylık Randevu Sayısı Eğilim Analizi\nAylık Randevu Sayısı Haziran 2026'da 19 ile en yüksek seviyesine, Temmuz 2026'da 7 ile en düşük seviyesine ulaşmıştır\nSon 6 tam dönemde (Ocak-Haziran 2026) tutarlı yükseliş trendi (%58.33 artış) gözlemlenmiştir\nTrend analizi için Temmuz 2026 verisi (kısmi dönem) karşılaştırmadan çıkarılmıştır\nAylık Randevu Sayısı Ocak 2026'dan Haziran 2026'ya kadar sürekli artış göstermekte, volatilite %22.53 seviyesindedir\nEğim katsayısı 0.9429 ile aylık ortalama yaklaşık 1 randevu artış hızı işaret etmektedir\nTemmuz 2026'daki düşüş (7 randevu) dönem henüz tamamlanmadığı için trend kırılması olarak değerlendirilmemeli, olası veri eksikliğinden kaynaklanabilir\nSadece 6 tam dönemlik veri ile uzun vadeli trend kalıcılığı hakkında kesin yargı sınırlıdır\n2026-07-01 dönemi henüz tamamlanmadığı için eğilim hesabında tam dönemlerle birlikte değerlendirilmemiştir.",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "duration",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": "<= 45.0",
+          "actual": 19.6497,
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "equals_path",
+          "passed": false,
+          "severity": "MAJOR",
+          "expected": "month",
+          "actual": null,
+          "diagnostic": "Aylık zaman kırılımı bekleniyor."
+        },
+        {
+          "kind": "no_contradictory_trend_rules",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": true,
+          "actual": [
+            "CONSISTENT_UPWARD_TREND",
+            "PARTIAL_PERIOD_EXCLUDED"
+          ],
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "partial_period_disclosed",
+          "passed": true,
+          "severity": "MINOR",
+          "expected": "Kısmi dönem varsa açıklama",
+          "actual": {
+            "applicable": true,
+            "visible_text": "# aylık randevu sayısı eğilim analizi\n\n## sorgu sonucu\naylık randevu sayısı son 6 tam dönemde (ocak 2026 - haziran 2026) tutarlı bir yükseliş trendi göstermekte, ortalama 12.57 randevudan 58.33% artışla 19 randevuya ulaşmıştır. temmuz 2026 verisi (7 randevu) dönem henüz tamamlanmadığı için trend karşılaştırmasından hariç tutulmuştur.\n\n## öne çıkan bulgular\n- aylık randevu sayısı haziran 2026'da 19 ile en yüksek seviyesine, temmuz 2026'da 7 ile en düşük seviyesine ulaşmıştır\n- son 6 tam dönemde (ocak-haziran 2026) tutarlı yükseliş trendi (%58.33 artış) gözlemlenmiştir\n- trend analizi için temmuz 2026 verisi (kısmi dönem) karşılaştırmadan çıkarılmıştır\n- aylık randevu sayısı ocak 2026'dan haziran 2026'ya kadar sürekli artış göstermekte, volatilite %22.53 seviyesindedir\n- eğim katsayısı 0.9429 ile aylık ortalama yaklaşık 1 randevu artış hızı işaret etmektedir\n\n## olası açıklamalar\n- temmuz 2026'daki düşüş (7 randevu) dönem henüz tamamlanmadığı için trend kırılması olarak değerlendirilmemeli, olası veri eksikliğinden kaynaklanabilir\n- sadece 6 tam dönemlik veri ile uzun vadeli trend kalıcılığı hakkında kesin yargı sınırlıdır\n- 2026-07-01 dönemi henüz tamamlanmadığı için eğilim hesabında tam dönemlerle birlikte değerlendirilmemiştir.\n\n## veri\ntoplam 7 kayıt listelenmiştir.\n\n| period start | aylık randevu sayısı |\n| --- | --- |\n| 2026-01-01 | 12 |\n| 2026-02-01 | 15 |\n| 2026-03-01 | 9 |\n| 2026-04-01 | 13 |\n| 2026-05-01 | 13 |\n| 2026-06-01 | 19 |\n| 2026-07-01 | 7 |\n\n**sorgulanan metrikler**\n- **aylık randevu sayısı**: toplam 88, ortalama 12.57, en yüksek: 2026-06-01, en düşük: 2026-07-01\n\n**öne çıkan bulgular**\n- en yüksek değer 2026-06-01 grubunda (19); en düşük 2026-07-01 (7).\n\n**varsayımlar ve sınırlamalar**\n- 2026-07-01 dönemi henüz tamamlanmadığı için eğilim hesabında tam dönemlerle birlikte değerlendirilmemiştir.\naylık randevu sayısı son 6 tam dönemde (ocak 2026 - haziran 2026) tutarlı bir yükseliş trendi göstermekte, ortalama 12.57 randevudan 58.33% artışla 19 randevuya ulaşmıştır. temmuz 2026 verisi (7 randevu) dönem henüz tamamlanmadığı için trend karşılaştırmasından hariç tutulmuştur.\naylık randevu sayısı eğilim analizi\naylık randevu sayısı haziran 2026'da 19 ile en yüksek seviyesine, temmuz 2026'da 7 ile en düşük seviyesine ulaşmıştır\nson 6 tam dönemde (ocak-haziran 2026) tutarlı yükseliş trendi (%58.33 artış) gözlemlenmiştir\ntrend analizi için temmuz 2026 verisi (kısmi dönem) karşılaştırmadan çıkarılmıştır\naylık randevu sayısı ocak 2026'dan haziran 2026'ya kadar sürekli artış göstermekte, volatilite %22.53 seviyesindedir\neğim katsayısı 0.9429 ile aylık ortalama yaklaşık 1 randevu artış hızı işaret etmektedir\ntemmuz 2026'daki düşüş (7 randevu) dönem henüz tamamlanmadığı için trend kırılması olarak değerlendirilmemeli, olası veri eksikliğinden kaynaklanabilir\nsadece 6 tam dönemlik veri ile uzun vadeli trend kalıcılığı hakkında kesin yargı sınırlıdır\n2026-07-01 dönemi henüz tamamlanmadığı için eğilim hesabında tam dönemlerle birlikte değerlendirilmemiştir."
+          },
+          "diagnostic": "Beklenti karşılandı."
+        }
+      ],
+      "verdict": "FAIL",
+      "unavailable_fields": [
+        "sql_source",
+        "server_stack_trace"
+      ]
+    },
+    {
+      "timestamp": "2026-07-22T11:05:44+03:00",
+      "scenario_id": "04_complex_multi_metric",
+      "scenario_title": "Karma Çoklu Metrik",
+      "category": "Karşılaştırma",
+      "turn_number": 1,
+      "question": "Son 6 ayda şubelere göre randevu sayısı, gerçekleşme oranı ve ortalama randevu süresini karşılaştır; dikkat çeken farklılıkları ve olası nedenleri açıkla.",
+      "session_id": "72a6244d-fa2b-44d9-865a-db2bcfb8b0f2",
+      "http_status": 200,
+      "response_outcome": "EXECUTE_SQL",
+      "report_text": "# TEST ASM Gebze Şubesine Ait Randevu Analizi\n\n## Sorgu Sonucu\nAnaliz kapsamında yalnızca TEST ASM Gebze şubesi bulunduğu için kategoriler arası karşılaştırma yapılamamıştır; bu şubeye ait toplam 88 randevu, ortalama randevu süresi 66.97 dakika ve gerçekleşme oranı %0 olarak ölçülmüştür.\n\n## Öne Çıkan Bulgular\n- Tek kategori (TEST ASM Gebze) analiz edildiği için karşılaştırma yetersiz kalmıştır\n- Toplam 88 randevu kaydı bulunmaktadır\n- Ortalama randevu süresi 66.97 dakika olarak hesaplanmıştır\n- Gerçekleşme oranı %0 olarak belirlenmiştir\n- Seçilen kapsamda yalnızca bir kategori (TEST ASM Gebze) bulunduğu için kategoriler arası karşılaştırma yapılamamıştır\n- Tek bir kategori üzerinden yapılan analizde en yüksek ve en düşük değerler aynı kategoriye aittir\n- Dağılım yüzdeleri TEST ASM Gebze için %100 olarak gerçekleşmiştir\n\n## Olası Açıklamalar\n- Tek kategori analiz edildiği için performans karşılaştırması veya sıralama yapılamamaktadır\n- Gerçekleşme oranı %0 olması, veri toplama sürecinde bir sorun olabileceği gibi randevuların henüz gerçekleşmemiş olabileceğini de gösterebilir\n- Ortalama randevu süresi 66.97 dakika tek bir kategori için geçerli olup, bu değerin genel performans göstergesi olup olmadığı değerlendirilemez\n- Seçilen kapsamda yalnızca bir kategori bulunduğu için kategoriler arası karşılaştırma yapılamadı.\n\n## Veri\nToplam 1 kayıt listelenmiştir.\n\n| Subeadi | Ortalama Randevu Süresi | Gerçekleşme Oranı | Toplam Randevu |\n| --- | --- | --- | --- |\n| TEST ASM Gebze | 67,0 | %0,0 | 88 |\n\n**Sorgulanan metrikler**\n- **Ortalama Randevu Süresi**: toplam 66.97, ortalama 66.97, en yüksek: TEST ASM Gebze, en düşük: TEST ASM Gebze\n- **Gerçekleşme Oranı**: toplam 0, ortalama 0, en yüksek: TEST ASM Gebze, en düşük: TEST ASM Gebze\n- **Toplam Randevu**: toplam 88, ortalama 88, en yüksek: TEST ASM Gebze, en düşük: TEST ASM Gebze\n\n**Varsayımlar ve Sınırlamalar**\n- Seçilen kapsamda yalnızca bir kategori bulunduğu için kategoriler arası karşılaştırma yapılamadı.",
+      "generated_sql": "SELECT SubeAdi AS SubeAdi, AVG(CAST(RandevuSuresi AS FLOAT)) AS appointment_duration_average, 100.0 * SUM(CASE WHEN RandevuDurumu = N'Gerçekleşti' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) AS completed_appointment_rate, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2026-01-22' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-22')\n\nGROUP BY SubeAdi;",
+      "sql_source": null,
+      "query_row_count": 1,
+      "query_columns": [
+        "SubeAdi",
+        "appointment_duration_average",
+        "completed_appointment_rate",
+        "appointment_count"
+      ],
+      "first_row_keys": [
+        "SubeAdi",
+        "appointment_count",
+        "appointment_duration_average",
+        "completed_appointment_rate"
+      ],
+      "safe_aggregate_summaries": {
+        "metrics": {
+          "count": 1,
+          "total": 88.0,
+          "average": 88.0,
+          "median": 88.0,
+          "minimum": 88.0,
+          "maximum": 88.0,
+          "highest_value": 88.0,
+          "lowest_value": 88.0,
+          "top_category": "TEST ASM Gebze",
+          "bottom_category": "TEST ASM Gebze"
+        },
+        "kpis": []
+      },
+      "analytics_type": "comparison",
+      "result_shape": "categorical_grouped_result",
+      "metric_ids": [
+        "appointment_duration_average",
+        "completed_appointment_rate",
+        "appointment_count"
+      ],
+      "dimension_ids": [
+        "branch"
+      ],
+      "context_applied": false,
+      "inherited_fields": [],
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "fallback_used": false,
+      "total_duration_seconds": 23.8655,
+      "stage_timings": {
+        "analyze_intent_ms": 13.169599988032132,
+        "analyze_results_ms": 1.0504999954719096,
+        "generate_insights_ms": 23154.373099998338,
+        "generate_observations_ms": 0.4647999885492027,
+        "retrieve_context_ms": 651.6794000053778,
+        "generate_sql_ms": 6.685499974992126,
+        "validate_sql_ms": 0.000100000761449337,
+        "execute_sql_ms": 37.07709998707287,
+        "generate_report_ms": 0.8506000158376992,
+        "insight_llm_ms": 23151.987799996277,
+        "observation_llm_ms": null,
+        "llm_total_ms": 23152.36680000089,
+        "total_ms": 23865.463399968576
+      },
+      "errors": [],
+      "stack_trace": null,
+      "assertions": [
+        {
+          "kind": "outcome",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "EXECUTE_SQL",
+          "actual": "EXECUTE_SQL",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "analysis_type",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": "comparison|distribution",
+          "actual": "comparison",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "provider_model",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": {
+            "provider": "nvidia",
+            "model_contains": "nemotron"
+          },
+          "actual": {
+            "providers": [
+              "nvidia",
+              "remote_llm",
+              "insight_reuse"
+            ],
+            "models": [
+              "nvidia/nemotron-3-ultra-550b-a55b",
+              "nvidia/nemotron-3-ultra-550b-a55b"
+            ]
+          },
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "metrics",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": [
+            "appointment_count",
+            "completed_appointment_rate",
+            "appointment_duration_average"
+          ],
+          "actual": [
+            "appointment_duration_average",
+            "completed_appointment_rate",
+            "appointment_count"
+          ],
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "dimensions",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": [
+            "branch"
+          ],
+          "actual": [
+            "branch"
+          ],
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "context_applied",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": false,
+          "actual": false,
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "sql_clause",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "contains GROUP BY SubeAdi",
+          "actual": "SELECT SubeAdi AS SubeAdi, AVG(CAST(RandevuSuresi AS FLOAT)) AS appointment_duration_average, 100.0 * SUM(CASE WHEN RandevuDurumu = N'Gerçekleşti' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) AS completed_appointment_rate, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2026-01-22' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-22')\n\nGROUP BY SubeAdi;",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "visible_text",
+          "passed": true,
+          "severity": "MINOR",
+          "expected": "not_contains appointments_per_branch",
+          "actual": "# TEST ASM Gebze Şubesine Ait Randevu Analizi\n\n## Sorgu Sonucu\nAnaliz kapsamında yalnızca TEST ASM Gebze şubesi bulunduğu için kategoriler arası karşılaştırma yapılamamıştır; bu şubeye ait toplam 88 randevu, ortalama randevu süresi 66.97 dakika ve gerçekleşme oranı %0 olarak ölçülmüştür.\n\n## Öne Çıkan Bulgular\n- Tek kategori (TEST ASM Gebze) analiz edildiği için karşılaştırma yetersiz kalmıştır\n- Toplam 88 randevu kaydı bulunmaktadır\n- Ortalama randevu süresi 66.97 dakika olarak hesaplanmıştır\n- Gerçekleşme oranı %0 olarak belirlenmiştir\n- Seçilen kapsamda yalnızca bir kategori (TEST ASM Gebze) bulunduğu için kategoriler arası karşılaştırma yapılamamıştır\n- Tek bir kategori üzerinden yapılan analizde en yüksek ve en düşük değerler aynı kategoriye aittir\n- Dağılım yüzdeleri TEST ASM Gebze için %100 olarak gerçekleşmiştir\n\n## Olası Açıklamalar\n- Tek kategori analiz edildiği için performans karşılaştırması veya sıralama yapılamamaktadır\n- Gerçekleşme oranı %0 olması, veri toplama sürecinde bir sorun olabileceği gibi randevuların henüz gerçekleşmemiş olabileceğini de gösterebilir\n- Ortalama randevu süresi 66.97 dakika tek bir kategori için geçerli olup, bu değerin genel performans göstergesi olup olmadığı değerlendirilemez\n- Seçilen kapsamda yalnızca bir kategori bulunduğu için kategoriler arası karşılaştırma yapılamadı.\n\n## Veri\nToplam 1 kayıt listelenmiştir.\n\n| Subeadi | Ortalama Randevu Süresi | Gerçekleşme Oranı | Toplam Randevu |\n| --- | --- | --- | --- |\n| TEST ASM Gebze | 67,0 | %0,0 | 88 |\n\n**Sorgulanan metrikler**\n- **Ortalama Randevu Süresi**: toplam 66.97, ortalama 66.97, en yüksek: TEST ASM Gebze, en düşük: TEST ASM Gebze\n- **Gerçekleşme Oranı**: toplam 0, ortalama 0, en yüksek: TEST ASM Gebze, en düşük: TEST ASM Gebze\n- **Toplam Randevu**: toplam 88, ortalama 88, en yüksek: TEST ASM Gebze, en düşük: TEST ASM Gebze\n\n**Varsayımlar ve Sınırlamalar**\n- Seçilen kapsamda yalnızca bir kategori bulunduğu için kategoriler arası karşılaştırma yapılamadı.\nAnaliz kapsamında yalnızca TEST ASM Gebze şubesi bulunduğu için kategoriler arası karşılaştırma yapılamamıştır; bu şubeye ait toplam 88 randevu, ortalama randevu süresi 66.97 dakika ve gerçekleşme oranı %0 olarak ölçülmüştür.\nTEST ASM Gebze Şubesine Ait Randevu Analizi\nTek kategori (TEST ASM Gebze) analiz edildiği için karşılaştırma yetersiz kalmıştır\nToplam 88 randevu kaydı bulunmaktadır\nOrtalama randevu süresi 66.97 dakika olarak hesaplanmıştır\nGerçekleşme oranı %0 olarak belirlenmiştir\nSeçilen kapsamda yalnızca bir kategori (TEST ASM Gebze) bulunduğu için kategoriler arası karşılaştırma yapılamamıştır\nTek bir kategori üzerinden yapılan analizde en yüksek ve en düşük değerler aynı kategoriye aittir\nDağılım yüzdeleri TEST ASM Gebze için %100 olarak gerçekleşmiştir\nTek kategori analiz edildiği için performans karşılaştırması veya sıralama yapılamamaktadır\nGerçekleşme oranı %0 olması, veri toplama sürecinde bir sorun olabileceği gibi randevuların henüz gerçekleşmemiş olabileceğini de gösterebilir\nOrtalama randevu süresi 66.97 dakika tek bir kategori için geçerli olup, bu değerin genel performans göstergesi olup olmadığı değerlendirilemez\nSeçilen kapsamda yalnızca bir kategori bulunduğu için kategoriler arası karşılaştırma yapılamadı.",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "duration",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": "<= 90.0",
+          "actual": 23.8655,
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "nonempty_path",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": true,
+          "actual": "categorical_grouped_result",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "turkish_report_title",
+          "passed": true,
+          "severity": "MINOR",
+          "expected": true,
+          "actual": "TEST ASM Gebze Şubesine Ait Randevu Analizi",
+          "diagnostic": "Beklenti karşılandı."
+        }
+      ],
+      "verdict": "PASS",
+      "unavailable_fields": [
+        "sql_source",
+        "server_stack_trace"
+      ]
+    },
+    {
+      "timestamp": "2026-07-22T11:06:20+03:00",
+      "scenario_id": "05_grounded_branch",
+      "scenario_title": "Doğrulanmış Şube",
+      "category": "Filtre",
+      "turn_number": 1,
+      "question": "TEST ASM Gebze için son 30 günlük randevu sayılarını göster.",
+      "session_id": "87ef2f0d-9e13-4394-ad1c-b2606542ab09",
+      "http_status": 200,
+      "response_outcome": "EXECUTE_SQL",
+      "report_text": "# Sorgu Sonucu\n\nToplam 7 kayıt listelenmiştir.\n\n| Gun | Randevusayisi |\n| --- | --- |\n| 2026-06-23 | 3 |\n| 2026-06-29 | 2 |\n| 2026-07-06 | 1 |\n| 2026-07-09 | 1 |\n| 2026-07-13 | 1 |\n| 2026-07-17 | 3 |\n| 2026-07-20 | 1 |\n\n**Öne çıkan bulgular**\n- En yüksek değer 2026-06-23 grubunda (3); en düşük 2026-07-20 (1).\n- Gruplar arasında belirgin fark var: en yüksek değer en düşüğün 3 katı.",
+      "generated_sql": "SELECT TOP (100) \n    FORMAT(BaslangicTarihi, 'yyyy-MM-dd') AS Gun,\n    COUNT(*) AS RandevuSayisi\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2026-06-23'\n    AND BaslangicTarihi < DATEADD(day, 1, '2026-07-22')\n    AND SubeAdi = 'TEST ASM Gebze'\nGROUP BY FORMAT(BaslangicTarihi, 'yyyy-MM-dd')\nORDER BY Gun;",
+      "sql_source": null,
+      "query_row_count": 7,
+      "query_columns": [
+        "Gun",
+        "RandevuSayisi"
+      ],
+      "first_row_keys": [
+        "Gun",
+        "RandevuSayisi"
+      ],
+      "safe_aggregate_summaries": {
+        "metrics": {
+          "count": 7,
+          "total": 12.0,
+          "average": 1.71,
+          "median": 1.0,
+          "minimum": 1.0,
+          "maximum": 3.0,
+          "highest_value": 3.0,
+          "lowest_value": 1.0,
+          "highest_period": "2026-06-23",
+          "lowest_period": "2026-07-20",
+          "largest_change": "2026-07-17",
+          "difference": -2.0,
+          "percentage_change": -66.67,
+          "growth_rate": -66.67,
+          "trend_direction": "downward",
+          "endpoint_change": -2.0,
+          "endpoint_percentage_change": -66.67,
+          "endpoint_direction": "downward",
+          "slope": -0.1429,
+          "slope_direction": "downward",
+          "trend_consistency": "consistent_downward",
+          "volatility": 51.37,
+          "comparable_period_count": 7,
+          "first_comparable_period": "2026-06-23",
+          "last_comparable_period": "2026-07-20",
+          "comparison_excluded_partial_period": false,
+          "slope_direction_tr": "düşüşe",
+          "endpoint_direction_tr": "düşüş"
+        },
+        "kpis": []
+      },
+      "analytics_type": "trend",
+      "result_shape": "time_series",
+      "metric_ids": [
+        "daily_appointment_count",
+        "appointment_count"
+      ],
+      "dimension_ids": [],
+      "context_applied": false,
+      "inherited_fields": [],
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "fallback_used": false,
+      "total_duration_seconds": 33.5003,
+      "stage_timings": {
+        "analyze_intent_ms": 9.653399989474565,
+        "analyze_results_ms": 0.68450000253506,
+        "generate_insights_ms": 9614.886900002602,
+        "generate_observations_ms": 0.2519999979995191,
+        "retrieve_context_ms": 653.8891000091098,
+        "generate_sql_ms": 21502.64709998737,
+        "validate_sql_ms": 0.000100000761449337,
+        "execute_sql_ms": 36.688299995148554,
+        "generate_report_ms": 0.8140999998431653,
+        "insight_llm_ms": 9613.02269998123,
+        "observation_llm_ms": null,
+        "llm_total_ms": 31109.308799961582,
+        "total_ms": 33500.280699983705
+      },
+      "errors": [],
+      "stack_trace": null,
+      "assertions": [
+        {
+          "kind": "outcome",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "EXECUTE_SQL",
+          "actual": "EXECUTE_SQL",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "analysis_type",
+          "passed": false,
+          "severity": "MAJOR",
+          "expected": "count|summary|list",
+          "actual": "trend",
+          "diagnostic": "Analiz tipi beklentiyle eşleşmiyor."
+        },
+        {
+          "kind": "metrics",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": [
+            "appointment_count"
+          ],
+          "actual": [
+            "daily_appointment_count",
+            "appointment_count"
+          ],
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "context_applied",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": false,
+          "actual": false,
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "sql_clause",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "contains TEST ASM Gebze",
+          "actual": "SELECT TOP (100) \n    FORMAT(BaslangicTarihi, 'yyyy-MM-dd') AS Gun,\n    COUNT(*) AS RandevuSayisi\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2026-06-23'\n    AND BaslangicTarihi < DATEADD(day, 1, '2026-07-22')\n    AND SubeAdi = 'TEST ASM Gebze'\nGROUP BY FORMAT(BaslangicTarihi, 'yyyy-MM-dd')\nORDER BY Gun;",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "sql_clause",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "contains >=",
+          "actual": "SELECT TOP (100) \n    FORMAT(BaslangicTarihi, 'yyyy-MM-dd') AS Gun,\n    COUNT(*) AS RandevuSayisi\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2026-06-23'\n    AND BaslangicTarihi < DATEADD(day, 1, '2026-07-22')\n    AND SubeAdi = 'TEST ASM Gebze'\nGROUP BY FORMAT(BaslangicTarihi, 'yyyy-MM-dd')\nORDER BY Gun;",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "sql_clause",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "contains <",
+          "actual": "SELECT TOP (100) \n    FORMAT(BaslangicTarihi, 'yyyy-MM-dd') AS Gun,\n    COUNT(*) AS RandevuSayisi\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2026-06-23'\n    AND BaslangicTarihi < DATEADD(day, 1, '2026-07-22')\n    AND SubeAdi = 'TEST ASM Gebze'\nGROUP BY FORMAT(BaslangicTarihi, 'yyyy-MM-dd')\nORDER BY Gun;",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "sql_clause",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "not_contains LIKE",
+          "actual": "SELECT TOP (100) \n    FORMAT(BaslangicTarihi, 'yyyy-MM-dd') AS Gun,\n    COUNT(*) AS RandevuSayisi\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2026-06-23'\n    AND BaslangicTarihi < DATEADD(day, 1, '2026-07-22')\n    AND SubeAdi = 'TEST ASM Gebze'\nGROUP BY FORMAT(BaslangicTarihi, 'yyyy-MM-dd')\nORDER BY Gun;",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "duration",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": "<= 45.0",
+          "actual": 33.5003,
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "sql_recent_day_window",
+          "passed": false,
+          "severity": "CRITICAL",
+          "expected": "Son 30 günlük yarı-açık tarih aralığı",
+          "actual": "SELECT TOP (100) \n    FORMAT(BaslangicTarihi, 'yyyy-MM-dd') AS Gun,\n    COUNT(*) AS RandevuSayisi\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2026-06-23'\n    AND BaslangicTarihi < DATEADD(day, 1, '2026-07-22')\n    AND SubeAdi = 'TEST ASM Gebze'\nGROUP BY FORMAT(BaslangicTarihi, 'yyyy-MM-dd')\nORDER BY Gun;",
+          "diagnostic": "Son 30 günlük doğru tarih aralığı bulunamadı."
+        }
+      ],
+      "verdict": "FAIL",
+      "unavailable_fields": [
+        "sql_source",
+        "server_stack_trace"
+      ]
+    },
+    {
+      "timestamp": "2026-07-22T11:06:27+03:00",
+      "scenario_id": "07_additive_followup",
+      "scenario_title": "Eklemeli Takip Sorusu",
+      "category": "Bağlam",
+      "turn_number": 1,
+      "question": "Şubelere göre randevu sayılarını karşılaştır.",
+      "session_id": "bc2ad888-68d0-4e9d-a4ab-4cdf43d9f5eb",
+      "http_status": 200,
+      "response_outcome": "EXECUTE_SQL",
+      "report_text": "# Dönem Karşılaştırması\n\n## Sorgu Sonucu\nToplam 1.683.876 kayıttan 1.683.876 tanesi (%100,0) 'TEST ASM Gebze' durumunda.\n\n## Öne Çıkan Bulgular\n- Toplam 1.683.876 kayıttan 1.683.876 tanesi (%100,0) 'TEST ASM Gebze' durumunda.\n- 'TEST ASM Gebze' toplamın %100,0 kadarını oluşturuyor.\n- Sonuç kümesindeki toplam: 1.683.876.\n- Ortalama değer: 1.683.876.\n- Değerler 1.683.876 ile 1.683.876 arasında.\n- 'TEST ASM Gebze' için sonuçlar özetlenmiştir.\n\n## Olası Açıklamalar\n- Seçilen kapsamda yalnızca bir kategori bulunduğu için kategoriler arası karşılaştırma yapılamadı.\n\n## Veri\nToplam 1 kayıt listelenmiştir.\n\n| Subeadi | Toplam Randevu |\n| --- | --- |\n| TEST ASM Gebze | 1.683.876 |\n\n**Sorgulanan metrikler**\n- **Toplam Randevu**: toplam 1.68388e+06, ortalama 1.68388e+06, en yüksek: TEST ASM Gebze, en düşük: TEST ASM Gebze\n\n**Varsayımlar ve Sınırlamalar**\n- Seçilen kapsamda yalnızca bir kategori bulunduğu için kategoriler arası karşılaştırma yapılamadı.",
+      "generated_sql": "SELECT SubeAdi AS SubeAdi, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\n\nGROUP BY SubeAdi;",
+      "sql_source": null,
+      "query_row_count": 1,
+      "query_columns": [
+        "SubeAdi",
+        "appointment_count"
+      ],
+      "first_row_keys": [
+        "SubeAdi",
+        "appointment_count"
+      ],
+      "safe_aggregate_summaries": {
+        "metrics": {
+          "count": 1,
+          "total": 1683876.0,
+          "average": 1683876.0,
+          "median": 1683876.0,
+          "minimum": 1683876.0,
+          "maximum": 1683876.0,
+          "highest_value": 1683876.0,
+          "lowest_value": 1683876.0,
+          "top_category": "TEST ASM Gebze",
+          "bottom_category": "TEST ASM Gebze"
+        },
+        "kpis": []
+      },
+      "analytics_type": "comparison",
+      "result_shape": "categorical_grouped_result",
+      "metric_ids": [
+        "appointment_count"
+      ],
+      "dimension_ids": [
+        "branch"
+      ],
+      "context_applied": false,
+      "inherited_fields": [],
+      "provider": "deterministic",
+      "model": "templates",
+      "fallback_used": false,
+      "total_duration_seconds": 4.7121,
+      "stage_timings": {
+        "analyze_intent_ms": 8.081599982688203,
+        "analyze_results_ms": 0.4859000036958605,
+        "generate_insights_ms": 0.4861000052187592,
+        "generate_observations_ms": 0.26099997921846807,
+        "retrieve_context_ms": 1547.7020000107586,
+        "generate_sql_ms": 2.953200018964708,
+        "validate_sql_ms": 0.000100000761449337,
+        "execute_sql_ms": 3151.2674000114202,
+        "generate_report_ms": 0.8224000048357993,
+        "insight_llm_ms": 0.0,
+        "observation_llm_ms": null,
+        "llm_total_ms": 0.21269998978823423,
+        "total_ms": 4712.101600016467
+      },
+      "errors": [],
+      "stack_trace": null,
+      "assertions": [
+        {
+          "kind": "outcome",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "EXECUTE_SQL",
+          "actual": "EXECUTE_SQL",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "analysis_type",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": "comparison|distribution",
+          "actual": "comparison",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "metrics",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": [
+            "appointment_count"
+          ],
+          "actual": [
+            "appointment_count"
+          ],
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "dimensions",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": [
+            "branch"
+          ],
+          "actual": [
+            "branch"
+          ],
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "context_applied",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": false,
+          "actual": false,
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "sql_clause",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "contains GROUP BY SubeAdi",
+          "actual": "SELECT SubeAdi AS SubeAdi, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\n\nGROUP BY SubeAdi;",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "duration",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": "<= 45.0",
+          "actual": 4.7121,
+          "diagnostic": "Beklenti karşılandı."
+        }
+      ],
+      "verdict": "PASS",
+      "unavailable_fields": [
+        "sql_source",
+        "server_stack_trace"
+      ]
+    },
+    {
+      "timestamp": "2026-07-22T11:06:29+03:00",
+      "scenario_id": "07_additive_followup",
+      "scenario_title": "Eklemeli Takip Sorusu",
+      "category": "Bağlam",
+      "turn_number": 2,
+      "question": "Bir de gerçekleşme oranını ekle.",
+      "session_id": "bc2ad888-68d0-4e9d-a4ab-4cdf43d9f5eb",
+      "http_status": 200,
+      "response_outcome": "OUT_OF_SCOPE",
+      "report_text": "# Bu Soru Veri Kapsamı Dışında\n\nBu soru, hastane veritabanındaki verilerle yanıtlayabileceğim bir soruya benzemiyor.\n\n## Yanıtlayabileceğim konular\n\n- **Bölümler** — Kardiyoloji, Psikiyatri, Ortopedi vb. bölüm bazlı analizler\n- **Doktorlar** — doktor listeleri, yoğunluk ve randevu sayıları\n- **Hastalar** — hasta sayıları ve dağılımları\n- **Randevular** — günlük/haftalık/aylık randevu istatistikleri\n- **Reçeteler ve tanılar** — reçete ve tanı analizleri\n- **Faturalar, laboratuvar testleri ve yatışlar**\n\n## Örnek sorular\n\n- \"Bugün kaç randevu oluşturuldu?\"\n- \"Kardiyoloji doktorlarını göster.\"\n- \"Son 6 ayın randevularını analiz et.\"\n\nSorunuzu bu veriler üzerinden yeniden ifade ederseniz yardımcı olabilirim.\n",
+      "generated_sql": "",
+      "sql_source": null,
+      "query_row_count": null,
+      "query_columns": [],
+      "first_row_keys": [],
+      "safe_aggregate_summaries": {
+        "metrics": {},
+        "kpis": []
+      },
+      "analytics_type": null,
+      "result_shape": null,
+      "metric_ids": [
+        "appointment_count",
+        "completed_appointment_rate"
+      ],
+      "dimension_ids": [
+        "branch"
+      ],
+      "context_applied": false,
+      "inherited_fields": [],
+      "provider": "static",
+      "model": "out_of_scope_node",
+      "fallback_used": null,
+      "total_duration_seconds": 0.0094,
+      "stage_timings": {
+        "analyze_intent_ms": 9.41989998682402,
+        "analyze_results_ms": null,
+        "generate_insights_ms": null,
+        "generate_observations_ms": null,
+        "retrieve_context_ms": null,
+        "generate_sql_ms": null,
+        "validate_sql_ms": null,
+        "execute_sql_ms": null,
+        "generate_report_ms": null,
+        "insight_llm_ms": null,
+        "observation_llm_ms": null,
+        "llm_total_ms": null,
+        "total_ms": 9.437299973797053
+      },
+      "errors": [],
+      "stack_trace": null,
+      "assertions": [
+        {
+          "kind": "outcome",
+          "passed": false,
+          "severity": "CRITICAL",
+          "expected": "EXECUTE_SQL",
+          "actual": "OUT_OF_SCOPE",
+          "diagnostic": "Beklenen iş akışı sonucu alınmadı."
+        },
+        {
+          "kind": "analysis_type",
+          "passed": false,
+          "severity": "MAJOR",
+          "expected": "comparison|distribution",
+          "actual": null,
+          "diagnostic": "Analiz tipi beklentiyle eşleşmiyor."
+        },
+        {
+          "kind": "metrics",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": [
+            "appointment_count",
+            "completed_appointment_rate"
+          ],
+          "actual": [
+            "appointment_count",
+            "completed_appointment_rate"
+          ],
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "dimensions",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": [
+            "branch"
+          ],
+          "actual": [
+            "branch"
+          ],
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "context_applied",
+          "passed": false,
+          "severity": "CRITICAL",
+          "expected": true,
+          "actual": false,
+          "diagnostic": "Bağlam uygulama kararı beklentiyle eşleşmiyor."
+        },
+        {
+          "kind": "sql_clause",
+          "passed": false,
+          "severity": "CRITICAL",
+          "expected": "contains GROUP BY SubeAdi",
+          "actual": "",
+          "diagnostic": "SQL beklenen ifadeyi içermiyor: GROUP BY SubeAdi"
+        },
+        {
+          "kind": "duration",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": "<= 45.0",
+          "actual": 0.0094,
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "context_inheritance",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": [
+            "dimensions",
+            "metrics"
+          ],
+          "actual": [
+            "dimensions",
+            "metrics"
+          ],
+          "diagnostic": "Beklenti karşılandı."
+        }
+      ],
+      "verdict": "FAIL",
+      "unavailable_fields": [
+        "sql_source",
+        "server_stack_trace"
+      ]
+    },
+    {
+      "timestamp": "2026-07-22T11:06:42+03:00",
+      "scenario_id": "09_year_only_followup",
+      "scenario_title": "Yalnızca Yıl Takibi",
+      "category": "Bağlam",
+      "turn_number": 1,
+      "question": "2025 yılının ortalama randevu süresini göster.",
+      "session_id": "e4c39117-6b22-4e0c-8420-24784994c250",
+      "http_status": 200,
+      "response_outcome": "EXECUTE_SQL",
+      "report_text": "# Sorgu Sonucu\n\n**Ortalamarandevusuresi:** 33,2\n\nOrtalamarandevusuresi 33,2 olarak hesaplanmıştır.",
+      "generated_sql": "SELECT TOP (100) AVG(CAST(RandevuSuresi AS FLOAT)) AS OrtalamaRandevuSuresi\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2025-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2025-12-31')",
+      "sql_source": null,
+      "query_row_count": 1,
+      "query_columns": [
+        "OrtalamaRandevuSuresi"
+      ],
+      "first_row_keys": [
+        "OrtalamaRandevuSuresi"
+      ],
+      "safe_aggregate_summaries": {
+        "metrics": {},
+        "kpis": []
+      },
+      "analytics_type": "average",
+      "result_shape": "scalar_aggregate",
+      "metric_ids": [
+        "appointment_duration_average"
+      ],
+      "dimension_ids": [],
+      "context_applied": false,
+      "inherited_fields": [],
+      "provider": "deterministic",
+      "model": "templates",
+      "fallback_used": false,
+      "total_duration_seconds": 11.0101,
+      "stage_timings": {
+        "analyze_intent_ms": 10.651699994923547,
+        "analyze_results_ms": 0.5098999827168882,
+        "generate_insights_ms": 0.31560001662001014,
+        "generate_observations_ms": 0.3182999789714813,
+        "retrieve_context_ms": 635.1940000022296,
+        "generate_sql_ms": 9652.833500003908,
+        "validate_sql_ms": 0.000100000761449337,
+        "execute_sql_ms": 709.3699999968521,
+        "generate_report_ms": 0.8252999978139997,
+        "insight_llm_ms": 0.0,
+        "observation_llm_ms": null,
+        "llm_total_ms": 9645.728000003146,
+        "total_ms": 11010.073899960844
+      },
+      "errors": [],
+      "stack_trace": null,
+      "assertions": [
+        {
+          "kind": "outcome",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "EXECUTE_SQL",
+          "actual": "EXECUTE_SQL",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "analysis_type",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": "average|summary",
+          "actual": "average",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "metrics",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": [
+            "appointment_duration_average"
+          ],
+          "actual": [
+            "appointment_duration_average"
+          ],
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "context_applied",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": false,
+          "actual": false,
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "visible_text",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "not_contains Kayıt Sayısı: 1",
+          "actual": "# Sorgu Sonucu\n\n**Ortalamarandevusuresi:** 33,2\n\nOrtalamarandevusuresi 33,2 olarak hesaplanmıştır.\nAnaliz için yeterli veri bulunamadı.\nOrtalama Analizi\nSonuç kümesi, yorum üretmek için yeterli veri içermiyor.",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "duration",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": "<= 45.0",
+          "actual": 11.0101,
+          "diagnostic": "Beklenti karşılandı."
+        }
+      ],
+      "verdict": "PASS",
+      "unavailable_fields": [
+        "sql_source",
+        "server_stack_trace"
+      ]
+    },
+    {
+      "timestamp": "2026-07-22T11:06:55+03:00",
+      "scenario_id": "09_year_only_followup",
+      "scenario_title": "Yalnızca Yıl Takibi",
+      "category": "Bağlam",
+      "turn_number": 2,
+      "question": "2024 yılının?",
+      "session_id": "e4c39117-6b22-4e0c-8420-24784994c250",
+      "http_status": 200,
+      "response_outcome": "EXECUTE_SQL",
+      "report_text": "# Sorgu Sonucu\n\n**Ortalamarandevusuresi:** 32,8\n\nOrtalamarandevusuresi 32,8 olarak hesaplanmıştır.",
+      "generated_sql": "SELECT TOP (100) AVG(CAST(RandevuSuresi AS FLOAT)) AS OrtalamaRandevuSuresi\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31')",
+      "sql_source": null,
+      "query_row_count": 1,
+      "query_columns": [
+        "OrtalamaRandevuSuresi"
+      ],
+      "first_row_keys": [
+        "OrtalamaRandevuSuresi"
+      ],
+      "safe_aggregate_summaries": {
+        "metrics": {},
+        "kpis": []
+      },
+      "analytics_type": "average",
+      "result_shape": "scalar_aggregate",
+      "metric_ids": [
+        "appointment_duration_average"
+      ],
+      "dimension_ids": [],
+      "context_applied": true,
+      "inherited_fields": [
+        "previous_question",
+        "entity_types",
+        "metrics",
+        "date"
+      ],
+      "provider": "deterministic",
+      "model": "templates",
+      "fallback_used": false,
+      "total_duration_seconds": 10.0257,
+      "stage_timings": {
+        "analyze_intent_ms": 7.589100016048178,
+        "analyze_results_ms": 0.5757999897468835,
+        "generate_insights_ms": 0.3266999847255647,
+        "generate_observations_ms": 0.22340001305565238,
+        "retrieve_context_ms": 613.2344999932684,
+        "generate_sql_ms": 8552.848799998173,
+        "validate_sql_ms": 0.000100000761449337,
+        "execute_sql_ms": 850.1845000137109,
+        "generate_report_ms": 0.6506000063382089,
+        "insight_llm_ms": 0.0,
+        "observation_llm_ms": null,
+        "llm_total_ms": 8548.949899995932,
+        "total_ms": 10025.684400025057
+      },
+      "errors": [],
+      "stack_trace": null,
+      "assertions": [
+        {
+          "kind": "outcome",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "EXECUTE_SQL",
+          "actual": "EXECUTE_SQL",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "analysis_type",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": "average|summary",
+          "actual": "average",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "metrics",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": [
+            "appointment_duration_average"
+          ],
+          "actual": [
+            "appointment_duration_average"
+          ],
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "context_applied",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": true,
+          "actual": true,
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "sql_clause",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "contains 2024-01-01",
+          "actual": "SELECT TOP (100) AVG(CAST(RandevuSuresi AS FLOAT)) AS OrtalamaRandevuSuresi\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31')",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "sql_clause",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "contains 2024-12-31",
+          "actual": "SELECT TOP (100) AVG(CAST(RandevuSuresi AS FLOAT)) AS OrtalamaRandevuSuresi\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31')",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "visible_text",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "not_contains Bu Soru Veri Kapsamı Dışında",
+          "actual": "# Sorgu Sonucu\n\n**Ortalamarandevusuresi:** 32,8\n\nOrtalamarandevusuresi 32,8 olarak hesaplanmıştır.\nAnaliz için yeterli veri bulunamadı.\nOrtalama Analizi\nSonuç kümesi, yorum üretmek için yeterli veri içermiyor.",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "visible_text",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "not_contains Kayıt Sayısı: 1",
+          "actual": "# Sorgu Sonucu\n\n**Ortalamarandevusuresi:** 32,8\n\nOrtalamarandevusuresi 32,8 olarak hesaplanmıştır.\nAnaliz için yeterli veri bulunamadı.\nOrtalama Analizi\nSonuç kümesi, yorum üretmek için yeterli veri içermiyor.",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "duration",
+          "passed": true,
+          "severity": "MAJOR",
+          "expected": "<= 45.0",
+          "actual": 10.0257,
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "contains_path",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "2024",
+          "actual": "2024 yilinin ortalama randevu suresini goster",
+          "diagnostic": "Beklenti karşılandı."
+        },
+        {
+          "kind": "not_contains_path",
+          "passed": true,
+          "severity": "CRITICAL",
+          "expected": "2025",
+          "actual": "2024 yilinin ortalama randevu suresini goster",
+          "diagnostic": "Beklenti karşılandı."
+        }
+      ],
+      "verdict": "PASS",
+      "unavailable_fields": [
+        "sql_source",
+        "server_stack_trace"
+      ]
+    }
+  ]
+}

@@ -242,6 +242,7 @@ async def test_graph_builder_with_execution_node():
     assert final_state_dict["completed_nodes"] == [
         "analyze_intent",
         "retrieve_context",
+        "resolve_filter_values",
         "generate_sql",
         "validate_sql",
         "execute_sql",

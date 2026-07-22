@@ -1,6 +1,6 @@
 import { motion, useReducedMotion } from "framer-motion";
 
-const LOGO_SRC = "/med-agent-logo.svg";
+const LOGO_SRC = "/med-agent-logo.svg?v=3";
 
 export interface MedAgentLogoProps {
   /** Rendered size in px (width = height). Defaults to 180. */
@@ -41,11 +41,11 @@ export function MedAgentLogo({ size = 180, className, noIntro = false }: MedAgen
         className="block h-full w-full select-none object-contain"
         animate={
           reducedMotion
-            ? { scale: 1.34 }
+            ? { scale: 0.96 }
             : {
                 y: [0, -1.5, 0, 1.5, 0],
                 rotate: [0, -0.7, 0, 0.7, 0],
-                scale: [1.34, 1.39, 1.34],
+                scale: [0.96, 1, 0.96],
                 filter: [
                   "drop-shadow(0 0 0 rgba(6,182,212,0))",
                   "drop-shadow(0 0 4px rgba(6,182,212,0.28))",

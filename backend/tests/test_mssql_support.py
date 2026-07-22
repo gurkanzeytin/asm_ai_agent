@@ -58,6 +58,7 @@ def test_database_url_constructed_from_parts():
     assert "SERVER=SRV1" in odbc
     assert "DATABASE=Db1" in odbc
     assert "Trusted_Connection=yes" in odbc
+    assert odbc.count("Trusted_Connection=yes") == 1
     assert "Encrypt=yes" in odbc
     assert "TrustServerCertificate=yes" in odbc
     assert "UID" not in odbc and "PWD" not in odbc

@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict
 from app.analytics.models import AnalyticsResult
 from app.insights import templates
 from app.insights.models import InsightNarrative, InsightRule
+from app.insights.narrative_guard import repair_narrative
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,20 @@ _CAUSAL_CERTAINTY_PATTERNS = (
     "şüphesiz",
 )
 
+# AI-INTELLIGENCE-018 (item 9): unsupported HEDGED causal speculation — the
+# view has no operational/process data (no logs, no staff records, no system
+# events), so "there might be a data-collection problem" is never evidence-
+# backed, even hedged with "olabilir". Dropped the same way as a certainty
+# claim; never rewritten into a stronger claim.
+_UNSUPPORTED_CAUSAL_SPECULATION_PATTERNS = (
+    "veri toplama sorunu",
+    "veri toplama problemi",
+    "veri girişi sorunu",
+    "veri girişiyle ilgili bir sorun",
+    "kayıt sorunu olabilir",
+    "sistemsel bir sorun olabilir",
+)
+
 
 class NarrativeValidationVerdict(BaseModel):
     """Safe, loggable diagnostic describing what the validator did — never
@@ -55,6 +70,7 @@ class NarrativeValidationVerdict(BaseModel):
     narrative_replaced: bool = False
     missing_limitations_added: list[str] = []
     causal_certainty_dropped: int = 0
+    continuous_growth_phrase_repaired: bool = False
     reason: str | None = None
 
 
@@ -134,16 +150,30 @@ def validate_and_repair(
             causal_dropped += 1
             logger.warning("Dropped considerations entry with unsupported causal certainty.")
             continue
+        if any(pattern in lowered for pattern in _UNSUPPORTED_CAUSAL_SPECULATION_PATTERNS):
+            causal_dropped += 1
+            logger.warning("Dropped considerations entry with unsupported causal speculation.")
+            continue
         filtered_considerations.append(text)
 
     repaired = narrative.model_copy(
         update={"title": title, "considerations": filtered_considerations}
     )
+
+    # AI-INTELLIGENCE-018 (item 8): never let an upward endpoint or positive
+    # slope alone stand in for "continuous/uninterrupted growth" — repair or
+    # drop the claim whenever the deterministic trend verdict says the series
+    # actually fluctuated (monotonicity == "non_monotonic").
+    before = repaired
+    repaired = repair_narrative(repaired, trend_metrics)
+    continuous_growth_repaired = repaired != before
+
     return repaired, NarrativeValidationVerdict(
         language_ok=True,
         title_replaced=title_replaced,
         narrative_replaced=False,
         missing_limitations_added=missing_limitations,
         causal_certainty_dropped=causal_dropped,
+        continuous_growth_phrase_repaired=continuous_growth_repaired,
         reason=None,
     )

@@ -1,3 +1,4 @@
+import inspect
 import logging
 import time
 from datetime import date, datetime
@@ -12,8 +13,19 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.config import settings
 from app.repositories.exceptions import RepositoryError
 from app.repositories.interfaces import IAnalyticalRepository
+from app.shared.result_limits import MAX_DATABASE_FETCH_ROWS
 
 logger = logging.getLogger(__name__)
+
+
+async def _close_result_safely(result: Any) -> None:
+    """Release a database cursor without masking the query's actual outcome."""
+    try:
+        close_result = result.close()
+        if inspect.isawaitable(close_result):
+            await close_result
+    except Exception:
+        logger.warning("Database result cursor could not be closed cleanly.", exc_info=True)
 
 
 def serialize_row_value(value: Any) -> Any:
@@ -91,13 +103,19 @@ class AnalyticalRepository(IAnalyticalRepository):
         logger.info(f"AnalyticalRepository executing query statement (length={len(query)})...")
         start = time.perf_counter()
         try:
-            result = await self.session.execute(text(query), params or {})
-            if result.returns_rows:
+            result = await self.session.stream(text(query), params or {})
+            try:
+                # ``AsyncSession.stream`` returns SQLAlchemy's ``AsyncResult``.
+                # Unlike synchronous ``CursorResult``, it has no ``returns_rows``
+                # attribute. This repository accepts validated SELECT statements
+                # only, so bounded mapping iteration is the portable contract.
+                mapped_rows = await result.mappings().fetchmany(MAX_DATABASE_FETCH_ROWS + 1)
                 return [
                     {key: serialize_row_value(value) for key, value in row.items()}
-                    for row in result.mappings().all()
+                    for row in mapped_rows
                 ]
-            return []
+            finally:
+                await _close_result_safely(result)
         except Exception as e:
             logger.error(f"Query execution failed: {e}")
             if "timeout" in str(e).lower():
@@ -114,6 +132,7 @@ class AnalyticalRepository(IAnalyticalRepository):
         """Executes a query and returns the first column of the first row."""
         logger.info(f"AnalyticalRepository executing scalar query (length={len(query)})...")
         start = time.perf_counter()
+        result = None
         try:
             result = await self.session.execute(text(query), params or {})
             return result.scalar()
@@ -121,6 +140,8 @@ class AnalyticalRepository(IAnalyticalRepository):
             logger.error(f"Scalar query execution failed: {e}")
             raise RepositoryError(f"Database scalar query failed: {str(e)}") from e
         finally:
+            if result is not None:
+                await _close_result_safely(result)
             logger.info(
                 f"Execution profile [execute_scalar]: elapsed={time.perf_counter() - start:.6f}s"
             )

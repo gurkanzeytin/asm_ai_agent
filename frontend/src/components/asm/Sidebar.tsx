@@ -6,6 +6,7 @@ import type { Conversation } from "./types";
 import { Input } from "@/components/ui/input";
 import { MedAgentLogo } from "./MedAgentLogo";
 import { tr } from "@/locales/tr";
+import { panelTransition, uiTransition } from "@/lib/ui-motion";
 
 interface Props {
   conversations: Conversation[];
@@ -37,7 +38,7 @@ export function Sidebar({
   return (
     <motion.aside
       animate={{ width: collapsed ? 72 : 288 }}
-      transition={{ type: "spring", stiffness: 260, damping: 30 }}
+      transition={panelTransition}
       className="relative z-20 flex h-full flex-col border-r border-border bg-sidebar"
     >
       {/* Header */}
@@ -64,39 +65,37 @@ export function Sidebar({
         </AnimatePresence>
       </div>
 
-      {/* New chat */}
-      <div className="px-3">
+      {/* Primary controls */}
+      <div className="flex shrink-0 flex-col gap-3 px-3 pt-4">
         <button
+          type="button"
           onClick={onNew}
           aria-label={tr.sidebar.newChat}
           title={collapsed ? tr.sidebar.newChat : undefined}
           className={cn(
-            "flex w-full items-center gap-2 rounded-xl bg-primary/10 px-3 py-2.5 text-sm font-medium text-primary transition-all hover:bg-primary/20 hover:shadow-[var(--shadow-glow)]",
-            collapsed && "justify-center px-0",
+            "flex h-10 w-full items-center justify-start gap-2.5 rounded-lg bg-primary/10 px-3 text-sm font-medium text-primary transition-all hover:bg-primary/20 hover:shadow-[var(--shadow-glow)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+            collapsed && "w-10 self-center justify-center px-0",
           )}
         >
           <Plus className="h-4 w-4 shrink-0" />
           {!collapsed && <span>{tr.sidebar.newChat}</span>}
         </button>
-      </div>
 
-      {/* Search */}
-      {!collapsed && (
-        <div className="mt-3 px-3">
+        {!collapsed && (
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={tr.sidebar.searchConversations}
-              className="h-9 rounded-lg border-border bg-background/40 pl-9 text-sm placeholder:text-muted-foreground/70"
+              className="h-10 rounded-lg border-border bg-background/40 pl-9 pr-3 text-sm placeholder:text-muted-foreground/70"
             />
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Lists */}
-      <div className="mt-3 flex-1 overflow-y-auto px-2 pb-2">
+      <div className="mt-4 flex-1 overflow-y-auto px-3 pb-3">
         {!collapsed && favorites.length > 0 && (
           <Section title={tr.sidebar.favorites}>
             <AnimatePresence initial={false}>
@@ -116,7 +115,7 @@ export function Sidebar({
         {!collapsed && (
           <Section title={tr.sidebar.recent}>
             {recents.length === 0 && (
-              <div className="px-3 py-2 text-xs text-muted-foreground">
+              <div className="px-3 py-2.5 text-xs leading-5 text-muted-foreground">
                 {tr.sidebar.noConversations}
               </div>
             )}
@@ -134,20 +133,24 @@ export function Sidebar({
             </AnimatePresence>
           </Section>
         )}
-        {collapsed &&
-          conversations.slice(0, 8).map((c) => (
-            <button
-              key={c.id}
-              onClick={() => onSelect(c.id)}
-              className={cn(
-                "mx-auto my-1 grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-accent hover:text-foreground",
-                c.id === activeId && "bg-primary/15 text-primary",
-              )}
-              title={c.title}
-            >
-              <MessageSquare className="h-4 w-4" />
-            </button>
-          ))}
+        {collapsed && (
+          <div className="flex flex-col items-center gap-2">
+            {conversations.slice(0, 8).map((c) => (
+              <button
+                type="button"
+                key={c.id}
+                onClick={() => onSelect(c.id)}
+                className={cn(
+                  "grid h-10 w-10 place-items-center rounded-lg text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+                  c.id === activeId && "bg-primary/15 text-primary",
+                )}
+                title={c.title}
+              >
+                <MessageSquare className="h-4 w-4" />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Collapse toggle */}
@@ -165,11 +168,11 @@ export function Sidebar({
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="mb-2">
-      <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+    <div className="mb-4 last:mb-0">
+      <div className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
         {title}
       </div>
-      <div className="flex flex-col gap-0.5">{children}</div>
+      <div className="flex flex-col gap-1">{children}</div>
     </div>
   );
 }
@@ -193,9 +196,9 @@ function ConvItem({
       initial={{ opacity: 0, x: -12, scale: 0.98 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={{ opacity: 0, x: -8, scale: 0.98 }}
-      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+      transition={uiTransition}
       className={cn(
-        "group relative flex items-center rounded-lg text-sm transition",
+        "group relative flex min-h-10 items-center rounded-lg text-sm transition",
         active
           ? "bg-primary/15 text-foreground"
           : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -208,18 +211,18 @@ function ConvItem({
         type="button"
         onClick={() => onSelect(conv.id)}
         aria-current={active ? "page" : undefined}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-l-lg px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+        className="flex min-h-10 min-w-0 flex-1 items-center gap-2.5 rounded-l-lg px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
       >
         <MessageSquare className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <span className="truncate flex-1">{conv.title}</span>
       </button>
-      <div className="flex shrink-0 items-center gap-0.5 pr-1">
+      <div className="flex shrink-0 items-center gap-1 pr-1.5">
         <button
           type="button"
           onClick={() => onFav(conv.id)}
           aria-label={tr.sidebar.favoriteConversation}
           title={tr.sidebar.favoriteConversation}
-          className="grid h-6 w-6 place-items-center rounded hover:bg-background/40"
+          className="grid h-7 w-7 place-items-center rounded-md hover:bg-background/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
         >
           <Star
             className={cn(
@@ -233,7 +236,7 @@ function ConvItem({
           onClick={() => onDelete(conv.id)}
           aria-label={tr.sidebar.deleteConversation}
           title={tr.sidebar.deleteConversation}
-          className="grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-background/40 hover:text-destructive"
+          className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground hover:bg-background/40 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
         >
           <Trash2 className="h-3 w-3" />
         </button>

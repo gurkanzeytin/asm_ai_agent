@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>ASM AI Agent Smoke-Test Özeti</title>
+<style>
+:root{--bg:#061424;--panel:#0b2035;--line:#173d58;--text:#d9f2f2;--muted:#8eb3bd;
+--blue:#38bdf8;--cyan:#2dd4bf;--pass:#22c55e;--partial:#f59e0b;--fail:#ef4444}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+font:14px/1.55 system-ui,sans-serif}
+main{max-width:1180px;margin:auto;padding:32px 20px 64px} h1{color:var(--cyan);margin:0 0 8px}
+.muted,label,small{color:var(--muted)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+gap:12px;margin:24px 0}
+.stat,.result{background:var(--panel);border:1px solid var(--line);
+border-radius:12px}
+.stat{padding:16px} .stat b{display:block;font-size:24px;color:var(--blue)}
+.result{margin:12px 0;overflow:hidden}
+summary{display:flex;justify-content:space-between;gap:16px;
+padding:16px;cursor:pointer}
+.pass summary b{color:var(--pass)} .partial summary b{color:var(--partial)}
+.fail summary b{color:var(--fail)}
+.result>div,.result>p,.result>h4,.result>ul,.result>pre{margin-left:16px;margin-right:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+gap:10px;padding:12px;background:#081a2b;border-radius:8px}
+.grid label{display:block;font-size:11px;text-transform:uppercase}
+pre{white-space:pre-wrap;overflow:auto;background:#03101d;
+border:1px solid var(--line);padding:14px;border-radius:8px;color:#b9f5e8}
+code{color:#7dd3fc} ul{padding-bottom:10px}
+.overview{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.overview article{background:var(--panel);border:1px solid var(--line);
+border-radius:12px;padding:0 16px}
+</style></head><body><main>
+<h1>ASM AI Agent Smoke-Test Özeti</h1>
+<div class="muted">2026-07-22T11:06:55+03:00</div>
+<section class="stats">
+ <div class="stat"><span>Başarı oranı</span><b>%62.5</b></div>
+ <div class="stat"><span>PASS</span><b style="color:var(--pass)">5</b></div>
+ <div class="stat"><span>PARTIAL</span>
+  <b style="color:var(--partial)">0</b></div>
+ <div class="stat"><span>FAIL</span><b style="color:var(--fail)">3</b></div>
+ <div class="stat"><span>Ortalama süre</span><b>13.44s</b></div>
+</section>
+<section class="overview">
+ <article><h3>Kategori Dağılımı</h3><ul><li><b>Bağlam</b>: PASS 3, PARTIAL 0, FAIL 1</li><li><b>Dağılım</b>: PASS 1, PARTIAL 0, FAIL 0</li><li><b>Filtre</b>: PASS 0, PARTIAL 0, FAIL 1</li><li><b>Karşılaştırma</b>: PASS 1, PARTIAL 0, FAIL 0</li><li><b>Trend</b>: PASS 0, PARTIAL 0, FAIL 1</li></ul></article>
+ <article><h3>Provider Kullanımı</h3><ul><li><b>deterministic</b>: 4 tur</li><li><b>nvidia</b>: 3 tur</li><li><b>static</b>: 1 tur</li></ul></article>
+ <article><h3>En Yavaş Senaryolar</h3><ul><li>05_grounded_branch / tur 1: 33.50 sn</li><li>04_complex_multi_metric / tur 1: 23.87 sn</li><li>03_monthly_trend / tur 1: 19.65 sn</li><li>09_year_only_followup / tur 1: 11.01 sn</li><li>09_year_only_followup / tur 2: 10.03 sn</li></ul></article>
+ <article><h3>Risk Özeti</h3><ul>
+  <li>Kritik başarısızlık: 4</li>
+  <li>Major başarısızlık: 4</li>
+  <li>Başarısız tur: 3</li>
+ </ul></article>
+</section>
+<h2>Senaryo Ayrıntıları</h2>
+<details class="result pass">
+  <summary><span>01_basic_distribution · Randevu Durumu Dağılımı</span>
+    <b>PASS</b></summary>
+  <div class="grid">
+    <div><label>Kategori</label>Dağılım</div>
+    <div><label>Tur</label>1</div>
+    <div><label>Provider / Model</label>deterministic / templates</div>
+    <div><label>Süre</label>4.71 sn</div>
+    <div><label>Outcome</label>EXECUTE_SQL</div>
+    <div><label>Sonuç şekli</label>categorical_grouped_result</div>
+  </div>
+  <p><b>Soru:</b> Randevu durumlarının dağılımını göster.</p>
+  <p><b>Oturum:</b> <code>0b5b3ea5-7c98-4e48-b621-ac9139366321</code> ·
+     <b>Bağlam:</b> False</p>
+  <h4>Başarısız Assertion'lar</h4><ul><li>Başarısız assertion yok.</li></ul>
+  <h4>SQL</h4><pre><code>SELECT RandevuDurumu AS RandevuDurumu, COUNT(*) AS appointment_count
+FROM dbo.vw_RandevuRaporu
+
+GROUP BY RandevuDurumu
+ORDER BY appointment_count DESC;</code></pre>
+  <h4>Görünür Rapor</h4><pre># Sorgu Sonucu
+
+Toplam 5 kayıt listelenmiştir.
+
+| Randevudurumu | Toplam Randevu |
+| --- | --- |
+| Gerçekleşti | 1.137.937 |
+| Giriş Yapılmış | 184.324 |
+| Gelmedi | 170.702 |
+| İşlem Sürmekte | 142.347 |
+| Beklemede | 48.566 |
+
+**Sorgulanan metrikler**
+- **Toplam Randevu**: toplam 1.68388e+06, ortalama 336775, en yüksek: Gerçekleşti, en düşük: Beklemede
+
+**Öne çıkan bulgular**
+- En yüksek değer Gerçekleşti grubunda (1137937); en düşük Beklemede (48566).
+- Gruplar arasında belirgin fark var: en yüksek değer en düşüğün 23.4 katı.</pre>
+</details>
+<details class="result fail">
+  <summary><span>03_monthly_trend · Aylık Eğilim</span>
+    <b>FAIL</b></summary>
+  <div class="grid">
+    <div><label>Kategori</label>Trend</div>
+    <div><label>Tur</label>1</div>
+    <div><label>Provider / Model</label>nvidia / nvidia/nemotron-3-ultra-550b-a55b</div>
+    <div><label>Süre</label>19.65 sn</div>
+    <div><label>Outcome</label>EXECUTE_SQL</div>
+    <div><label>Sonuç şekli</label>time_series</div>
+  </div>
+  <p><b>Soru:</b> Son 6 aydaki randevu eğilimini kısaca yorumla.</p>
+  <p><b>Oturum:</b> <code>00c6bbec-a7db-4e7a-b226-98b0547d0c8c</code> ·
+     <b>Bağlam:</b> False</p>
+  <h4>Başarısız Assertion'lar</h4><ul><li><b>MAJOR</b> — Provider veya model yönlendirmesi beklentiyle eşleşmiyor.<br><small>Beklenen: {&quot;provider&quot;: &quot;ollama|local_llm&quot;, &quot;model_contains&quot;: &quot;qwen&quot;} · Gerçek: {&quot;providers&quot;: [&quot;nvidia&quot;, &quot;remote_llm&quot;, &quot;insight_reuse&quot;], &quot;models&quot;: [&quot;nvidia/nemotron-3-ultra-550b-a55b&quot;, &quot;nvidia/nemotron-3-ultra-550b-a55b&quot;]}</small></li><li><b>MAJOR</b> — Aylık zaman kırılımı bekleniyor.<br><small>Beklenen: month · Gerçek: None</small></li></ul>
+  <h4>SQL</h4><pre><code>SELECT DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1) AS period_start, COUNT(*) AS monthly_appointment_count
+FROM dbo.vw_RandevuRaporu
+WHERE BaslangicTarihi &gt;= &#x27;2026-01-22&#x27; AND BaslangicTarihi &lt; DATEADD(day, 1, &#x27;2026-07-22&#x27;)
+GROUP BY DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1)
+ORDER BY period_start ASC;</code></pre>
+  <h4>Görünür Rapor</h4><pre># Aylık Randevu Sayısı Eğilim Analizi
+
+## Sorgu Sonucu
+Aylık Randevu Sayısı son 6 tam dönemde (Ocak 2026 - Haziran 2026) tutarlı bir yükseliş trendi göstermekte, ortalama 12.57 randevudan 58.33% artışla 19 randevuya ulaşmıştır. Temmuz 2026 verisi (7 randevu) dönem henüz tamamlanmadığı için trend karşılaştırmasından hariç tutulmuştur.
+
+## Öne Çıkan Bulgular
+- Aylık Randevu Sayısı Haziran 2026&#x27;da 19 ile en yüksek seviyesine, Temmuz 2026&#x27;da 7 ile en düşük seviyesine ulaşmıştır
+- Son 6 tam dönemde (Ocak-Haziran 2026) tutarlı yükseliş trendi (%58.33 artış) gözlemlenmiştir
+- Trend analizi için Temmuz 2026 verisi (kısmi dönem) karşılaştırmadan çıkarılmıştır
+- Aylık Randevu Sayısı Ocak 2026&#x27;dan Haziran 2026&#x27;ya kadar sürekli artış göstermekte, volatilite %22.53 seviyesindedir
+- Eğim katsayısı 0.9429 ile aylık ortalama yaklaşık 1 randevu artış hızı işaret etmektedir
+
+## Olası Açıklamalar
+- Temmuz 2026&#x27;daki düşüş (7 randevu) dönem henüz tamamlanmadığı için trend kırılması olarak değerlendirilmemeli, olası veri eksikliğinden kaynaklanabilir
+- Sadece 6 tam dönemlik veri ile uzun vadeli trend kalıcılığı hakkında kesin yargı sınırlıdır
+- 2026-07-01 dönemi henüz tamamlanmadığı için eğilim hesabında tam dönemlerle birlikte değerlendirilmemiştir.
+
+## Veri
+Toplam 7 kayıt listelenmiştir.
+
+| Period Start | Aylık Randevu Sayısı |
+| --- | --- |
+| 2026-01-01 | 12 |
+| 2026-02-01 | 15 |
+| 2026-03-01 | 9 |
+| 2026-04-01 | 13 |
+| 2026-05-01 | 13 |
+| 2026-06-01 | 19 |
+| 2026-07-01 | 7 |
+
+**Sorgulanan metrikler**
+- **Aylık Randevu Sayısı**: toplam 88, ortalama 12.57, en yüksek: 2026-06-01, en düşük: 2026-07-01
+
+**Öne çıkan bulgular**
+- En yüksek değer 2026-06-01 grubunda (19); en düşük 2026-07-01 (7).
+
+**Varsayımlar ve Sınırlamalar**
+- 2026-07-01 dönemi henüz tamamlanmadığı için eğilim hesabında tam dönemlerle birlikte değerlendirilmemiştir.</pre>
+</details>
+<details class="result pass">
+  <summary><span>04_complex_multi_metric · Karma Çoklu Metrik</span>
+    <b>PASS</b></summary>
+  <div class="grid">
+    <div><label>Kategori</label>Karşılaştırma</div>
+    <div><label>Tur</label>1</div>
+    <div><label>Provider / Model</label>nvidia / nvidia/nemotron-3-ultra-550b-a55b</div>
+    <div><label>Süre</label>23.87 sn</div>
+    <div><label>Outcome</label>EXECUTE_SQL</div>
+    <div><label>Sonuç şekli</label>categorical_grouped_result</div>
+  </div>
+  <p><b>Soru:</b> Son 6 ayda şubelere göre randevu sayısı, gerçekleşme oranı ve ortalama randevu süresini karşılaştır; dikkat çeken farklılıkları ve olası nedenleri açıkla.</p>
+  <p><b>Oturum:</b> <code>72a6244d-fa2b-44d9-865a-db2bcfb8b0f2</code> ·
+     <b>Bağlam:</b> False</p>
+  <h4>Başarısız Assertion'lar</h4><ul><li>Başarısız assertion yok.</li></ul>
+  <h4>SQL</h4><pre><code>SELECT SubeAdi AS SubeAdi, AVG(CAST(RandevuSuresi AS FLOAT)) AS appointment_duration_average, 100.0 * SUM(CASE WHEN RandevuDurumu = N&#x27;Gerçekleşti&#x27; THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) AS completed_appointment_rate, COUNT(*) AS appointment_count
+FROM dbo.vw_RandevuRaporu
+WHERE BaslangicTarihi &gt;= &#x27;2026-01-22&#x27; AND BaslangicTarihi &lt; DATEADD(day, 1, &#x27;2026-07-22&#x27;)
+
+GROUP BY SubeAdi;</code></pre>
+  <h4>Görünür Rapor</h4><pre># TEST ASM Gebze Şubesine Ait Randevu Analizi
+
+## Sorgu Sonucu
+Analiz kapsamında yalnızca TEST ASM Gebze şubesi bulunduğu için kategoriler arası karşılaştırma yapılamamıştır; bu şubeye ait toplam 88 randevu, ortalama randevu süresi 66.97 dakika ve gerçekleşme oranı %0 olarak ölçülmüştür.
+
+## Öne Çıkan Bulgular
+- Tek kategori (TEST ASM Gebze) analiz edildiği için karşılaştırma yetersiz kalmıştır
+- Toplam 88 randevu kaydı bulunmaktadır
+- Ortalama randevu süresi 66.97 dakika olarak hesaplanmıştır
+- Gerçekleşme oranı %0 olarak belirlenmiştir
+- Seçilen kapsamda yalnızca bir kategori (TEST ASM Gebze) bulunduğu için kategoriler arası karşılaştırma yapılamamıştır
+- Tek bir kategori üzerinden yapılan analizde en yüksek ve en düşük değerler aynı kategoriye aittir
+- Dağılım yüzdeleri TEST ASM Gebze için %100 olarak gerçekleşmiştir
+
+## Olası Açıklamalar
+- Tek kategori analiz edildiği için performans karşılaştırması veya sıralama yapılamamaktadır
+- Gerçekleşme oranı %0 olması, veri toplama sürecinde bir sorun olabileceği gibi randevuların henüz gerçekleşmemiş olabileceğini de gösterebilir
+- Ortalama randevu süresi 66.97 dakika tek bir kategori için geçerli olup, bu değerin genel performans göstergesi olup olmadığı değerlendirilemez
+- Seçilen kapsamda yalnızca bir kategori bulunduğu için kategoriler arası karşılaştırma yapılamadı.
+
+## Veri
+Toplam 1 kayıt listelenmiştir.
+
+| Subeadi | Ortalama Randevu Süresi | Gerçekleşme Oranı | Toplam Randevu |
+| --- | --- | --- | --- |
+| TEST ASM Gebze | 67,0 | %0,0 | 88 |
+
+**Sorgulanan metrikler**
+- **Ortalama Randevu Süresi**: toplam 66.97, ortalama 66.97, en yüksek: TEST ASM Gebze, en düşük: TEST ASM Gebze
+- **Gerçekleşme Oranı**: toplam 0, ortalama 0, en yüksek: TEST ASM Gebze, en düşük: TEST ASM Gebze
+- **Toplam Randevu**: toplam 88, ortalama 88, en yüksek: TEST ASM Gebze, en düşük: TEST ASM Gebze
+
+**Varsayımlar ve Sınırlamalar**
+- Seçilen kapsamda yalnızca bir kategori bulunduğu için kategoriler arası karşılaştırma yapılamadı.</pre>
+</details>
+<details class="result fail">
+  <summary><span>05_grounded_branch · Doğrulanmış Şube</span>
+    <b>FAIL</b></summary>
+  <div class="grid">
+    <div><label>Kategori</label>Filtre</div>
+    <div><label>Tur</label>1</div>
+    <div><label>Provider / Model</label>nvidia / nvidia/nemotron-3-ultra-550b-a55b</div>
+    <div><label>Süre</label>33.50 sn</div>
+    <div><label>Outcome</label>EXECUTE_SQL</div>
+    <div><label>Sonuç şekli</label>time_series</div>
+  </div>
+  <p><b>Soru:</b> TEST ASM Gebze için son 30 günlük randevu sayılarını göster.</p>
+  <p><b>Oturum:</b> <code>87ef2f0d-9e13-4394-ad1c-b2606542ab09</code> ·
+     <b>Bağlam:</b> False</p>
+  <h4>Başarısız Assertion'lar</h4><ul><li><b>MAJOR</b> — Analiz tipi beklentiyle eşleşmiyor.<br><small>Beklenen: count|summary|list · Gerçek: trend</small></li><li><b>CRITICAL</b> — Son 30 günlük doğru tarih aralığı bulunamadı.<br><small>Beklenen: Son 30 günlük yarı-açık tarih aralığı · Gerçek: SELECT TOP (100) 
+    FORMAT(BaslangicTarihi, &#x27;yyyy-MM-dd&#x27;) AS Gun,
+    COUNT(*) AS RandevuSayisi
+FROM dbo.vw_RandevuRaporu
+WHERE BaslangicTarihi &gt;= &#x27;2026-06-23&#x27;
+    AND BaslangicTarihi &lt; DATEADD(day, 1, &#x27;2026-07-22&#x27;)
+    AND SubeAdi = &#x27;TE…</small></li></ul>
+  <h4>SQL</h4><pre><code>SELECT TOP (100) 
+    FORMAT(BaslangicTarihi, &#x27;yyyy-MM-dd&#x27;) AS Gun,
+    COUNT(*) AS RandevuSayisi
+FROM dbo.vw_RandevuRaporu
+WHERE BaslangicTarihi &gt;= &#x27;2026-06-23&#x27;
+    AND BaslangicTarihi &lt; DATEADD(day, 1, &#x27;2026-07-22&#x27;)
+    AND SubeAdi = &#x27;TEST ASM Gebze&#x27;
+GROUP BY FORMAT(BaslangicTarihi, &#x27;yyyy-MM-dd&#x27;)
+ORDER BY Gun;</code></pre>
+  <h4>Görünür Rapor</h4><pre># Sorgu Sonucu
+
+Toplam 7 kayıt listelenmiştir.
+
+| Gun | Randevusayisi |
+| --- | --- |
+| 2026-06-23 | 3 |
+| 2026-06-29 | 2 |
+| 2026-07-06 | 1 |
+| 2026-07-09 | 1 |
+| 2026-07-13 | 1 |
+| 2026-07-17 | 3 |
+| 2026-07-20 | 1 |
+
+**Öne çıkan bulgular**
+- En yüksek değer 2026-06-23 grubunda (3); en düşük 2026-07-20 (1).
+- Gruplar arasında belirgin fark var: en yüksek değer en düşüğün 3 katı.</pre>
+</details>
+<details class="result pass">
+  <summary><span>07_additive_followup · Eklemeli Takip Sorusu</span>
+    <b>PASS</b></summary>
+  <div class="grid">
+    <div><label>Kategori</label>Bağlam</div>
+    <div><label>Tur</label>1</div>
+    <div><label>Provider / Model</label>deterministic / templates</div>
+    <div><label>Süre</label>4.71 sn</div>
+    <div><label>Outcome</label>EXECUTE_SQL</div>
+    <div><label>Sonuç şekli</label>categorical_grouped_result</div>
+  </div>
+  <p><b>Soru:</b> Şubelere göre randevu sayılarını karşılaştır.</p>
+  <p><b>Oturum:</b> <code>bc2ad888-68d0-4e9d-a4ab-4cdf43d9f5eb</code> ·
+     <b>Bağlam:</b> False</p>
+  <h4>Başarısız Assertion'lar</h4><ul><li>Başarısız assertion yok.</li></ul>
+  <h4>SQL</h4><pre><code>SELECT SubeAdi AS SubeAdi, COUNT(*) AS appointment_count
+FROM dbo.vw_RandevuRaporu
+
+GROUP BY SubeAdi;</code></pre>
+  <h4>Görünür Rapor</h4><pre># Dönem Karşılaştırması
+
+## Sorgu Sonucu
+Toplam 1.683.876 kayıttan 1.683.876 tanesi (%100,0) &#x27;TEST ASM Gebze&#x27; durumunda.
+
+## Öne Çıkan Bulgular
+- Toplam 1.683.876 kayıttan 1.683.876 tanesi (%100,0) &#x27;TEST ASM Gebze&#x27; durumunda.
+- &#x27;TEST ASM Gebze&#x27; toplamın %100,0 kadarını oluşturuyor.
+- Sonuç kümesindeki toplam: 1.683.876.
+- Ortalama değer: 1.683.876.
+- Değerler 1.683.876 ile 1.683.876 arasında.
+- &#x27;TEST ASM Gebze&#x27; için sonuçlar özetlenmiştir.
+
+## Olası Açıklamalar
+- Seçilen kapsamda yalnızca bir kategori bulunduğu için kategoriler arası karşılaştırma yapılamadı.
+
+## Veri
+Toplam 1 kayıt listelenmiştir.
+
+| Subeadi | Toplam Randevu |
+| --- | --- |
+| TEST ASM Gebze | 1.683.876 |
+
+**Sorgulanan metrikler**
+- **Toplam Randevu**: toplam 1.68388e+06, ortalama 1.68388e+06, en yüksek: TEST ASM Gebze, en düşük: TEST ASM Gebze
+
+**Varsayımlar ve Sınırlamalar**
+- Seçilen kapsamda yalnızca bir kategori bulunduğu için kategoriler arası karşılaştırma yapılamadı.</pre>
+</details>
+<details class="result fail">
+  <summary><span>07_additive_followup · Eklemeli Takip Sorusu</span>
+    <b>FAIL</b></summary>
+  <div class="grid">
+    <div><label>Kategori</label>Bağlam</div>
+    <div><label>Tur</label>2</div>
+    <div><label>Provider / Model</label>static / out_of_scope_node</div>
+    <div><label>Süre</label>0.01 sn</div>
+    <div><label>Outcome</label>OUT_OF_SCOPE</div>
+    <div><label>Sonuç şekli</label>-</div>
+  </div>
+  <p><b>Soru:</b> Bir de gerçekleşme oranını ekle.</p>
+  <p><b>Oturum:</b> <code>bc2ad888-68d0-4e9d-a4ab-4cdf43d9f5eb</code> ·
+     <b>Bağlam:</b> False</p>
+  <h4>Başarısız Assertion'lar</h4><ul><li><b>CRITICAL</b> — Beklenen iş akışı sonucu alınmadı.<br><small>Beklenen: EXECUTE_SQL · Gerçek: OUT_OF_SCOPE</small></li><li><b>MAJOR</b> — Analiz tipi beklentiyle eşleşmiyor.<br><small>Beklenen: comparison|distribution · Gerçek: None</small></li><li><b>CRITICAL</b> — Bağlam uygulama kararı beklentiyle eşleşmiyor.<br><small>Beklenen: True · Gerçek: False</small></li><li><b>CRITICAL</b> — SQL beklenen ifadeyi içermiyor: GROUP BY SubeAdi<br><small>Beklenen: contains GROUP BY SubeAdi · Gerçek: </small></li></ul>
+  <h4>SQL</h4><pre><code>-- SQL üretilmedi</code></pre>
+  <h4>Görünür Rapor</h4><pre># Bu Soru Veri Kapsamı Dışında
+
+Bu soru, hastane veritabanındaki verilerle yanıtlayabileceğim bir soruya benzemiyor.
+
+## Yanıtlayabileceğim konular
+
+- **Bölümler** — Kardiyoloji, Psikiyatri, Ortopedi vb. bölüm bazlı analizler
+- **Doktorlar** — doktor listeleri, yoğunluk ve randevu sayıları
+- **Hastalar** — hasta sayıları ve dağılımları
+- **Randevular** — günlük/haftalık/aylık randevu istatistikleri
+- **Reçeteler ve tanılar** — reçete ve tanı analizleri
+- **Faturalar, laboratuvar testleri ve yatışlar**
+
+## Örnek sorular
+
+- &quot;Bugün kaç randevu oluşturuldu?&quot;
+- &quot;Kardiyoloji doktorlarını göster.&quot;
+- &quot;Son 6 ayın randevularını analiz et.&quot;
+
+Sorunuzu bu veriler üzerinden yeniden ifade ederseniz yardımcı olabilirim.
+</pre>
+</details>
+<details class="result pass">
+  <summary><span>09_year_only_followup · Yalnızca Yıl Takibi</span>
+    <b>PASS</b></summary>
+  <div class="grid">
+    <div><label>Kategori</label>Bağlam</div>
+    <div><label>Tur</label>1</div>
+    <div><label>Provider / Model</label>deterministic / templates</div>
+    <div><label>Süre</label>11.01 sn</div>
+    <div><label>Outcome</label>EXECUTE_SQL</div>
+    <div><label>Sonuç şekli</label>scalar_aggregate</div>
+  </div>
+  <p><b>Soru:</b> 2025 yılının ortalama randevu süresini göster.</p>
+  <p><b>Oturum:</b> <code>e4c39117-6b22-4e0c-8420-24784994c250</code> ·
+     <b>Bağlam:</b> False</p>
+  <h4>Başarısız Assertion'lar</h4><ul><li>Başarısız assertion yok.</li></ul>
+  <h4>SQL</h4><pre><code>SELECT TOP (100) AVG(CAST(RandevuSuresi AS FLOAT)) AS OrtalamaRandevuSuresi
+FROM dbo.vw_RandevuRaporu
+WHERE BaslangicTarihi &gt;= &#x27;2025-01-01&#x27; AND BaslangicTarihi &lt; DATEADD(day, 1, &#x27;2025-12-31&#x27;)</code></pre>
+  <h4>Görünür Rapor</h4><pre># Sorgu Sonucu
+
+**Ortalamarandevusuresi:** 33,2
+
+Ortalamarandevusuresi 33,2 olarak hesaplanmıştır.</pre>
+</details>
+<details class="result pass">
+  <summary><span>09_year_only_followup · Yalnızca Yıl Takibi</span>
+    <b>PASS</b></summary>
+  <div class="grid">
+    <div><label>Kategori</label>Bağlam</div>
+    <div><label>Tur</label>2</div>
+    <div><label>Provider / Model</label>deterministic / templates</div>
+    <div><label>Süre</label>10.03 sn</div>
+    <div><label>Outcome</label>EXECUTE_SQL</div>
+    <div><label>Sonuç şekli</label>scalar_aggregate</div>
+  </div>
+  <p><b>Soru:</b> 2024 yılının?</p>
+  <p><b>Oturum:</b> <code>e4c39117-6b22-4e0c-8420-24784994c250</code> ·
+     <b>Bağlam:</b> True</p>
+  <h4>Başarısız Assertion'lar</h4><ul><li>Başarısız assertion yok.</li></ul>
+  <h4>SQL</h4><pre><code>SELECT TOP (100) AVG(CAST(RandevuSuresi AS FLOAT)) AS OrtalamaRandevuSuresi
+FROM dbo.vw_RandevuRaporu
+WHERE BaslangicTarihi &gt;= &#x27;2024-01-01&#x27; AND BaslangicTarihi &lt; DATEADD(day, 1, &#x27;2024-12-31&#x27;)</code></pre>
+  <h4>Görünür Rapor</h4><pre># Sorgu Sonucu
+
+**Ortalamarandevusuresi:** 32,8
+
+Ortalamarandevusuresi 32,8 olarak hesaplanmıştır.</pre>
+</details>
+</main></body></html>

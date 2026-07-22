@@ -9,6 +9,79 @@ import { SqlResultsTable } from "./SqlResultsTable";
 import { SqlChartPanel } from "./SqlChartPanel";
 
 describe("sohbet arayüzü düzenlemeleri", () => {
+  it("tamamlanan sıfır sonuç yanıtını görünür asistan metni olarak gösterir", () => {
+    render(
+      <ChatMessage
+        message={{
+          id: "empty-result",
+          role: "assistant",
+          content: "Belirtilen kriterlere uygun kayıt bulunamadı.",
+          createdAt: Date.now(),
+          streaming: false,
+          status: "success",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Belirtilen kriterlere uygun kayıt bulunamadı.")).toBeTruthy();
+  });
+
+  it("uzun temel gösterge değerlerini sabit ve dengeli kartlarda sınırlar", () => {
+    const { container } = render(
+      <ChatMessage
+        message={{
+          id: "metrics-layout",
+          role: "assistant",
+          content: "Özet",
+          createdAt: 1,
+          metricCards: [
+            {
+              value: "ASM MR ŞIEMENS, MANYETİK REZONANS BİRİMİ",
+              label: "En Yüksek Kategori",
+              context: "Tekil Hasta Sayısı",
+            },
+            {
+              value: "1",
+              label: "Toplam",
+              context: "Tekil Hasta Sayısı",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Tekil Hasta Sayısı")).toHaveLength(1);
+    expect(container.querySelector(".lg\\:grid-cols-4")).toBeTruthy();
+    expect(container.querySelector(".min-h-\\[104px\\]")).toBeTruthy();
+    expect(screen.getByTitle("ASM MR ŞIEMENS, MANYETİK REZONANS BİRİMİ")).toBeTruthy();
+  });
+
+  it("backend aşamasını düşünme animasyonunda gösterir", () => {
+    render(<TypingIndicator stage="executing_sql" />);
+    expect(screen.getByText("Veriler getiriliyor…")).toBeTruthy();
+  });
+
+  it("sorgu hatasını uygun aksiyonlarla gösterir", () => {
+    render(
+      <ChatMessage
+        message={{
+          id: "query-error",
+          role: "assistant",
+          content: "",
+          createdAt: 1,
+          status: "error",
+          errorKind: "query",
+          prompt: "Soru",
+        }}
+        onPrompt={() => undefined}
+        onEditPrompt={() => undefined}
+      />,
+    );
+    expect(screen.getByText("Sorgu tamamlanamadı")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Yeniden dene" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Soruyu düzenle" })).toBeTruthy();
+  });
+
   it("üç panelin üst ayraçlarını aynı yükseklikte hizalar", () => {
     const { container } = render(
       <>
@@ -93,6 +166,11 @@ describe("sohbet arayüzü düzenlemeleri", () => {
 
     expect(screen.getByText("Med Agent")).toBeTruthy();
     expect(screen.queryByText("ASM AI Agent")).toBeNull();
+    const newChat = screen.getByRole("button", { name: "Yeni sohbet" });
+    expect(newChat.className).toContain("h-10");
+    expect(newChat.parentElement?.className).toContain("pt-4");
+    expect(newChat.parentElement?.className).toContain("gap-3");
+    expect(screen.getByRole("textbox").className).toContain("h-10");
   });
 
   it("düşünme avatarını ve balonunu aynı merkez ve yükseklikte tutar", () => {
@@ -235,6 +313,7 @@ describe("sohbet arayüzü düzenlemeleri", () => {
           content: "İstek başarısız",
           createdAt: 1,
           status: "error",
+          errorKind: "query",
           prompt: "Başarısız soru",
         }}
         onPrompt={onPrompt}

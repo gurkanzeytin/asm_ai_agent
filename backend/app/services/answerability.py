@@ -18,6 +18,45 @@ class AnswerabilityResult(BaseModel):
     )
 
 
+class AnswerabilityInput(BaseModel):
+    """Typed decision contract (AI-INTELLIGENCE-018, item 2).
+
+    A short follow-up must be evaluated using the RESOLVED analytical context,
+    not raw text alone. Built once in `ReportingService.run_workflow()` — the
+    only place both `ContextResolver`'s output and the raw question coexist —
+    and threaded through `AgentState` to `AnswerabilityGuard.assess()`.
+    """
+
+    raw_question: str = Field(..., description="Exactly as the user typed it.")
+    resolved_question: str = Field(..., description="After ContextResolver rewriting/merge.")
+    has_valid_prior_context: bool = Field(
+        default=False, description="ResolutionResult.context_applied — real prior-turn "
+        "analytical state was retained, replaced, or extended this turn."
+    )
+    resolved_metrics: list[str] = Field(default_factory=list)
+    resolved_dimensions: list[str] = Field(default_factory=list)
+    resolved_date_range: str | None = Field(
+        default=None, description="Explicit or inherited date expression, if any."
+    )
+    context_operation: str | None = Field(
+        default=None, description="The follow-up signal that fired this turn, if any "
+        "(e.g. 'additive_or_replacement_followup', 'elliptical_analytical_followup', "
+        "'date_only_followup', 'pronoun_reference') — None for an independent question.",
+    )
+    pending_clarification: bool = Field(
+        default=False, description="Whether this turn resolved a pending clarification reply "
+        "(e.g. 'hepsini') — such a reply is answerable by construction, never out-of-scope.",
+    )
+
+    def has_resolved_domain_context(self) -> bool:
+        """A merged analytical context that carries a real metric or dimension
+        is, by itself, sufficient domain evidence — independent of whatever
+        the raw follow-up text alone would (fail to) signal."""
+        return self.has_valid_prior_context and bool(
+            self.resolved_metrics or self.resolved_dimensions
+        )
+
+
 class AnswerabilityGuard:
     """Decides whether a database-bound question is inside the schema domain (AG-022).
 
@@ -37,16 +76,35 @@ class AnswerabilityGuard:
         self._query_analyzer = query_analyzer or QueryAnalyzer()
         self._context_extractor = context_extractor or ContextExtractor()
 
-    def assess(self, question: str) -> AnswerabilityResult:
+    def assess(
+        self,
+        question: str,
+        resolved_context_signals: list[str] | None = None,
+        context: "AnswerabilityInput | None" = None,
+    ) -> AnswerabilityResult:
         try:
-            return self._assess(question)
+            return self._assess(question, resolved_context_signals or [], context)
         except Exception as error:  # degrade open: never block a real question
             logger.error("AnswerabilityGuard failed open: %s", error)
             return AnswerabilityResult(
                 answerable=True, reason="guard_error_failed_open", signals=[]
             )
 
-    def _assess(self, question: str) -> AnswerabilityResult:
+    def _assess(
+        self,
+        question: str,
+        resolved_context_signals: list[str],
+        context: "AnswerabilityInput | None" = None,
+    ) -> AnswerabilityResult:
+        # AI-INTELLIGENCE-018 (item 2/8): a reply that already resolved a
+        # pending grounded-value clarification is answerable by construction
+        # — evaluated BEFORE any raw-text domain-signal scan, never diverted
+        # to out-of-scope classification.
+        if context is not None and context.pending_clarification:
+            return AnswerabilityResult(
+                answerable=True, reason="pending_clarification_context", signals=[]
+            )
+
         analysis = self._query_analyzer.analyze(question)
         context_signals = self._context_extractor.extract(question)
 
@@ -58,17 +116,28 @@ class AnswerabilityGuard:
             f"date:{date_range.expression}" for date_range in analysis.detected_dates
         )
         signals.extend(f"operation:{op}" for op in analysis.detected_operations)
+        signals.extend(resolved_context_signals)
 
         # Matched rewrite synonyms are intentionally NOT a domain signal: the
         # conversational rewrite group matches filler words ("bana", "acaba")
         # in completely unrelated questions. Domain rewrites (e.g. "kalp" ->
         # "kardiyoloji") surface as entities in the expanded query instead.
-        has_entity = bool(analysis.entities) or bool(context_signals.department)
+        has_resolved_domain_context = any(
+            signal.startswith(("inherited_entity:", "inherited_metric:"))
+            for signal in resolved_context_signals
+        ) or (context is not None and context.has_resolved_domain_context())
+        has_entity = (
+            bool(analysis.entities)
+            or bool(context_signals.department)
+            or has_resolved_domain_context
+        )
         has_dated_aggregate = bool(analysis.detected_dates) and bool(
             analysis.detected_operations
         )
 
-        if has_entity:
+        if has_resolved_domain_context:
+            verdict, reason = True, "resolved_context_detected"
+        elif has_entity:
             verdict, reason = True, "domain_entity_detected"
         elif has_dated_aggregate:
             verdict, reason = True, "dated_aggregate_detected"

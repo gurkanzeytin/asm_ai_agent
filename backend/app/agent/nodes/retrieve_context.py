@@ -3,6 +3,7 @@ import time
 
 from app.agent.nodes.node_interface import IAgentNode
 from app.agent.state import AgentState
+from app.context.analytical_signals import merge_query_plans
 from app.planning.models import QueryPlan
 from app.planning.planner import QueryPlanner
 from app.services.interfaces import IPromptService
@@ -45,7 +46,16 @@ class RetrieveContextNode(IAgentNode):
 
         try:
             db_context = await self.prompt_service.retrieve_schema_context(state.question)
-            query_plan = self._build_plan(state.question, db_context, state.semantic_frame)
+            planning_question = state.raw_question or state.question
+            planning_frame = None if state.context_follow_up_detected else state.semantic_frame
+            query_plan = self._build_plan(planning_question, db_context, planning_frame)
+            if query_plan is not None:
+                query_plan = merge_query_plans(
+                    current=query_plan,
+                    retained=state.retained_query_plan,
+                    raw_question=planning_question,
+                    follow_up_detected=state.context_follow_up_detected,
+                )
 
             # AG-022: the schema context must contain every table the plan
             # requires (fact table, join hops) or the schema-identifier guard
@@ -63,8 +73,15 @@ class RetrieveContextNode(IAgentNode):
                 if missing and extend is not None:
                     db_context = await extend(db_context, missing)
                     query_plan = (
-                        self._build_plan(state.question, db_context, state.semantic_frame)
-                        or query_plan
+                        merge_query_plans(
+                            current=(
+                                self._build_plan(planning_question, db_context, planning_frame)
+                                or query_plan
+                            ),
+                            retained=state.retained_query_plan,
+                            raw_question=planning_question,
+                            follow_up_detected=state.context_follow_up_detected,
+                        )
                     )
 
             logger.info("RetrieveContextNode completed successfully.")

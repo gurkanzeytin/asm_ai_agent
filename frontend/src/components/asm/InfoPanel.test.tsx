@@ -4,9 +4,7 @@ import { InfoPanel } from "./InfoPanel";
 
 describe("InfoPanel", () => {
   it("yanıt süresini gösterir; model ve token bilgilerini göstermez", () => {
-    render(
-      <InfoPanel open responseMs={1250} isThinking={false} sql={null} />,
-    );
+    render(<InfoPanel open responseMs={1250} isThinking={false} sql={null} />);
 
     expect(screen.getByText("1.25s")).toBeTruthy();
     expect(screen.queryByText(/token/i)).toBeNull();
