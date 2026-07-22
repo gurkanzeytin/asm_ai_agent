@@ -16,6 +16,7 @@ from app.database_intelligence.models import (
     ViewMetadata,
     calculate_fingerprint,
 )
+from app.semantics.view_mapping import load_view_semantics
 from app.sql_validator.validator import normalize_object_name
 
 logger = logging.getLogger(__name__)
@@ -206,6 +207,19 @@ class DatabaseInspector(IDatabaseInspector):
                 # Best-effort for unrestricted (local development) inspection.
 
             display_name = qualified(view_name)
+
+            # Enrich with curated semantic descriptions when the database has no comments
+            semantics = load_view_semantics().get(display_name) or load_view_semantics().get(
+                view_name
+            )
+            if semantics:
+                column_notes = semantics.get("columns", {})
+                view_columns = [
+                    col.model_copy(update={"comment": col.comment or column_notes.get(col.name)})
+                    for col in view_columns
+                ]
+                view_comment = view_comment or semantics.get("comment")
+
             views_metadata[display_name] = ViewMetadata(
                 name=display_name,
                 comment=view_comment,

@@ -21,6 +21,7 @@ from httpx import AsyncClient
 
 from app.api.deps import get_reporting_service
 from app.application_models.generated_report import GeneratedReport
+from app.application_models.workflow_metrics import WorkflowMetrics
 from app.application_models.workflow_models import QueryResult
 from app.application_models.workflow_result import WorkflowResult
 from app.main import app
@@ -60,7 +61,7 @@ def _make_workflow_result(errors: list | None = None) -> WorkflowResult:
         execution_time_ms=12.0,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
     return WorkflowResult(
         workflow_id="wf-test-001",
@@ -68,6 +69,11 @@ def _make_workflow_result(errors: list | None = None) -> WorkflowResult:
         generated_sql="SELECT d.ad_soyad, COUNT(r.id) AS randevu_sayisi FROM doktorlar d JOIN randevular r ON d.id = r.doktor_id GROUP BY d.ad_soyad ORDER BY randevu_sayisi DESC LIMIT 1;",
         query_result=qr,
         generated_report=report,
+        metrics=WorkflowMetrics(
+            execute_sql_ms=12.0,
+            generate_report_ms=210.0,
+            total_ms=4321.0,
+        ),
         errors=errors or [],
     )
 
@@ -120,6 +126,11 @@ async def test_report_success(client: AsyncClient):
         assert meta["latency_ms"] == 210.0
         assert meta["prompt_tokens"] == 350
         assert meta["completion_tokens"] == 180
+
+        timing = data["timing"]
+        assert timing["execute_sql_ms"] == 12.0
+        assert timing["generate_report_ms"] == 210.0
+        assert timing["total_ms"] == 4321.0
     finally:
         app.dependency_overrides.pop(get_reporting_service, None)
 

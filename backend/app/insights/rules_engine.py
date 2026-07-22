@@ -11,7 +11,6 @@ from app.insights.models import InsightConfidence, InsightRule
 
 logger = logging.getLogger(__name__)
 
-_HIGH_GROWTH_THRESHOLD = 15.0
 _DOMINANT_SHARE_THRESHOLD = 50.0
 _BALANCED_SPREAD_THRESHOLD = 10.0  # max-min share difference in percentage points
 _OUTLIER_RATIO = 1.5  # top value vs average
@@ -25,6 +24,18 @@ _EXPECTED_METRICS: dict[DataShape, tuple[str, ...]] = {
     DataShape.TABULAR: ("count",),
 }
 
+# analytics.trend_metrics.trend_consistency -> InsightRule, computed over
+# comparable (complete) periods only. Replaces the old independent
+# growth_rate/trend_direction rule blocks, which could contradict each other
+# (e.g. DECLINING + POSITIVE_TREND firing together on the same series).
+_CONSISTENCY_RULES: dict[str, InsightRule] = {
+    "insufficient_data": InsightRule.INSUFFICIENT_COMPLETE_PERIODS,
+    "consistent_upward": InsightRule.CONSISTENT_UPWARD_TREND,
+    "consistent_downward": InsightRule.CONSISTENT_DOWNWARD_TREND,
+    "mixed": InsightRule.MIXED_TREND_SIGNAL,
+    "flat": InsightRule.FLAT_TREND,
+}
+
 
 class InsightRulesEngine:
     """Maps deterministic analytics metrics to business rules and confidence."""
@@ -36,22 +47,19 @@ class InsightRulesEngine:
         if analytics.row_count == 0 or not metrics or metrics.get("count", 0) == 0:
             return [InsightRule.INSUFFICIENT_EVIDENCE]
 
-        growth_rate = metrics.get("growth_rate")
-        if isinstance(growth_rate, (int, float)):
-            if growth_rate > _HIGH_GROWTH_THRESHOLD:
-                rules.append(InsightRule.HIGH_GROWTH)
-            elif growth_rate >= 0:
-                rules.append(InsightRule.MODERATE_GROWTH)
-            else:
-                rules.append(InsightRule.DECLINING)
+        if analytics.data_shape == DataShape.TIME_SERIES and analytics.trend_metrics:
+            trend_metrics = analytics.trend_metrics
+            rule = _CONSISTENCY_RULES.get(trend_metrics.trend_consistency)
+            if rule:
+                rules.append(rule)
+            if trend_metrics.comparison_excluded_partial_period:
+                rules.append(InsightRule.PARTIAL_PERIOD_EXCLUDED)
 
-        trend = metrics.get("trend_direction")
-        if trend == "upward":
-            rules.append(InsightRule.POSITIVE_TREND)
-        elif trend == "downward":
-            rules.append(InsightRule.NEGATIVE_TREND)
-        elif trend == "stable":
-            rules.append(InsightRule.STABLE_TREND)
+        if (
+            analytics.data_shape == DataShape.CATEGORICAL
+            and analytics.comparison_category_count == 1
+        ):
+            rules.append(InsightRule.SINGLE_CATEGORY_COMPARISON)
 
         distribution = metrics.get("distribution")
         if isinstance(distribution, dict) and len(distribution) >= 2:
@@ -99,4 +107,16 @@ class InsightRulesEngine:
             return InsightConfidence.MEDIUM
         if not rules:
             return InsightConfidence.MEDIUM
+
+        # A disagreeing endpoint-vs-slope signal, or too few complete periods
+        # to verify a trend at all, is genuine but weaker evidence — real
+        # data, just not a single clean conclusion. Never LOW: the query
+        # executed and produced real numbers, just not a confident trend.
+        weaker_trend_evidence = (
+            InsightRule.MIXED_TREND_SIGNAL in rules
+            or InsightRule.INSUFFICIENT_COMPLETE_PERIODS in rules
+        )
+        if weaker_trend_evidence:
+            return InsightConfidence.MEDIUM
+
         return InsightConfidence.HIGH

@@ -1,0 +1,756 @@
+{
+  "patterns": [
+    {
+      "id": "count",
+      "triggers": [
+        "kac",
+        "sayisi",
+        "sayi",
+        "adet",
+        "toplam randevu",
+        "kac tane"
+      ],
+      "requires": [
+        "metric"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "none",
+      "result_type": "integer",
+      "example_questions": [
+        "Bu ay kaç randevu var?"
+      ],
+      "invalid_examples": [
+        "'kaç' tek başına metrik belirtmezse randevu sayısı varsayılır"
+      ]
+    },
+    {
+      "id": "distinct_count",
+      "triggers": [
+        "farkli",
+        "tekil",
+        "benzersiz",
+        "kac farkli"
+      ],
+      "requires": [
+        "metric"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "none",
+      "result_type": "integer",
+      "example_questions": [
+        "Kaç farklı hasta randevu aldı?"
+      ],
+      "invalid_examples": []
+    },
+    {
+      "id": "distribution",
+      "triggers": [
+        "dagilim",
+        "dagilimi",
+        "gore dagilim",
+        "nasil dagiliyor",
+        "kirilim"
+      ],
+      "requires": [
+        "metric",
+        "dimension"
+      ],
+      "dimension_count": [
+        1,
+        2
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "by_metric_desc",
+      "result_type": "grouped_counts",
+      "example_questions": [
+        "Randevu tiplerine göre dağılımı göster"
+      ],
+      "invalid_examples": [
+        "Boyutsuz dağılım sorusu belirsizdir"
+      ]
+    },
+    {
+      "id": "ranking",
+      "triggers": [
+        "en cok",
+        "en fazla",
+        "en yuksek",
+        "en yogun",
+        "zirvede",
+        "en dusuk",
+        "en az",
+        "en seyrek",
+        "sirala",
+        "siralama",
+        "buyukten kucuge",
+        "coktan aza",
+        "kucukten buyuge",
+        "azdan coga"
+      ],
+      "requires": [
+        "metric",
+        "dimension"
+      ],
+      "dimension_count": [
+        1,
+        1
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "explicit_direction",
+      "result_type": "ranked_rows",
+      "example_questions": [
+        "En yoğun 5 bölümü göster"
+      ],
+      "invalid_examples": [
+        "'en iyi', 'en başarılı' metriksiz belirsizdir; clarification gerekir"
+      ]
+    },
+    {
+      "id": "top_n",
+      "triggers": [
+        "ilk",
+        "top"
+      ],
+      "requires": [
+        "metric",
+        "dimension",
+        "limit"
+      ],
+      "dimension_count": [
+        1,
+        1
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "desc",
+      "result_type": "ranked_rows",
+      "example_questions": [
+        "İlk 10 doktoru randevu sayısına göre göster"
+      ],
+      "invalid_examples": []
+    },
+    {
+      "id": "bottom_n",
+      "triggers": [
+        "son siradaki",
+        "en alttaki",
+        "en dusuk",
+        "en az"
+      ],
+      "requires": [
+        "metric",
+        "dimension",
+        "limit"
+      ],
+      "dimension_count": [
+        1,
+        1
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "asc",
+      "result_type": "ranked_rows",
+      "example_questions": [
+        "En az randevu alan 5 bölüm hangileri?"
+      ],
+      "invalid_examples": []
+    },
+    {
+      "id": "ratio",
+      "triggers": [
+        "orani",
+        "oranlari",
+        "yuzdesi",
+        "yuzde kac",
+        "kacta kaci",
+        "toplama orani",
+        "her 100"
+      ],
+      "requires": [
+        "numerator",
+        "denominator"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "by_metric_desc_optional",
+      "default_formula": "100.0 * numerator / NULLIF(denominator, 0)",
+      "result_type": "percentage",
+      "example_questions": [
+        "Bu ay iptal oranı nedir?"
+      ],
+      "invalid_examples": [
+        "Pay veya payda çıkarılamıyorsa soru belirsizdir"
+      ]
+    },
+    {
+      "id": "percentage",
+      "triggers": [
+        "yuzde",
+        "yuzdelik",
+        "oransal"
+      ],
+      "requires": [
+        "numerator",
+        "denominator"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "none",
+      "default_formula": "100.0 * numerator / NULLIF(denominator, 0)",
+      "result_type": "percentage",
+      "example_questions": [
+        "Randevuların yüzde kaçı gerçekleşti?"
+      ],
+      "invalid_examples": []
+    },
+    {
+      "id": "average",
+      "triggers": [
+        "ortalama",
+        "ortalamasi",
+        "gunde ortalama"
+      ],
+      "requires": [
+        "metric"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "none",
+      "result_type": "float",
+      "example_questions": [
+        "Ortalama randevu süresi kaç dakika?"
+      ],
+      "invalid_examples": []
+    },
+    {
+      "id": "minimum",
+      "triggers": [
+        "en kisa",
+        "minimum",
+        "en kucuk"
+      ],
+      "requires": [
+        "metric"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "none",
+      "result_type": "numeric",
+      "example_questions": [
+        "En kısa randevu süresi nedir?"
+      ],
+      "invalid_examples": []
+    },
+    {
+      "id": "maximum",
+      "triggers": [
+        "en uzun",
+        "maksimum",
+        "en buyuk"
+      ],
+      "requires": [
+        "metric"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "none",
+      "result_type": "numeric",
+      "example_questions": [
+        "En uzun randevu ne kadar sürüyor?"
+      ],
+      "invalid_examples": []
+    },
+    {
+      "id": "period_comparison",
+      "triggers": [
+        "gecen aya gore",
+        "onceki aya gore",
+        "gecen haftaya gore",
+        "onceki doneme gore",
+        "bu ay ile gecen ay",
+        "gecen yila gore",
+        "karsilastir",
+        "kiyasla",
+        "onceki ceyrek",
+        "gecen yilin ayni",
+        "yan yana",
+        "onceki donemle",
+        "gecen ayin",
+        "onceki ayin",
+        "gecen haftadan",
+        "ilk yarisi ile ikinci yarisi"
+      ],
+      "requires": [
+        "metric",
+        "two_periods"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "two_period_ranges",
+      "ordering": "chronological",
+      "result_type": "period_comparison",
+      "example_questions": [
+        "Bu ay ile geçen ayın randevu sayılarını karşılaştır"
+      ],
+      "invalid_examples": [
+        "Dönem belirtilmeden 'karşılaştır' boyut karşılaştırması da olabilir"
+      ]
+    },
+    {
+      "id": "percentage_change",
+      "triggers": [
+        "yuzde degisim",
+        "ne kadar degisti",
+        "artmis mi",
+        "azalmis mi",
+        "artis orani",
+        "dusus orani",
+        "degisim orani",
+        "yuzde kac degisti",
+        "kac degisti",
+        "azalan",
+        "artan",
+        "en buyuk artis"
+      ],
+      "requires": [
+        "metric",
+        "two_periods"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "two_period_ranges",
+      "ordering": "chronological",
+      "default_formula": "100.0 * (current - previous) / NULLIF(previous, 0)",
+      "result_type": "percentage",
+      "example_questions": [
+        "Randevu sayısı geçen aya göre yüzde kaç değişti?"
+      ],
+      "invalid_examples": []
+    },
+    {
+      "id": "time_trend",
+      "triggers": [
+        "trend",
+        "egilim",
+        "zaman icinde",
+        "aylara gore",
+        "gunlere gore",
+        "haftalara gore",
+        "seyri",
+        "gidisat",
+        "seyretti",
+        "nasil degisti",
+        "nasil degisiyor",
+        "aydan aya",
+        "yillara gore",
+        "seyrini",
+        "nasil gidiyor"
+      ],
+      "requires": [
+        "metric",
+        "time_granularity"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "grouped_time_axis",
+      "ordering": "chronological",
+      "result_type": "time_series",
+      "example_questions": [
+        "Son 3 ayın randevu trendini göster"
+      ],
+      "invalid_examples": []
+    },
+    {
+      "id": "cross_analysis",
+      "triggers": [
+        "kirilimda",
+        "birlikte",
+        "capraz",
+        "hem bolum hem",
+        "ve bazinda"
+      ],
+      "requires": [
+        "metric",
+        "two_dimensions"
+      ],
+      "dimension_count": [
+        2,
+        2
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "by_metric_desc",
+      "result_type": "cross_tab",
+      "example_questions": [
+        "Şube ve bölüm kırılımında randevu sayılarını göster"
+      ],
+      "invalid_examples": [
+        "Üç ve üzeri boyut desteklenmez"
+      ]
+    },
+    {
+      "id": "conversion",
+      "triggers": [
+        "donusum",
+        "protokole donusen",
+        "protokole donusum",
+        "kabule donusen",
+        "protokole donusuyor"
+      ],
+      "requires": [
+        "numerator",
+        "denominator"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "none",
+      "default_formula": "100.0 * numerator / NULLIF(denominator, 0)",
+      "result_type": "percentage",
+      "example_questions": [
+        "Randevuların yüzde kaçı protokole dönüşüyor?"
+      ],
+      "invalid_examples": []
+    },
+    {
+      "id": "duration_analysis",
+      "triggers": [
+        "ne kadar suruyor",
+        "sure analizi",
+        "sureleri",
+        "kac dakika",
+        "fiili sure",
+        "sure farki"
+      ],
+      "requires": [
+        "metric"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "none",
+      "result_type": "float",
+      "example_questions": [
+        "Ameliyat randevuları ortalama ne kadar sürüyor?"
+      ],
+      "invalid_examples": []
+    },
+    {
+      "id": "lead_time_analysis",
+      "triggers": [
+        "kac gun onceden",
+        "ne kadar onceden",
+        "lead time",
+        "onceden alinma",
+        "protokol gecikmesi",
+        "randevu olusturma ile"
+      ],
+      "requires": [
+        "metric"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "none",
+      "result_type": "float",
+      "example_questions": [
+        "Randevular ortalama kaç gün önceden alınıyor?"
+      ],
+      "invalid_examples": []
+    },
+    {
+      "id": "repeat_behavior",
+      "triggers": [
+        "birden fazla randevu",
+        "tekrar gelen",
+        "tekrar randevu",
+        "birden cok randevusu",
+        "sadik hasta",
+        "hasta basina",
+        "birden fazla randevusu",
+        "tekrar eden",
+        "en sik gelen",
+        "tek seferlik",
+        "birden fazla gelen",
+        "birden cok kez"
+      ],
+      "requires": [
+        "metric"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "none",
+      "result_type": "integer",
+      "example_questions": [
+        "Birden fazla randevu alan kaç hasta var?"
+      ],
+      "invalid_examples": []
+    },
+    {
+      "id": "data_quality",
+      "triggers": [
+        "eksik",
+        "bos olan",
+        "hatali",
+        "tutarsiz",
+        "gecersiz",
+        "doluluk",
+        "veri kalitesi",
+        "kayip veri",
+        "uyusmayan",
+        "gecersiz tarih",
+        "once olan kayit",
+        "sifir veya negatif"
+      ],
+      "requires": [
+        "metric"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "none",
+      "result_type": "integer",
+      "example_questions": [
+        "Telefonu eksik kaç kayıt var?"
+      ],
+      "invalid_examples": []
+    },
+    {
+      "id": "anomaly_candidate",
+      "triggers": [
+        "anormal",
+        "sira disi",
+        "beklenmedik",
+        "aykiri",
+        "olagandisi",
+        "supheli"
+      ],
+      "requires": [
+        "metric",
+        "time_granularity"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "grouped_time_axis",
+      "ordering": "chronological",
+      "result_type": "time_series",
+      "example_questions": [
+        "Randevu sayısında sıra dışı günler var mı?"
+      ],
+      "invalid_examples": [
+        "Anomali eşiği deterministik değildir; yalnız aday zaman serisi üretilir"
+      ]
+    },
+    {
+      "id": "anomaly_comparison",
+      "triggers": [
+        "patlamis",
+        "patladi",
+        "firlamis",
+        "firladi",
+        "ani artis",
+        "aniden artti",
+        "anormal artis"
+      ],
+      "requires": [
+        "current_period",
+        "baseline_period",
+        "metric"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "current_vs_baseline",
+      "ordering": "desc_by_change",
+      "result_type": "comparison_summary",
+      "example_questions": [
+        "Bu aralar hangi şubede gelmeme oranı artmış?"
+      ],
+      "invalid_examples": [
+        "gelmeme sayısı nedir (artış sinyali yok)"
+      ]
+    },
+    {
+      "id": "multi_metric_performance",
+      "triggers": [
+        "isler nasil gidiyor",
+        "nasil gidiyoruz",
+        "genel durum nasil",
+        "durumumuz nasil",
+        "performans ozeti",
+        "genel gidisat"
+      ],
+      "requires": [
+        "kpi_set",
+        "baseline_period"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "current_vs_baseline",
+      "ordering": "none",
+      "result_type": "kpi_summary",
+      "example_questions": [
+        "Geçen seneye kıyasla işler nasıl gidiyor?"
+      ]
+    },
+    {
+      "id": "cohort_analysis",
+      "triggers": [
+        "son dakika alan",
+        "son dakika randevu",
+        "son anda alan",
+        "gunu gunune alan"
+      ],
+      "requires": [
+        "cohort_definition",
+        "metric"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "cohort_window",
+      "ordering": "none",
+      "result_type": "cohort_summary",
+      "example_questions": [
+        "Randevusunu son dakika alanların gelme durumu nasıl?"
+      ]
+    },
+    {
+      "id": "variance_analysis",
+      "triggers": [
+        "cok fark var mi",
+        "fark var mi",
+        "farklilik var mi",
+        "arasinda fark",
+        "esitsizlik",
+        "dengesizlik"
+      ],
+      "requires": [
+        "dimension",
+        "metric"
+      ],
+      "dimension_count": [
+        1,
+        1
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "desc",
+      "result_type": "distribution_summary",
+      "example_questions": [
+        "Doktorlar arasında çok fark var mı?"
+      ]
+    },
+    {
+      "id": "baseline_comparison",
+      "triggers": [
+        "gecen seneye kiyasla",
+        "gecen yila kiyasla",
+        "gecen seneye gore",
+        "gecen yilin aynisiyla"
+      ],
+      "requires": [
+        "current_period",
+        "baseline_period"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "same_period_previous_year",
+      "ordering": "none",
+      "result_type": "comparison_summary",
+      "example_questions": [
+        "Geçen seneye kıyasla işler nasıl gidiyor?"
+      ]
+    },
+    {
+      "id": "distribution_inequality",
+      "triggers": [
+        "yogunlasma",
+        "adaletsiz dagilim",
+        "dengesiz dagilim",
+        "yuk dagilimi"
+      ],
+      "requires": [
+        "dimension",
+        "metric"
+      ],
+      "dimension_count": [
+        1,
+        1
+      ],
+      "date_behavior": "optional_filter",
+      "ordering": "desc",
+      "result_type": "distribution_summary",
+      "example_questions": [
+        "İş yükü doktorlar arasında dengesiz mi dağılıyor?"
+      ]
+    },
+    {
+      "id": "adaptive_time_comparison",
+      "triggers": [
+        "bu aralar",
+        "son zamanlarda",
+        "son donemde",
+        "bu donemde"
+      ],
+      "requires": [
+        "current_period",
+        "baseline_period"
+      ],
+      "dimension_count": [
+        0,
+        1
+      ],
+      "date_behavior": "last_30_vs_previous_30",
+      "ordering": "none",
+      "result_type": "comparison_summary",
+      "example_questions": [
+        "Bu aralar randevular nasıl seyrediyor?"
+      ]
+    }
+  ]
+}

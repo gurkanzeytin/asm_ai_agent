@@ -31,7 +31,7 @@ async def test_execution_service_success():
 
     service = ExecutionService(repository, sql_validator)
     sql = "SELECT * FROM doctors;"
-    
+
     result = await service.execute_sql(sql)
 
     # Assertions
@@ -42,10 +42,55 @@ async def test_execution_service_success():
     assert result.row_count == 2
     assert result.execution_time_ms > 0
     assert isinstance(result.executed_at, datetime)
-    assert result.database_provider == "sqlite"  # from settings default in tests config
+    assert result.database_provider == "mssql"  # SQL Server is the only runtime database
 
     sql_validator.validate.assert_called_once_with(sql)
     repository.execute_readonly_query.assert_called_once_with(sql)
+
+
+@pytest.mark.asyncio
+async def test_execution_service_preserves_all_grouped_multi_metric_aliases():
+    """Multi-metric grouped SQL result rows must preserve every SELECT alias
+    (dimension + every metric column) — never collapse to the first numeric
+    column or a single scalar."""
+    repository = AsyncMock(spec=IAnalyticalRepository)
+    sql_validator = MagicMock(spec=ISQLValidator)
+
+    mock_rows = [
+        {
+            "SubeAdi": "Merkez",
+            "appointment_count": 89,
+            "completed_appointment_rate": 76.5,
+            "appointment_duration_average": 22.0,
+        },
+        {
+            "SubeAdi": "Kadikoy",
+            "appointment_count": 54,
+            "completed_appointment_rate": 68.0,
+            "appointment_duration_average": 27.5,
+        },
+    ]
+    repository.execute_readonly_query.return_value = mock_rows
+    sql_validator.validate.return_value = SQLValidationResult(valid=True)
+
+    service = ExecutionService(repository, sql_validator)
+    result = await service.execute_sql(
+        "SELECT SubeAdi, COUNT(*) AS appointment_count, "
+        "100.0 * SUM(CASE WHEN RandevuDurumu = N'Gerçekleşti' THEN 1 ELSE 0 END) / "
+        "NULLIF(COUNT(*), 0) AS completed_appointment_rate, "
+        "AVG(CAST(RandevuSuresi AS FLOAT)) AS appointment_duration_average "
+        "FROM dbo.vw_RandevuRaporu GROUP BY SubeAdi;"
+    )
+
+    assert set(result.columns) == {
+        "SubeAdi",
+        "appointment_count",
+        "completed_appointment_rate",
+        "appointment_duration_average",
+    }
+    assert result.row_count == 2
+    for row in result.rows:
+        assert set(row.keys()) == set(result.columns)
 
 
 @pytest.mark.asyncio
@@ -105,7 +150,7 @@ async def test_execution_service_exception_translation():
 @pytest.mark.asyncio
 async def test_execute_sql_node_immutability():
     workflow_service = AsyncMock(spec=IWorkflowService)
-    
+
     mock_query_result = QueryResult(
         columns=["id"],
         rows=[{"id": 1}],
@@ -113,12 +158,12 @@ async def test_execute_sql_node_immutability():
         execution_time_ms=10.0,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
     workflow_service.execute_query.return_value = mock_query_result
 
     node = ExecuteSQLNode(workflow_service)
-    
+
     state = AgentState(
         question="List data",
         generated_sql=GeneratedSQL(
@@ -151,7 +196,7 @@ async def test_graph_builder_with_execution_node():
 
     prompt_service.retrieve_schema_context.return_value = DatabaseContext(tables=[], views=[])
     prompt_service.render_sql_prompt.return_value = "Rendered Prompt"
-    
+
     mock_generated_sql = GeneratedSQL(
         sql="SELECT * FROM doctors;",
         normalized_sql="SELECT * FROM doctors",
@@ -169,7 +214,7 @@ async def test_graph_builder_with_execution_node():
         execution_time_ms=5.0,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
     workflow_service.execute_query.return_value = mock_query_result
 

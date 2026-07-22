@@ -1,0 +1,387 @@
+{
+  "run_id": "20260717T125417Z-643e40f3",
+  "generated_at": "2026-07-17T12:54:17.078358+00:00",
+  "suite": "acceptance",
+  "mode": "planner-only",
+  "environment": {
+    "sql_dialect": "tsql",
+    "database_provider": "mssql",
+    "live_db_available": true
+  },
+  "summary": {
+    "total_cases": 7,
+    "passed": 6,
+    "failed": 1,
+    "skipped": 0,
+    "layer_accuracy": {
+      "routing": 85.71,
+      "query_plan": 85.71
+    },
+    "failure_counts": {
+      "CLARIFICATION_UNNECESSARY": 1,
+      "PLAN_NOT_ANSWERABLE": 1
+    },
+    "p50_ms": 13.20560000021942,
+    "p95_ms": 16.084700007922947,
+    "max_ms": 16.084700007922947,
+    "deterministic_sql_avg_ms": 0.0,
+    "llm_sql_avg_ms": 0.0,
+    "live_execution_avg_ms": 0.0,
+    "timeout_rate": 0.0
+  },
+  "results": [
+    {
+      "case_id": "E2E-RW-001",
+      "question": "Bu aralar hangi subede iptaller patlamis?",
+      "category": "unanswerable",
+      "mode": "planner-only",
+      "passed": false,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 0.996499991742894,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": false,
+          "skipped": false,
+          "duration_ms": 0.028399997972883284,
+          "failures": [
+            {
+              "case_id": "E2E-RW-001",
+              "stage": "routing",
+              "failure_code": "CLARIFICATION_UNNECESSARY",
+              "expected": false,
+              "actual": true,
+              "component": "QueryAnalyzer",
+              "generated_plan": null,
+              "generated_sql": null,
+              "result_shape": null,
+              "exception_type": null,
+              "duration_ms": 0.0
+            }
+          ]
+        },
+        {
+          "stage": "query_plan",
+          "passed": false,
+          "skipped": false,
+          "duration_ms": 0.008199989679269493,
+          "failures": [
+            {
+              "case_id": "E2E-RW-001",
+              "stage": "query_plan",
+              "failure_code": "PLAN_NOT_ANSWERABLE",
+              "expected": "plan",
+              "actual": null,
+              "component": "QueryPlanner",
+              "generated_plan": null,
+              "generated_sql": null,
+              "result_shape": null,
+              "exception_type": null,
+              "duration_ms": 0.0
+            }
+          ]
+        }
+      ],
+      "failures": [
+        {
+          "case_id": "E2E-RW-001",
+          "stage": "routing",
+          "failure_code": "CLARIFICATION_UNNECESSARY",
+          "expected": false,
+          "actual": true,
+          "component": "QueryAnalyzer",
+          "generated_plan": null,
+          "generated_sql": null,
+          "result_shape": null,
+          "exception_type": null,
+          "duration_ms": 0.0
+        },
+        {
+          "case_id": "E2E-RW-001",
+          "stage": "query_plan",
+          "failure_code": "PLAN_NOT_ANSWERABLE",
+          "expected": "plan",
+          "actual": null,
+          "component": "QueryPlanner",
+          "generated_plan": null,
+          "generated_sql": null,
+          "result_shape": null,
+          "exception_type": null,
+          "duration_ms": 0.0
+        }
+      ],
+      "generated_sql": null,
+      "plan_summary": null
+    },
+    {
+      "case_id": "E2E-RW-002",
+      "question": "Gecen seneye kiyasla isler nasil gidiyor?",
+      "category": "multi_metric_performance",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 15.665999992052093,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0015999976312741637,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.005699999746866524,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "multi_metric_performance",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate",
+          "unique_patient_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": "current_year_to_date",
+        "baseline_period": "same_period_previous_year",
+        "cohort": null,
+        "minimum_sample_size": 20
+      }
+    },
+    {
+      "case_id": "E2E-RW-003",
+      "question": "Kontrole gelenler en cok hangi tarafta?",
+      "category": "clarification",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 1.0248000035062432,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0017999991541728377,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.000600004568696022,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": null
+    },
+    {
+      "case_id": "E2E-RW-004",
+      "question": "Randevusunu son dakika alanlarin gelme durumu nasil?",
+      "category": "cohort_analysis",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 14.274399989517406,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.000900006853044033,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.003100009053014219,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "cohort_analysis",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": "lead_time_under_24h (DATEDIFF(hour, CreatedDate, BaslangicTarihi) < 24)",
+        "minimum_sample_size": 20
+      }
+    },
+    {
+      "case_id": "E2E-RW-005",
+      "question": "Doktorlar arasinda cok fark var mi?",
+      "category": "variance_analysis",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 11.827999987872317,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0012999953469261527,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0031999952625483274,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "variance_analysis",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuKaynakAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": 20
+      }
+    },
+    {
+      "case_id": "E2E-RW-006",
+      "question": "Bu ay ile gecen ayin randevu sayilarini karsilastir.",
+      "category": "period_comparison",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 16.084700007922947,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0010999938240274787,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.010400006431154907,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "period_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null
+      }
+    },
+    {
+      "case_id": "E2E-RW-007",
+      "question": "Subelere gore gelmeme oranlari nedir?",
+      "category": "ratio",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 13.20560000021942,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0013999961083754897,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0029999937396496534,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "ratio",
+        "metrics": [
+          "no_show_rate"
+        ],
+        "dimensions": [
+          "SubeAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null
+      }
+    }
+  ],
+  "previous_comparison": {
+    "previous_run_id": "20260717T125417Z-d004c417",
+    "passed_delta": 0,
+    "failed_delta": 0,
+    "new_failure_types": [],
+    "resolved_failure_types": [],
+    "regression_case_ids": [],
+    "resolved_case_ids": [],
+    "p95_delta_ms": 0.4258000117260963
+  }
+}

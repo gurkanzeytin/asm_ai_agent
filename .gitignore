@@ -233,3 +233,6 @@ frontend/.next/
 frontend/node_modules/
 
 .env.local
+# Runtime schema cache (regenerates from the live database)
+backend/.schema_cache/
+evaluation/results/

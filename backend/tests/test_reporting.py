@@ -20,7 +20,7 @@ def _query_result(columns: list[str], rows: list[dict]) -> QueryResult:
         execution_time_ms=1.0,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
 
 

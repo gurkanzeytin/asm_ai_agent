@@ -1,0 +1,1017 @@
+{
+  "view": "dbo.vw_RandevuRaporu",
+  "dimension_groups": {
+    "standard": [
+      "SubeAdi",
+      "GenelRandevuBolumAdi",
+      "RandevuTipiAdi",
+      "RandevuDurumu",
+      "GenelRandevuKaynakAdi",
+      "DoktorId",
+      "Uyruk",
+      "CinsiyetId",
+      "KategoriAdi",
+      "HizmetAdi",
+      "RandevuyuVeren"
+    ],
+    "organizational": [
+      "SubeAdi",
+      "GenelRandevuBolumAdi",
+      "GenelRandevuKaynakAdi",
+      "DoktorId"
+    ]
+  },
+  "status_value_source": "Canlı veri doğrulaması (2026-07): Gerçekleşti, Giriş Yapılmış, Gelmedi, İşlem Sürmekte, Beklemede. 'İptal' değeri veride bulunmuyor.",
+  "metrics": [
+    {
+      "id": "appointment_count",
+      "name": "Toplam randevu sayısı",
+      "description": "Filtre koşullarına uyan toplam randevu kaydı.",
+      "analysis_type": "count",
+      "required_columns": [
+        "Id"
+      ],
+      "formula_type": "count_rows",
+      "formula": "COUNT(*)",
+      "synonyms": [
+        "randevu sayisi",
+        "kac randevu",
+        "toplam randevu",
+        "randevu adedi",
+        "randevu sayilari",
+        "randevularin sayisi",
+        "kac tane randevu"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "COUNT(*) null'lardan etkilenmez",
+      "result_type": "integer"
+    },
+    {
+      "id": "unique_patient_count",
+      "name": "Tekil hasta sayısı",
+      "description": "Filtre koşullarına uyan farklı hasta sayısı (HastaId üzerinden).",
+      "analysis_type": "distinct_count",
+      "required_columns": [
+        "HastaId"
+      ],
+      "formula_type": "count_distinct",
+      "formula": "COUNT(DISTINCT HastaId)",
+      "synonyms": [
+        "farkli hasta",
+        "tekil hasta",
+        "kac hasta",
+        "hasta sayisi",
+        "kac farkli hasta",
+        "benzersiz hasta",
+        "ayri hasta",
+        "hasta dagilimi",
+        "kac ayri hasta",
+        "hastalarin orani",
+        "hastalarin yuzdesi"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL HastaId sayılmaz",
+      "result_type": "integer"
+    },
+    {
+      "id": "appointments_per_patient",
+      "name": "Hasta başına randevu",
+      "description": "Ortalama hasta başına randevu adedi.",
+      "analysis_type": "ratio",
+      "required_columns": [
+        "Id",
+        "HastaId"
+      ],
+      "formula_type": "ratio",
+      "formula": "CAST(COUNT(*) AS FLOAT) / NULLIF(COUNT(DISTINCT HastaId), 0)",
+      "numerator": "appointment_count",
+      "denominator": "unique_patient_count",
+      "synonyms": [
+        "hasta basina randevu",
+        "hasta basi randevu",
+        "kisi basina randevu",
+        "ortalama randevu adedi",
+        "randevusu en fazla olan hasta",
+        "en sik gelen hasta",
+        "hasta basina",
+        "kac kez",
+        "tekrar ziyaret",
+        "randevusu en fazla olan",
+        "en sik gelen"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULLIF ile sıfıra bölme korunur",
+      "result_type": "float"
+    },
+    {
+      "id": "repeat_patient_count",
+      "name": "Tekrar randevu alan hasta sayısı",
+      "description": "Birden fazla randevusu olan hasta sayısı; HAVING COUNT(*) > 1 ile hesaplanır.",
+      "analysis_type": "repeat_behavior",
+      "required_columns": [
+        "HastaId",
+        "Id"
+      ],
+      "formula_type": "having_count_gt_1",
+      "formula": null,
+      "plan_description": "HastaId bazında grupla, COUNT(*) > 1 olanları say (alt sorgu/CTE).",
+      "synonyms": [
+        "birden fazla randevu alan",
+        "tekrar gelen hasta",
+        "tekrar randevu",
+        "birden cok randevusu olan",
+        "sadik hasta",
+        "birden fazla randevusu olan",
+        "tekrar eden hasta",
+        "birden fazla gelen",
+        "fazla randevusu olan",
+        "tek seferlik"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL HastaId dışlanır",
+      "result_type": "integer"
+    },
+    {
+      "id": "appointment_duration_average",
+      "name": "Ortalama randevu süresi",
+      "description": "Planlanan randevu süresinin ortalaması (dakika).",
+      "analysis_type": "average",
+      "required_columns": [
+        "RandevuSuresi"
+      ],
+      "formula_type": "avg",
+      "formula": "AVG(CAST(RandevuSuresi AS FLOAT))",
+      "synonyms": [
+        "ortalama randevu suresi",
+        "ortalama sure",
+        "randevular ne kadar suruyor",
+        "ortalama kac dakika",
+        "ne kadar suruyor",
+        "muayene suresi",
+        "ortalama muayene sure",
+        "randevu sureleri",
+        "sureler"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "AVG NULL değerleri yok sayar",
+      "result_type": "float"
+    },
+    {
+      "id": "appointment_duration_minimum",
+      "name": "En kısa randevu süresi",
+      "description": "Planlanan randevu süresinin en küçüğü (dakika).",
+      "analysis_type": "minimum",
+      "required_columns": [
+        "RandevuSuresi"
+      ],
+      "formula_type": "min",
+      "formula": "MIN(RandevuSuresi)",
+      "synonyms": [
+        "en kisa randevu",
+        "minimum sure",
+        "en kisa sure"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "MIN NULL değerleri yok sayar",
+      "result_type": "integer"
+    },
+    {
+      "id": "appointment_duration_maximum",
+      "name": "En uzun randevu süresi",
+      "description": "Planlanan randevu süresinin en büyüğü (dakika).",
+      "analysis_type": "maximum",
+      "required_columns": [
+        "RandevuSuresi"
+      ],
+      "formula_type": "max",
+      "formula": "MAX(RandevuSuresi)",
+      "synonyms": [
+        "en uzun randevu",
+        "maksimum sure",
+        "en uzun sure"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "MAX NULL değerleri yok sayar",
+      "result_type": "integer"
+    },
+    {
+      "id": "appointments_per_doctor",
+      "name": "Doktor bazında randevu sayısı",
+      "description": "DoktorId (veya kaynak adı) kırılımında randevu adedi.",
+      "analysis_type": "count",
+      "required_columns": [
+        "Id",
+        "DoktorId"
+      ],
+      "formula_type": "count_rows_grouped",
+      "formula": "COUNT(*)",
+      "fixed_dimension": "DoktorId",
+      "synonyms": [
+        "doktor bazinda randevu",
+        "doktor kiriliminda",
+        "doktor basina randevu",
+        "hekim bazinda randevu"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL DoktorId ayrı grup oluşturur",
+      "result_type": "integer"
+    },
+    {
+      "id": "appointments_per_department",
+      "name": "Bölüm bazında randevu sayısı",
+      "description": "GenelRandevuBolumAdi kırılımında randevu adedi.",
+      "analysis_type": "count",
+      "required_columns": [
+        "Id",
+        "GenelRandevuBolumAdi"
+      ],
+      "formula_type": "count_rows_grouped",
+      "formula": "COUNT(*)",
+      "fixed_dimension": "GenelRandevuBolumAdi",
+      "synonyms": [
+        "bolum bazinda randevu",
+        "bolumlere gore randevu",
+        "brans bazinda randevu"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL bölüm ayrı grup oluşturur",
+      "result_type": "integer"
+    },
+    {
+      "id": "appointments_per_branch",
+      "name": "Şube bazında randevu sayısı",
+      "description": "SubeAdi kırılımında randevu adedi.",
+      "analysis_type": "count",
+      "required_columns": [
+        "Id",
+        "SubeAdi"
+      ],
+      "formula_type": "count_rows_grouped",
+      "formula": "COUNT(*)",
+      "fixed_dimension": "SubeAdi",
+      "synonyms": [
+        "sube bazinda randevu",
+        "subelere gore randevu",
+        "hastane bazinda randevu"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL şube ayrı grup oluşturur",
+      "result_type": "integer"
+    },
+    {
+      "id": "appointments_per_source",
+      "name": "Kaynak bazında randevu sayısı",
+      "description": "GenelRandevuKaynakAdi kırılımında randevu adedi.",
+      "analysis_type": "count",
+      "required_columns": [
+        "Id",
+        "GenelRandevuKaynakAdi"
+      ],
+      "formula_type": "count_rows_grouped",
+      "formula": "COUNT(*)",
+      "fixed_dimension": "GenelRandevuKaynakAdi",
+      "synonyms": [
+        "kaynak bazinda",
+        "kaynaklara gore",
+        "kaynaga gore randevu"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL kaynak ayrı grup oluşturur",
+      "result_type": "integer"
+    },
+    {
+      "id": "appointments_per_type",
+      "name": "Tip bazında randevu sayısı",
+      "description": "RandevuTipiAdi kırılımında randevu adedi.",
+      "analysis_type": "distribution",
+      "required_columns": [
+        "Id",
+        "RandevuTipiAdi"
+      ],
+      "formula_type": "count_rows_grouped",
+      "formula": "COUNT(*)",
+      "fixed_dimension": "RandevuTipiAdi",
+      "synonyms": [
+        "tip bazinda",
+        "tiplere gore",
+        "randevu tipine gore",
+        "turlere gore"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL tip ayrı grup oluşturur",
+      "result_type": "integer"
+    },
+    {
+      "id": "daily_appointment_count",
+      "name": "Günlük randevu sayısı",
+      "description": "Gün kırılımında randevu adedi.",
+      "analysis_type": "time_trend",
+      "required_columns": [
+        "Id",
+        "BaslangicTarihi"
+      ],
+      "formula_type": "count_rows_grouped_time",
+      "formula": "COUNT(*)",
+      "grouping_granularity": "day",
+      "synonyms": [
+        "gunluk randevu",
+        "gun gun",
+        "gunlere gore",
+        "gun bazinda"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "COUNT(*) null'lardan etkilenmez",
+      "result_type": "integer"
+    },
+    {
+      "id": "weekly_appointment_count",
+      "name": "Haftalık randevu sayısı",
+      "description": "Hafta kırılımında randevu adedi.",
+      "analysis_type": "time_trend",
+      "required_columns": [
+        "Id",
+        "BaslangicTarihi"
+      ],
+      "formula_type": "count_rows_grouped_time",
+      "formula": "COUNT(*)",
+      "grouping_granularity": "week",
+      "synonyms": [
+        "haftalik randevu",
+        "haftalara gore",
+        "hafta bazinda",
+        "haftalik trend"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "COUNT(*) null'lardan etkilenmez",
+      "result_type": "integer"
+    },
+    {
+      "id": "monthly_appointment_count",
+      "name": "Aylık randevu sayısı",
+      "description": "Ay kırılımında randevu adedi.",
+      "analysis_type": "time_trend",
+      "required_columns": [
+        "Id",
+        "BaslangicTarihi"
+      ],
+      "formula_type": "count_rows_grouped_time",
+      "formula": "COUNT(*)",
+      "grouping_granularity": "month",
+      "synonyms": [
+        "aylik randevu",
+        "aylara gore",
+        "ay bazinda",
+        "aylik dagilim"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "COUNT(*) null'lardan etkilenmez",
+      "result_type": "integer"
+    },
+    {
+      "id": "daily_average_appointment_count",
+      "name": "Günlük ortalama randevu sayısı",
+      "description": "Dönemdeki toplam randevunun gün sayısına oranı.",
+      "analysis_type": "average",
+      "required_columns": [
+        "Id",
+        "BaslangicTarihi"
+      ],
+      "formula_type": "ratio",
+      "formula": "CAST(COUNT(*) AS FLOAT) / NULLIF(COUNT(DISTINCT CAST(BaslangicTarihi AS DATE)), 0)",
+      "synonyms": [
+        "gunluk ortalama randevu",
+        "gunde ortalama kac randevu",
+        "gun basina randevu",
+        "gunluk ortalama"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULLIF ile sıfıra bölme korunur",
+      "result_type": "float"
+    },
+    {
+      "id": "appointment_lead_time_average",
+      "name": "Ortalama randevu alma öncesi süre (lead time)",
+      "description": "Randevunun kaç gün önceden alındığının ortalaması: BaslangicTarihi - CreatedDate.",
+      "analysis_type": "lead_time_analysis",
+      "required_columns": [
+        "BaslangicTarihi",
+        "CreatedDate"
+      ],
+      "formula_type": "avg_datediff",
+      "formula": "AVG(CAST(DATEDIFF(day, CreatedDate, BaslangicTarihi) AS FLOAT))",
+      "synonyms": [
+        "kac gun onceden",
+        "ne kadar onceden",
+        "lead time",
+        "onceden alinma suresi",
+        "randevu alma suresi",
+        "randevu olusturma ile",
+        "onceden randevu"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL tarihler AVG dışında kalır",
+      "result_type": "float"
+    },
+    {
+      "id": "same_day_booking_count",
+      "name": "Aynı gün alınan randevu sayısı",
+      "description": "Oluşturulduğu gün gerçekleşecek şekilde alınan randevu adedi.",
+      "analysis_type": "count",
+      "required_columns": [
+        "BaslangicTarihi",
+        "CreatedDate",
+        "Id"
+      ],
+      "formula_type": "conditional_count",
+      "formula": "SUM(CASE WHEN CAST(CreatedDate AS DATE) = CAST(BaslangicTarihi AS DATE) THEN 1 ELSE 0 END)",
+      "synonyms": [
+        "ayni gun alinan",
+        "ayni gune randevu",
+        "gununde alinan randevu",
+        "ayni gun icinde"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL tarihler koşulu sağlamaz",
+      "result_type": "integer"
+    },
+    {
+      "id": "same_day_booking_rate",
+      "name": "Aynı gün randevu oranı",
+      "description": "Aynı gün alınan randevuların tüm randevulara yüzdesi.",
+      "analysis_type": "ratio",
+      "required_columns": [
+        "BaslangicTarihi",
+        "CreatedDate",
+        "Id"
+      ],
+      "formula_type": "conditional_rate",
+      "formula": "100.0 * SUM(CASE WHEN CAST(CreatedDate AS DATE) = CAST(BaslangicTarihi AS DATE) THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0)",
+      "numerator": "same_day_booking_count",
+      "denominator": "appointment_count",
+      "synonyms": [
+        "ayni gun orani",
+        "ayni gun yuzdesi",
+        "ayni gun randevu alma orani",
+        "ayni gun randevu orani"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULLIF ile sıfıra bölme korunur",
+      "result_type": "percentage"
+    },
+    {
+      "id": "protocol_opening_delay_average",
+      "name": "Ortalama protokol açılış gecikmesi",
+      "description": "Protokol açılışının randevu başlangıcına göre ortalama gecikmesi (gün): ProtokolAcilisTarihi - BaslangicTarihi.",
+      "analysis_type": "lead_time_analysis",
+      "required_columns": [
+        "ProtokolAcilisTarihi",
+        "BaslangicTarihi"
+      ],
+      "formula_type": "avg_datediff",
+      "formula": "AVG(CAST(DATEDIFF(day, BaslangicTarihi, ProtokolAcilisTarihi) AS FLOAT))",
+      "synonyms": [
+        "protokol gecikmesi",
+        "protokol acilis suresi",
+        "protokol ne kadar gec",
+        "protokol acilis gecikme",
+        "protokol acilisi randevudan"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "Protokolü olmayan (NULL) kayıtlar ortalamaya girmez",
+      "result_type": "float"
+    },
+    {
+      "id": "actual_duration_from_dates",
+      "name": "Tarihlerden hesaplanan fiili süre",
+      "description": "Ortalama fiili süre (dakika): BitisTarihi - BaslangicTarihi.",
+      "analysis_type": "duration_analysis",
+      "required_columns": [
+        "BaslangicTarihi",
+        "BitisTarihi"
+      ],
+      "formula_type": "avg_datediff",
+      "formula": "AVG(CAST(DATEDIFF(minute, BaslangicTarihi, BitisTarihi) AS FLOAT))",
+      "synonyms": [
+        "fiili sure",
+        "gercek sure",
+        "tarihlere gore sure"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL tarihler ortalamaya girmez",
+      "result_type": "float"
+    },
+    {
+      "id": "duration_difference",
+      "name": "Planlanan-fiili süre farkı",
+      "description": "Fiili süre ile planlanan RandevuSuresi arasındaki ortalama fark (dakika).",
+      "analysis_type": "duration_analysis",
+      "required_columns": [
+        "BaslangicTarihi",
+        "BitisTarihi",
+        "RandevuSuresi"
+      ],
+      "formula_type": "avg_expression",
+      "formula": "AVG(CAST(DATEDIFF(minute, BaslangicTarihi, BitisTarihi) - RandevuSuresi AS FLOAT))",
+      "synonyms": [
+        "sure farki",
+        "planlanan sure farki",
+        "sapma suresi",
+        "planlanan sure ile gercek sure"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL değerler ortalamaya girmez",
+      "result_type": "float"
+    },
+    {
+      "id": "completed_appointment_count",
+      "name": "Gerçekleşen randevu sayısı",
+      "description": "RandevuDurumu = 'Gerçekleşti' olan randevu adedi (değer canlı doğrulandı).",
+      "analysis_type": "count",
+      "required_columns": [
+        "RandevuDurumu",
+        "Id"
+      ],
+      "formula_type": "conditional_count",
+      "formula": "SUM(CASE WHEN RandevuDurumu = N'Gerçekleşti' THEN 1 ELSE 0 END)",
+      "status_value": "Gerçekleşti",
+      "synonyms": [
+        "gerceklesen randevu",
+        "gerceklesen sayisi",
+        "tamamlanan randevu",
+        "yapilan randevu",
+        "gerceklesti",
+        "gerceklesmis randevu",
+        "tamamlandi"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL durum koşulu sağlamaz",
+      "result_type": "integer"
+    },
+    {
+      "id": "completed_appointment_rate",
+      "name": "Gerçekleşme oranı",
+      "description": "Gerçekleşen randevuların tüm randevulara yüzdesi.",
+      "analysis_type": "ratio",
+      "required_columns": [
+        "RandevuDurumu",
+        "Id"
+      ],
+      "formula_type": "conditional_rate",
+      "formula": "100.0 * SUM(CASE WHEN RandevuDurumu = N'Gerçekleşti' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0)",
+      "numerator": "completed_appointment_count",
+      "denominator": "appointment_count",
+      "synonyms": [
+        "gerceklesme orani",
+        "gerceklesme yuzdesi",
+        "tamamlanma orani",
+        "yuzde kaci gerceklesti"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULLIF ile sıfıra bölme korunur",
+      "result_type": "percentage"
+    },
+    {
+      "id": "no_show_count",
+      "name": "Gelmeyen hasta randevu sayısı",
+      "description": "RandevuDurumu = 'Gelmedi' olan randevu adedi (değer canlı doğrulandı).",
+      "analysis_type": "count",
+      "required_columns": [
+        "RandevuDurumu",
+        "Id"
+      ],
+      "formula_type": "conditional_count",
+      "formula": "SUM(CASE WHEN RandevuDurumu = N'Gelmedi' THEN 1 ELSE 0 END)",
+      "status_value": "Gelmedi",
+      "synonyms": [
+        "gelmeyen",
+        "gelmedi sayisi",
+        "no show",
+        "randevuya gelmeyen",
+        "gelmedi",
+        "gelmeyen hasta",
+        "gelmeme sayisi",
+        "gelmeme"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL durum koşulu sağlamaz",
+      "result_type": "integer"
+    },
+    {
+      "id": "no_show_rate",
+      "name": "Gelmeme oranı",
+      "description": "Gelmeyen randevuların tüm randevulara yüzdesi.",
+      "analysis_type": "ratio",
+      "required_columns": [
+        "RandevuDurumu",
+        "Id"
+      ],
+      "formula_type": "conditional_rate",
+      "formula": "100.0 * SUM(CASE WHEN RandevuDurumu = N'Gelmedi' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0)",
+      "numerator": "no_show_count",
+      "denominator": "appointment_count",
+      "synonyms": [
+        "gelmeme orani",
+        "no show orani",
+        "gelmeyenlerin orani",
+        "yuzde kaci gelmedi"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULLIF ile sıfıra bölme korunur",
+      "result_type": "percentage"
+    },
+    {
+      "id": "protocol_created_count",
+      "name": "Protokol açılan randevu sayısı",
+      "description": "ProtokolAcilisTarihi dolu olan randevu adedi (yapısal çıkarım; ProtokolIslemState kod eşlemesi doğrulanmadığı için tarih varlığı kullanılır).",
+      "analysis_type": "count",
+      "required_columns": [
+        "ProtokolAcilisTarihi",
+        "Id"
+      ],
+      "formula_type": "conditional_count",
+      "formula": "SUM(CASE WHEN ProtokolAcilisTarihi IS NOT NULL THEN 1 ELSE 0 END)",
+      "synonyms": [
+        "protokol acilan",
+        "protokole donusen",
+        "protokol sayisi",
+        "protokol acilis",
+        "protokol acilmis",
+        "kac protokol"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL protokol tarihi 'açılmadı' sayılır",
+      "result_type": "integer"
+    },
+    {
+      "id": "protocol_conversion_rate",
+      "name": "Protokole dönüşüm oranı",
+      "description": "Protokol açılan randevuların tüm randevulara yüzdesi.",
+      "analysis_type": "conversion",
+      "required_columns": [
+        "ProtokolAcilisTarihi",
+        "Id"
+      ],
+      "formula_type": "conditional_rate",
+      "formula": "100.0 * SUM(CASE WHEN ProtokolAcilisTarihi IS NOT NULL THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0)",
+      "numerator": "protocol_created_count",
+      "denominator": "appointment_count",
+      "synonyms": [
+        "protokole donusum",
+        "donusum orani",
+        "protokol orani",
+        "protokole donusuyor",
+        "protokole donusen",
+        "protokol acilma yuzdesi",
+        "protokol acilma orani"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULLIF ile sıfıra bölme korunur",
+      "result_type": "percentage"
+    },
+    {
+      "id": "protocol_state_based_completion",
+      "name": "Protokol durumuna göre tamamlanma",
+      "description": "ProtokolIslemState kodu üzerinden tamamlanma analizi.",
+      "analysis_type": "conversion",
+      "required_columns": [
+        "ProtokolIslemState",
+        "Id"
+      ],
+      "formula_type": "conditional_count",
+      "formula": null,
+      "status": "requires_verified_mapping",
+      "synonyms": [],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "tanımsız",
+      "result_type": "integer"
+    },
+    {
+      "id": "missing_doctor_count",
+      "name": "Doktor bilgisi eksik kayıt sayısı",
+      "description": "DoktorId boş olan randevu adedi.",
+      "analysis_type": "data_quality",
+      "required_columns": [
+        "DoktorId",
+        "Id"
+      ],
+      "formula_type": "conditional_count",
+      "formula": "SUM(CASE WHEN DoktorId IS NULL THEN 1 ELSE 0 END)",
+      "synonyms": [
+        "doktoru eksik",
+        "doktorsuz randevu",
+        "doktor bilgisi olmayan",
+        "doktor bilgisi eksik",
+        "doktoru olmayan",
+        "eksik doktor"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL kontrolünün kendisidir",
+      "result_type": "integer"
+    },
+    {
+      "id": "missing_department_count",
+      "name": "Bölüm bilgisi eksik kayıt sayısı",
+      "description": "GenelRandevuBolumAdi boş olan randevu adedi.",
+      "analysis_type": "data_quality",
+      "required_columns": [
+        "GenelRandevuBolumAdi",
+        "Id"
+      ],
+      "formula_type": "conditional_count",
+      "formula": "SUM(CASE WHEN GenelRandevuBolumAdi IS NULL OR GenelRandevuBolumAdi = '' THEN 1 ELSE 0 END)",
+      "synonyms": [
+        "bolumu eksik",
+        "bolum bilgisi olmayan",
+        "bolumsuz kayit",
+        "veri eksikligi"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL ve boş string birlikte kontrol edilir",
+      "result_type": "integer"
+    },
+    {
+      "id": "invalid_date_range_count",
+      "name": "Geçersiz tarih aralıklı kayıt sayısı",
+      "description": "BitisTarihi, BaslangicTarihi'nden önce olan kayıt adedi.",
+      "analysis_type": "data_quality",
+      "required_columns": [
+        "BaslangicTarihi",
+        "BitisTarihi",
+        "Id"
+      ],
+      "formula_type": "conditional_count",
+      "formula": "SUM(CASE WHEN BitisTarihi < BaslangicTarihi THEN 1 ELSE 0 END)",
+      "synonyms": [
+        "gecersiz tarih",
+        "hatali tarih araligi",
+        "tarihi bozuk",
+        "baslangictan once",
+        "veri kalitesi sorunlu",
+        "sorunlu kayit"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL tarihler koşulu sağlamaz",
+      "result_type": "integer"
+    },
+    {
+      "id": "zero_or_negative_duration_count",
+      "name": "Sıfır/negatif süreli kayıt sayısı",
+      "description": "RandevuSuresi <= 0 olan kayıt adedi.",
+      "analysis_type": "data_quality",
+      "required_columns": [
+        "RandevuSuresi",
+        "Id"
+      ],
+      "formula_type": "conditional_count",
+      "formula": "SUM(CASE WHEN RandevuSuresi <= 0 THEN 1 ELSE 0 END)",
+      "synonyms": [
+        "sifir sureli",
+        "negatif sure",
+        "suresi hatali",
+        "sifir veya negatif"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL süre koşulu sağlamaz",
+      "result_type": "integer"
+    },
+    {
+      "id": "duration_mismatch_count",
+      "name": "Süre tutarsızlığı olan kayıt sayısı",
+      "description": "Tarih farkı ile RandevuSuresi uyuşmayan kayıt adedi.",
+      "analysis_type": "data_quality",
+      "required_columns": [
+        "BaslangicTarihi",
+        "BitisTarihi",
+        "RandevuSuresi",
+        "Id"
+      ],
+      "formula_type": "conditional_count",
+      "formula": "SUM(CASE WHEN DATEDIFF(minute, BaslangicTarihi, BitisTarihi) <> RandevuSuresi THEN 1 ELSE 0 END)",
+      "synonyms": [
+        "sure tutarsizligi",
+        "sure uyusmayan",
+        "tarih farki uyusmayan",
+        "planlanandan uzun",
+        "sure uyusmazligi"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL değerler koşulu sağlamaz",
+      "result_type": "integer"
+    },
+    {
+      "id": "patient_id_mismatch_count",
+      "name": "Hasta kimliği uyuşmayan kayıt sayısı",
+      "description": "HastaId ile HastaId2 farklı olan kayıt adedi. İki alanın ilişkisi doğrulanmamıştır; bu bir veri kalitesi ADAYI göstergesidir.",
+      "analysis_type": "data_quality",
+      "required_columns": [
+        "HastaId",
+        "HastaId2",
+        "Id"
+      ],
+      "formula_type": "conditional_count",
+      "formula": "SUM(CASE WHEN HastaId <> HastaId2 THEN 1 ELSE 0 END)",
+      "status": "requires_verified_mapping",
+      "synonyms": [
+        "hasta id uyusmayan",
+        "hasta kimlik farki",
+        "hastaid2",
+        "hasta id uyusmazligi",
+        "hasta kimlikleri uyusmayan"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL değerler koşulu sağlamaz",
+      "result_type": "integer"
+    },
+    {
+      "id": "protocol_status_mismatch_count",
+      "name": "Protokol durum tutarsızlığı",
+      "description": "ProtokolAcilisTarihi ile ProtokolIslemState arasındaki tutarsızlık; kod eşlemesi doğrulanmadan hesaplanamaz.",
+      "analysis_type": "data_quality",
+      "required_columns": [
+        "ProtokolAcilisTarihi",
+        "ProtokolIslemState",
+        "Id"
+      ],
+      "formula_type": "conditional_count",
+      "formula": null,
+      "status": "requires_verified_mapping",
+      "synonyms": [
+        "protokol tutarsizligi",
+        "protokol durumu tutarsiz",
+        "durum tutarsizligi"
+      ],
+      "compatible_dimensions_group": "organizational",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "tanımsız",
+      "result_type": "integer"
+    },
+    {
+      "id": "checked_in_count",
+      "name": "Giriş yapılmış randevu sayısı",
+      "description": "RandevuDurumu 'Giriş Yapılmış' olan kayıt adedi.",
+      "analysis_type": "count",
+      "required_columns": [
+        "Id",
+        "RandevuDurumu"
+      ],
+      "formula_type": "conditional_count",
+      "formula": "SUM(CASE WHEN RandevuDurumu = N'Giriş Yapılmış' THEN 1 ELSE 0 END)",
+      "synonyms": [
+        "giris yapilmis",
+        "giris yapilan randevu"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL durumlar sayilmaz",
+      "result_type": "integer",
+      "status_value": "Giriş Yapılmış"
+    },
+    {
+      "id": "checked_in_rate",
+      "name": "Giriş yapılma oranı",
+      "description": "Giriş yapılmış randevuların toplam randevulara oranı.",
+      "analysis_type": "ratio",
+      "required_columns": [
+        "Id",
+        "RandevuDurumu"
+      ],
+      "formula_type": "conditional_rate",
+      "formula": "100.0 * SUM(CASE WHEN RandevuDurumu = N'Giriş Yapılmış' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0)",
+      "synonyms": [
+        "giris yapilma orani",
+        "giris orani"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULLIF ile sifira bolme korumasi",
+      "result_type": "percentage",
+      "status_value": "Giriş Yapılmış",
+      "numerator": "checked_in_count",
+      "denominator": "appointment_count"
+    },
+    {
+      "id": "in_progress_count",
+      "name": "İşlemi süren randevu sayısı",
+      "description": "RandevuDurumu 'İşlem Sürmekte' olan kayıt adedi.",
+      "analysis_type": "count",
+      "required_columns": [
+        "Id",
+        "RandevuDurumu"
+      ],
+      "formula_type": "conditional_count",
+      "formula": "SUM(CASE WHEN RandevuDurumu = N'İşlem Sürmekte' THEN 1 ELSE 0 END)",
+      "synonyms": [
+        "islemi suren",
+        "islem surmekte olan",
+        "islemde olan randevu"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL durumlar sayilmaz",
+      "result_type": "integer",
+      "status_value": "İşlem Sürmekte"
+    },
+    {
+      "id": "in_progress_rate",
+      "name": "İşlemde olanların oranı",
+      "description": "İşlemi süren randevuların toplam randevulara oranı.",
+      "analysis_type": "ratio",
+      "required_columns": [
+        "Id",
+        "RandevuDurumu"
+      ],
+      "formula_type": "conditional_rate",
+      "formula": "100.0 * SUM(CASE WHEN RandevuDurumu = N'İşlem Sürmekte' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0)",
+      "synonyms": [
+        "islemde olanlarin orani",
+        "islem surme orani"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULLIF ile sifira bolme korumasi",
+      "result_type": "percentage",
+      "status_value": "İşlem Sürmekte",
+      "numerator": "in_progress_count",
+      "denominator": "appointment_count"
+    },
+    {
+      "id": "waiting_count",
+      "name": "Bekleyen randevu sayısı",
+      "description": "RandevuDurumu 'Beklemede' olan kayıt adedi.",
+      "analysis_type": "count",
+      "required_columns": [
+        "Id",
+        "RandevuDurumu"
+      ],
+      "formula_type": "conditional_count",
+      "formula": "SUM(CASE WHEN RandevuDurumu = N'Beklemede' THEN 1 ELSE 0 END)",
+      "synonyms": [
+        "bekleyen randevu",
+        "beklemede olan"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL durumlar sayilmaz",
+      "result_type": "integer",
+      "status_value": "Beklemede"
+    },
+    {
+      "id": "waiting_rate",
+      "name": "Bekleme oranı",
+      "description": "Bekleyen randevuların toplam randevulara oranı.",
+      "analysis_type": "ratio",
+      "required_columns": [
+        "Id",
+        "RandevuDurumu"
+      ],
+      "formula_type": "conditional_rate",
+      "formula": "100.0 * SUM(CASE WHEN RandevuDurumu = N'Beklemede' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0)",
+      "synonyms": [
+        "bekleme orani",
+        "beklemede olanlarin orani"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULLIF ile sifira bolme korumasi",
+      "result_type": "percentage",
+      "status_value": "Beklemede",
+      "numerator": "waiting_count",
+      "denominator": "appointment_count"
+    }
+  ]
+}

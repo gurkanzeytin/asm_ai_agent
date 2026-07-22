@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from app.application_models.generated_report import GeneratedReport
 from app.application_models.workflow_models import QueryResult
 from app.insights.models import InsightConfidence, InsightResult
+from app.insights.output_validation import ENGLISH_WORD_PATTERN
 from app.llm.interfaces import ILLMProvider
 from app.reporting.report_classifier import ReportClassifier, ReportType
 from app.reporting.template_renderer import TemplateReportRenderer
@@ -13,6 +14,8 @@ from app.services.interfaces import IPromptService, IReportService
 from app.services.report_generator import IReportGenerator, NarrativeReportGenerator
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_TURKISH_TITLE = "Sorgu Sonucu"
 
 
 class ReportService(IReportService):
@@ -107,6 +110,10 @@ class ReportService(IReportService):
                 if line.strip().startswith("#"):
                     title = line.strip("# ").strip()
                     break
+            # Safety net: no title-scraped heading, or the LLM ignored the
+            # Turkish-only directive — never surface a missing/English title.
+            if not title or ENGLISH_WORD_PATTERN.search(title):
+                title = _DEFAULT_TURKISH_TITLE
 
             logger.info(
                 "ReportService LLM call completed: latency_ms=%.1f completion_tokens=%s",
@@ -180,18 +187,23 @@ class ReportService(IReportService):
             capped = query_result.model_copy(update={"rows": query_result.rows[:max_rows]})
         table_result = self.template_renderer.render(ReportType.TABLE, capped)
 
+        # Section names per spec: Sorgu Sonucu (title+summary) / Öne Çıkan
+        # Bulgular (highlights+observations merged) / Olası Açıklamalar
+        # (considerations — the LLM's hypotheses, framed as such by the
+        # insight_generation.md prompt directive). Deterministic assumptions
+        # and limitations (partial-period/comparison-sufficiency) live in a
+        # separate "Varsayımlar ve Sınırlamalar" section appended later by
+        # GenerateReportNode._append_reasoning_sections, sourced from
+        # analytics directly rather than the LLM.
         lines: list[str] = [f"# {insights.title}", ""]
-        lines += ["## Yönetici Özeti", insights.summary, ""]
-        if insights.highlights:
-            lines.append("## Öne Çıkanlar")
-            lines += [f"- {item}" for item in insights.highlights]
-            lines.append("")
-        if insights.observations:
-            lines.append("## Gözlemler")
-            lines += [f"- {item}" for item in insights.observations]
+        lines += ["## Sorgu Sonucu", insights.summary, ""]
+        findings = list(insights.highlights) + list(insights.observations)
+        if findings:
+            lines.append("## Öne Çıkan Bulgular")
+            lines += [f"- {item}" for item in findings]
             lines.append("")
         if insights.considerations:
-            lines.append("## Dikkat Edilecekler")
+            lines.append("## Olası Açıklamalar")
             lines += [f"- {item}" for item in insights.considerations]
             lines.append("")
         if table_result is not None:
@@ -282,7 +294,7 @@ class ReportService(IReportService):
                 execution_time_ms=0.0,
                 success=True,
                 executed_at=datetime.now(UTC),
-                database_provider="sqlite",
+                database_provider="mssql",
             )
 
         raise TypeError("query_result must be a QueryResult or list of row dictionaries.")

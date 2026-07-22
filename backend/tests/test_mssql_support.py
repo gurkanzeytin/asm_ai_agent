@@ -4,6 +4,8 @@ read-only object whitelisting, T-SQL pagination, and retryable error handling.
 No test in this module opens a real database connection.
 """
 
+from urllib.parse import parse_qs, urlsplit
+
 import pytest
 
 from app.agent.nodes.execute_sql import _retryable_error
@@ -34,16 +36,66 @@ def test_allowed_objects_parses_from_environment_variable(monkeypatch):
     assert settings.DATABASE_ALLOWED_OBJECTS == ["dbo.vw_RandevuRaporu", "dbo.vw_Other"]
 
 
-def test_allowed_objects_defaults_to_empty_list():
+def test_allowed_objects_default_is_the_allowed_view():
     settings = Settings(_env_file=None)
-    assert settings.DATABASE_ALLOWED_OBJECTS == []
+    assert settings.DATABASE_ALLOWED_OBJECTS == ["dbo.vw_RandevuRaporu"]
 
 
 def test_database_schema_and_timeout_defaults():
     settings = Settings(_env_file=None)
     assert settings.DATABASE_SCHEMA == "dbo"
     assert settings.DATABASE_CONNECT_TIMEOUT == 15
-    assert settings.DATABASE_QUERY_TIMEOUT == 30
+    assert settings.DATABASE_QUERY_TIMEOUT == 60
+
+
+def test_database_url_constructed_from_parts():
+    settings = Settings(_env_file=None, DB_SERVER="SRV1", DB_DATABASE="Db1")
+    assert settings.DATABASE_URL.startswith("mssql+aioodbc:///?odbc_connect=")
+    from urllib.parse import unquote_plus
+
+    odbc = unquote_plus(parse_qs(urlsplit(settings.DATABASE_URL).query)["odbc_connect"][0])
+    assert "DRIVER={ODBC Driver 18 for SQL Server}" in odbc
+    assert "SERVER=SRV1" in odbc
+    assert "DATABASE=Db1" in odbc
+    assert "Trusted_Connection=yes" in odbc
+    assert "Encrypt=yes" in odbc
+    assert "TrustServerCertificate=yes" in odbc
+    assert "UID" not in odbc and "PWD" not in odbc
+
+
+def test_explicit_development_url_receives_odbc_tls_options():
+    settings = Settings(
+        _env_file=None,
+        ENVIRONMENT="development",
+        DATABASE_URL="mssql+aioodbc://@SRV/Db?driver=ODBC+Driver+18+for+SQL+Server&trusted_connection=yes",
+    )
+    query = parse_qs(urlsplit(settings.DATABASE_URL).query)
+    normalized = {key.lower(): values for key, values in query.items()}
+    assert normalized["trusted_connection"] == ["yes"]
+    assert normalized["encrypt"] == ["yes"]
+    assert normalized["trustservercertificate"] == ["yes"]
+
+
+def test_production_does_not_add_development_certificate_override():
+    settings = Settings(
+        _env_file=None,
+        ENVIRONMENT="production",
+        DATABASE_URL="mssql+aioodbc://@SRV/Db?driver=ODBC+Driver+18+for+SQL+Server&trusted_connection=yes",
+    )
+    query = {key.lower() for key in parse_qs(urlsplit(settings.DATABASE_URL).query)}
+    assert "trustservercertificate" not in query
+
+
+def test_missing_server_raises_clear_error():
+    with pytest.raises(Exception) as excinfo:
+        Settings(_env_file=None, DB_SERVER="")
+    assert "DB_SERVER" in str(excinfo.value)
+
+
+def test_non_mssql_database_url_rejected():
+    with pytest.raises(Exception) as excinfo:
+        Settings(_env_file=None, DATABASE_URL="sqlite+aiosqlite:///./anything.db")
+    assert "mssql+aioodbc" in str(excinfo.value)
 
 
 # ---------------------------------------------------------------------------
@@ -51,16 +103,14 @@ def test_database_schema_and_timeout_defaults():
 # ---------------------------------------------------------------------------
 
 
-def test_sqlite_engine_options_preserved():
-    options = build_engine_options("sqlite+aiosqlite:///./data/hospital_demo.db")
-    assert options["connect_args"] == {"check_same_thread": False}
-    assert "pool_size" not in options
-
-
-def test_postgresql_engine_options_preserved():
-    options = build_engine_options("postgresql+asyncpg://u:p@localhost:5432/db")
-    assert options["pool_size"] > 0
-    assert options["max_overflow"] == 10
+def test_non_mssql_engine_url_rejected():
+    for url in (
+        "sqlite+aiosqlite:///./legacy.db",
+        "postgresql+asyncpg://u:p@localhost:5432/db",
+        "mssql+pyodbc://@SERVER/Db?driver=ODBC+Driver+18+for+SQL+Server",
+    ):
+        with pytest.raises(DatabaseInitializationError):
+            build_engine_options(url)
 
 
 def test_mssql_engine_options():
@@ -71,11 +121,6 @@ def test_mssql_engine_options():
     assert options["max_overflow"] == 5
     assert "timeout" in options["connect_args"]
     assert "check_same_thread" not in options.get("connect_args", {})
-
-
-def test_mssql_requires_aioodbc_driver_scheme():
-    with pytest.raises(DatabaseInitializationError):
-        build_engine_options("mssql+pyodbc://@SERVER/Db?driver=ODBC+Driver+18+for+SQL+Server")
 
 
 # ---------------------------------------------------------------------------
@@ -202,26 +247,21 @@ def test_empty_whitelist_disables_object_restriction():
 # ---------------------------------------------------------------------------
 
 
-def test_paged_query_sqlite_uses_limit_offset():
-    paged = build_paged_query("SELECT * FROM patients", "sqlite")
-    assert "LIMIT :limit OFFSET :skip" in paged
-
-
-def test_paged_query_mssql_with_order_by_uses_offset_fetch():
-    paged = build_paged_query("SELECT ad FROM dbo.vw_RandevuRaporu ORDER BY ad", "mssql")
+def test_paged_query_with_order_by_uses_offset_fetch():
+    paged = build_paged_query("SELECT ad FROM dbo.vw_RandevuRaporu ORDER BY ad")
     assert paged.endswith("OFFSET :skip ROWS FETCH NEXT :limit ROWS ONLY;")
     assert "LIMIT" not in paged
     assert "(SELECT NULL)" not in paged
 
 
-def test_paged_query_mssql_without_order_by_adds_neutral_order():
-    paged = build_paged_query("SELECT ad FROM dbo.vw_RandevuRaporu", "mssql")
+def test_paged_query_without_order_by_adds_neutral_order():
+    paged = build_paged_query("SELECT ad FROM dbo.vw_RandevuRaporu")
     assert "ORDER BY (SELECT NULL) OFFSET :skip ROWS FETCH NEXT :limit ROWS ONLY" in paged
     assert "LIMIT" not in paged
 
 
-def test_paged_query_mssql_with_top_is_wrapped():
-    paged = build_paged_query("SELECT TOP (100) ad FROM dbo.vw_RandevuRaporu", "mssql")
+def test_paged_query_with_top_is_wrapped():
+    paged = build_paged_query("SELECT TOP (100) ad FROM dbo.vw_RandevuRaporu")
     assert paged.startswith("SELECT * FROM (")
     assert "FETCH NEXT :limit ROWS ONLY" in paged
 
@@ -293,6 +333,113 @@ def test_inspector_filters_objects_to_whitelist(monkeypatch):
         ["vw_RandevuRaporu", "Patients", "SecretTable"], "dbo", allowed
     )
     assert filtered == ["vw_RandevuRaporu"]
+
+
+def test_sql_comments_rejected():
+    for sql in (
+        "SELECT * FROM dbo.vw_RandevuRaporu -- ; DROP TABLE x",
+        "SELECT /* hidden */ * FROM dbo.vw_RandevuRaporu;",
+    ):
+        result = _tsql_validator().validate(sql)
+        assert result.valid is False, sql
+
+
+def test_system_objects_rejected_even_without_whitelist():
+    validator = SQLValidator(dialect="tsql", allowed_objects=[], default_schema="dbo")
+    for sql in (
+        "SELECT * FROM sys.tables;",
+        "SELECT * FROM INFORMATION_SCHEMA.TABLES;",
+        "SELECT * FROM #tmp;",
+    ):
+        result = validator.validate(sql)
+        assert result.valid is False, sql
+
+
+# ---------------------------------------------------------------------------
+# Result row serialization (JSON-safe values)
+# ---------------------------------------------------------------------------
+
+
+def test_row_values_serialize_to_json_safe_primitives():
+    from datetime import date, datetime
+    from decimal import Decimal
+
+    from app.repositories.base import serialize_row_value
+
+    assert serialize_row_value(None) is None
+    assert serialize_row_value(Decimal("42")) == 42
+    assert serialize_row_value(Decimal("42.5")) == 42.5
+    assert serialize_row_value(datetime(2026, 7, 16, 10, 30)) == "2026-07-16T10:30:00"
+    assert serialize_row_value(date(2026, 7, 16)) == "2026-07-16"
+    assert serialize_row_value("Giriş Yapılmış") == "Giriş Yapılmış"
+    assert serialize_row_value(7) == 7
+
+
+# ---------------------------------------------------------------------------
+# Schema grounding: the real view reaches the LLM context
+# ---------------------------------------------------------------------------
+
+
+def test_format_context_renders_view_with_columns_and_notes():
+    from unittest.mock import MagicMock
+
+    from app.database_intelligence.models import ColumnMetadata, DatabaseContext, ViewMetadata
+    from app.services.prompt_service import PromptService
+
+    view = ViewMetadata(
+        name="dbo.vw_RandevuRaporu",
+        comment="Randevu raporlama görünümü.",
+        columns=[
+            ColumnMetadata(
+                name="RandevuDurumu",
+                type_name="VARCHAR",
+                nullable=True,
+                primary_key=False,
+                comment="Randevu durumu (Beklemede, Gerçekleşti, ...).",
+            ),
+            ColumnMetadata(
+                name="BaslangicTarihi", type_name="DATETIME", nullable=True, primary_key=False
+            ),
+        ],
+    )
+    context = DatabaseContext(tables=[], views=[view])
+    service = PromptService(MagicMock(), MagicMock(), MagicMock(), MagicMock())
+
+    rendered = service._format_context(context, question="randevu durumu")
+
+    assert "View: dbo.vw_RandevuRaporu" in rendered
+    assert "RandevuDurumu (VARCHAR)" in rendered
+    assert "BaslangicTarihi (DATETIME)" in rendered
+    assert "Beklemede" in rendered
+
+
+def test_retriever_falls_back_to_views_when_no_tables_exist():
+    from app.database_intelligence.models import (
+        ColumnMetadata,
+        DatabaseSchema,
+        SchemaStatistics,
+        ViewMetadata,
+    )
+    from app.database_intelligence.retriever import SchemaRetriever
+
+    view = ViewMetadata(
+        name="dbo.vw_RandevuRaporu",
+        columns=[
+            ColumnMetadata(name="Id", type_name="INT", nullable=False, primary_key=False),
+        ],
+    )
+    schema = DatabaseSchema(
+        tables={},
+        views={"dbo.vw_RandevuRaporu": view},
+        statistics=SchemaStatistics(
+            table_count=0, column_count=1, foreign_key_count=0, view_count=1
+        ),
+        fingerprint="f" * 64,
+    )
+    retriever = SchemaRetriever(schema_cache=None)
+    context = retriever.retrieve_context("kac randevu var", schema)
+
+    assert [v.name for v in context.views] == ["dbo.vw_RandevuRaporu"]
 
 
 def test_inspector_unrestricted_when_whitelist_empty(monkeypatch):

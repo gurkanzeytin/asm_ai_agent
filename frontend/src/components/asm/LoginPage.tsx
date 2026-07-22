@@ -35,7 +35,7 @@ export function LoginPage({ onLogin }: Props) {
       >
         <div className="flex flex-col items-center">
           <MedAgentLogo size={72} />
-          <h1 className="mt-5 text-xl font-semibold tracking-tight text-foreground">MedAgent</h1>
+          <h1 className="mt-5 text-xl font-semibold tracking-tight text-foreground">Med Agent</h1>
           <p className="mt-1 text-sm text-muted-foreground">{tr.login.tagline}</p>
         </div>
 

@@ -1,0 +1,337 @@
+{
+  "run_id": "20260717T083552Z-4ba56607",
+  "generated_at": "2026-07-17T08:35:52.882542+00:00",
+  "suite": "acceptance",
+  "mode": "planner-only",
+  "environment": {
+    "sql_dialect": "tsql",
+    "database_provider": "mssql",
+    "live_db_available": true
+  },
+  "summary": {
+    "total_cases": 7,
+    "passed": 7,
+    "failed": 0,
+    "skipped": 0,
+    "layer_accuracy": {
+      "routing": 100.0,
+      "query_plan": 100.0
+    },
+    "failure_counts": {},
+    "p50_ms": 13.04770000569988,
+    "p95_ms": 14.12349999009166,
+    "max_ms": 14.12349999009166,
+    "deterministic_sql_avg_ms": 0.0,
+    "llm_sql_avg_ms": 0.0,
+    "live_execution_avg_ms": 0.0,
+    "timeout_rate": 0.0
+  },
+  "results": [
+    {
+      "case_id": "E2E-RW-001",
+      "question": "Bu aralar hangi subede iptaller patlamis?",
+      "category": "anomaly_comparison",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 13.428000005660579,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001200009137392044,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.005099995178170502,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "anomaly_comparison",
+        "metrics": [
+          "cancelled_appointment_count",
+          "cancelled_appointment_rate",
+          "appointment_count"
+        ],
+        "dimensions": [
+          "SubeAdi"
+        ],
+        "answerable": true,
+        "current_period": "last_30_days",
+        "baseline_period": "previous_30_days",
+        "cohort": null,
+        "minimum_sample_size": 20
+      }
+    },
+    {
+      "case_id": "E2E-RW-002",
+      "question": "Gecen seneye kiyasla isler nasil gidiyor?",
+      "category": "multi_metric_performance",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 13.205299997935072,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0007999915396794677,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.006200003554113209,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "multi_metric_performance",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "cancelled_appointment_rate",
+          "unique_patient_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": "current_year_to_date",
+        "baseline_period": "same_period_previous_year",
+        "cohort": null,
+        "minimum_sample_size": 20
+      }
+    },
+    {
+      "case_id": "E2E-RW-003",
+      "question": "Kontrole gelenler en cok hangi tarafta?",
+      "category": "clarification",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 0.10720000136643648,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.000800006091594696,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0014999968698248267,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": null
+    },
+    {
+      "case_id": "E2E-RW-004",
+      "question": "Randevusunu son dakika alanlarin gelme durumu nasil?",
+      "category": "cohort_analysis",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 14.12349999009166,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0018999999156221747,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0041000021155923605,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "cohort_analysis",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": "lead_time_under_24h (DATEDIFF(hour, CreatedDate, BaslangicTarihi) < 24)",
+        "minimum_sample_size": 20
+      }
+    },
+    {
+      "case_id": "E2E-RW-005",
+      "question": "Doktorlar arasinda cok fark var mi?",
+      "category": "variance_analysis",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 10.593700004392304,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.000800006091594696,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0041000021155923605,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "variance_analysis",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuKaynakAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": 20
+      }
+    },
+    {
+      "case_id": "E2E-RW-006",
+      "question": "Bu ay ile gecen ayin randevu sayilarini karsilastir.",
+      "category": "period_comparison",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 13.04770000569988,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.000600004568696022,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0024000037228688598,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "period_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null
+      }
+    },
+    {
+      "case_id": "E2E-RW-007",
+      "question": "Subelere gore iptal oranlari nedir?",
+      "category": "ratio",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 10.548499994911253,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001100008375942707,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.003100009053014219,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "ratio",
+        "metrics": [
+          "cancelled_appointment_rate"
+        ],
+        "dimensions": [
+          "SubeAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null
+      }
+    }
+  ],
+  "previous_comparison": {
+    "status": "no_previous_run"
+  }
+}

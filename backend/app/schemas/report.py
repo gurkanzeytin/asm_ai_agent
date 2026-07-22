@@ -21,8 +21,11 @@ class ReportRequest(BaseModel):
     session_id: Optional[str] = Field(
         default=None,
         description=(
-            "Optional conversational session key for follow-up resolution. "
-            "Omitted clients share the default in-memory session."
+            "Optional conversational session key for follow-up resolution. Reuse the same "
+            "value across turns of one conversation to enable follow-up inheritance. Omitted "
+            "clients each get a fresh, isolated ephemeral session — never a shared 'default' "
+            "session — so independent requests can never contaminate each other's context. "
+            "The resolved session_id is always echoed back in the response."
         ),
     )
 
@@ -108,6 +111,39 @@ class InsightSchema(BaseModel):
     rules: List[str] = Field(default_factory=list, description="Deterministic business rules detected before narrative generation.")
     confidence: str = Field(..., description="Deterministically computed confidence level (HIGH, MEDIUM, LOW).")
     llm_generated: bool = Field(default=False, description="Whether the narrative was produced by the LLM or deterministic templates.")
+    llm_invoked: bool = Field(
+        default=False,
+        description="Alias of llm_generated for observability consistency: whether an LLM "
+        "call was actually made for this insight (false for the deterministic/template path).",
+    )
+    provider: Optional[str] = Field(
+        default=None, description="LLM provider used, or 'deterministic' when templated."
+    )
+    model: Optional[str] = Field(
+        default=None, description="LLM model used, or 'templates' when templated."
+    )
+    llm_inference_ms: Optional[float] = Field(
+        default=None, description="Real LLM call latency for this insight (ms), None if deterministic."
+    )
+    prompt_tokens: Optional[int] = Field(default=None, description="Prompt tokens, when returned by the provider.")
+    completion_tokens: Optional[int] = Field(default=None, description="Completion tokens, when returned by the provider.")
+    finish_reason: Optional[str] = Field(default=None, description="Provider finish reason, when returned.")
+    routing_mode: Optional[str] = Field(
+        default=None,
+        description="Insight generation mode selected by the router: deterministic, local_llm, "
+        "or remote_llm. None when routing was not active (legacy single-provider path).",
+    )
+    routing_reason: Optional[str] = Field(
+        default=None, description="Deterministic explanation for the routing decision."
+    )
+    fallback_used: bool = Field(
+        default=False, description="Whether the primary selected provider failed and a fallback was used."
+    )
+    fallback_reason: Optional[str] = Field(default=None, description="Reason the fallback was triggered, if any.")
+    remote_data_policy: Optional[str] = Field(
+        default=None,
+        description="Remote data policy verdict for this insight: not_applicable, allowed, or rejected.",
+    )
 
 
 class ObservationItemSchema(BaseModel):
@@ -139,7 +175,16 @@ class TimingSchema(BaseModel):
     validate_sql_ms: Optional[float] = Field(default=None, description="SQL validation duration (ms).")
     execute_sql_ms: Optional[float] = Field(default=None, description="SQL execution duration (ms).")
     generate_report_ms: Optional[float] = Field(default=None, description="Report generation node duration (ms).")
-    llm_total_ms: Optional[float] = Field(default=None, description="Aggregated LLM inference time: SQL + Report (ms).")
+    insight_llm_ms: Optional[float] = Field(
+        default=None, description="Real LLM inference time inside the Insight Engine (ms), when it called an LLM."
+    )
+    observation_llm_ms: Optional[float] = Field(
+        default=None, description="Real LLM inference time inside the Observation Engine (ms), when it called an LLM."
+    )
+    llm_total_ms: Optional[float] = Field(
+        default=None,
+        description="Aggregated real LLM inference time: SQL + Report + Insight + Observation (ms).",
+    )
     total_ms: float = Field(default=0.0, description="Sum of all node execution times (ms).")
 
 
@@ -174,6 +219,96 @@ class ReportResponse(BaseModel):
             "Controlled outcome of the run (AG-022): EXECUTE_SQL, ASK_CLARIFICATION, "
             "RETURN_HELP, OUT_OF_SCOPE, REWRITE_AND_RETRY, NO_RESULT_GUIDANCE, SAFE_ERROR."
         ),
+    )
+
+    # Conversational context / chat-memory diagnostics (optional, backward compatible —
+    # existing clients that ignore these fields are unaffected).
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Session key actually used for this run, resolved server-side "
+        "(always present, even when the request omitted session_id).",
+    )
+    follow_up_detected: bool = Field(
+        default=False,
+        description="Whether a deterministic follow-up signal fired for this question "
+        "(pronoun/reference, elliptical short-form, date-only or negation continuation).",
+    )
+    follow_up_confidence: float = Field(
+        default=1.0, description="Deterministic confidence of the follow-up resolution."
+    )
+    follow_up_signals: List[str] = Field(
+        default_factory=list, description="Names of the follow-up signals that fired."
+    )
+    context_applied: bool = Field(
+        default=False, description="Whether session context enrichment was applied."
+    )
+    inherited_fields: List[str] = Field(
+        default_factory=list, description="Field names inherited from session context."
+    )
+    overridden_fields: List[str] = Field(
+        default_factory=list,
+        description="Field names the current turn stated explicitly, replacing memory "
+        "(explicit-value precedence made observable).",
+    )
+    memory_updated: bool = Field(
+        default=False,
+        description="Whether session context was written after this run — only true for "
+        "a successful, data-bearing outcome (see write policy).",
+    )
+    memory_turn_count: Optional[int] = Field(
+        default=None, description="Retained turn count for the session after this run."
+    )
+    memory_expired: bool = Field(
+        default=False,
+        description="Whether the session had no live context at the START of this turn "
+        "(i.e. this turn began a fresh conversation window).",
+    )
+    memory_reset: bool = Field(
+        default=False,
+        description="Always false on this endpoint; reserved for parity with the "
+        "DELETE /api/v1/context/{session_id} reset endpoint's response.",
+    )
+
+    # Typed analytical follow-up signals (dimensions/metrics/filters/ranking/
+    # limit/time_grain/comparison_targets).
+    explicit_context_fields: List[str] = Field(
+        default_factory=list,
+        description="Analytical field names the current turn stated explicitly.",
+    )
+    inherited_context_fields: List[str] = Field(
+        default_factory=list, description="Field names inherited from session context."
+    )
+    overridden_context_fields: List[str] = Field(
+        default_factory=list,
+        description="Field names the current turn stated explicitly, replacing memory.",
+    )
+    removed_context_fields: List[str] = Field(
+        default_factory=list,
+        description="Field names that held a value in context but were cleared/replaced "
+        "this turn.",
+    )
+    resolved_metrics: List[str] = Field(
+        default_factory=list, description="This turn's resolved metric catalog ids."
+    )
+    resolved_dimensions: List[str] = Field(
+        default_factory=list, description="This turn's resolved grouping dimensions."
+    )
+    resolved_filters: Dict[str, List[str]] = Field(
+        default_factory=dict, description="This turn's resolved filter values by family."
+    )
+    resolved_time_grain: Optional[str] = Field(
+        default=None, description="This turn's resolved time grain: day|week|month|quarter|year."
+    )
+    resolved_ranking: Optional[str] = Field(
+        default=None, description="This turn's resolved ranking direction: top|bottom."
+    )
+    resolved_limit: Optional[int] = Field(
+        default=None, description="This turn's resolved explicit row/group limit."
+    )
+    pending_clarification_field: Optional[str] = Field(
+        default=None,
+        description="Name of a field still awaiting clarification after this turn, "
+        "or None when nothing is pending.",
     )
 
     model_config = {

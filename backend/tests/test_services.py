@@ -203,7 +203,7 @@ async def test_report_service_orchestration():
     prompt_service.render_report_prompt.return_value = "Rendered prompt text"
     llm_provider.get_metadata.return_value = {"provider": "mock-provider"}
     llm_provider.generate.return_value = LLMResponse(
-        content="# User Report\nThis is executive narrative summary.",
+        content="# Kullanıcı Raporu\nBu, yönetici anlatı özetidir.",
         model="qwen3:8b",
         latency_ms=250.0,
     )
@@ -217,7 +217,7 @@ async def test_report_service_orchestration():
         execution_time_ms=1.0,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
 
     res = await r_service.generate_report(
@@ -227,8 +227,8 @@ async def test_report_service_orchestration():
     )
 
     assert isinstance(res, GeneratedReport)
-    assert res.title == "User Report"
-    assert "This is executive narrative summary." in res.markdown
+    assert res.title == "Kullanıcı Raporu"
+    assert "Bu, yönetici anlatı özetidir." in res.markdown
 
 
 @pytest.mark.asyncio
@@ -247,7 +247,7 @@ async def test_report_service_failures():
         execution_time_ms=1.0,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
 
     with pytest.raises(ReportServiceException):

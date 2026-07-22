@@ -89,11 +89,13 @@ def test_unsafe_sql_rejection():
     # REPLACE (as a statement, not string function)
     res = validator.validate("REPLACE INTO users (id, name) VALUES (1, 'Bob');")
     assert res.valid is False
-    # sqlglot parses REPLACE INTO as an Insert statement or falls back to Command depending on dialect
+    # REPLACE INTO is not valid T-SQL: rejected either as an Insert-shaped statement
+    # or as a syntax parse failure depending on the sqlglot dialect behavior.
     assert (
         "Unsafe command 'Insert'" in res.reason
         or "Unsafe root statement type 'Insert'" in res.reason
         or "Unsafe root statement type 'Command'" in res.reason
+        or "parsing failed" in res.reason
     )
 
 

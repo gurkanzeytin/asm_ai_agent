@@ -1,0 +1,30 @@
+{
+  "view": "dbo.vw_RandevuRaporu",
+  "queries": [
+    {
+      "id": "reference_appointment_count",
+      "metric": "appointment_count",
+      "sql": "SELECT COUNT_BIG(1) AS reference_value FROM dbo.vw_RandevuRaporu;"
+    },
+    {
+      "id": "reference_unique_patient_count",
+      "metric": "unique_patient_count",
+      "sql": "SELECT COUNT(DISTINCT HastaId) AS reference_value FROM dbo.vw_RandevuRaporu WHERE HastaId IS NOT NULL;"
+    },
+    {
+      "id": "reference_branch_appointment_count",
+      "metric": "appointments_per_branch",
+      "sql": "SELECT SubeAdi, COUNT_BIG(1) AS reference_value FROM dbo.vw_RandevuRaporu GROUP BY SubeAdi;"
+    },
+    {
+      "id": "reference_appointment_duration_average",
+      "metric": "appointment_duration_average",
+      "sql": "SELECT AVG(CONVERT(float, RandevuSuresi)) AS reference_value FROM dbo.vw_RandevuRaporu WHERE RandevuSuresi IS NOT NULL;"
+    },
+    {
+      "id": "reference_current_vs_previous_month_appointments",
+      "metric": "appointment_count_period_pair",
+      "sql": "SELECT SUM(CASE WHEN BaslangicTarihi >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) AND BaslangicTarihi < DATEADD(month, 1, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)) THEN 1 ELSE 0 END) AS current_period_count, SUM(CASE WHEN BaslangicTarihi >= DATEADD(month, -1, DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)) AND BaslangicTarihi < DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1) THEN 1 ELSE 0 END) AS baseline_period_count FROM dbo.vw_RandevuRaporu;"
+    }
+  ]
+}

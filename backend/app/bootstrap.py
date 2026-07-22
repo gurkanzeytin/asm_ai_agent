@@ -2,6 +2,8 @@ import logging
 
 from app.agent.graph import AgentGraphBuilder
 from app.context import ContextManager
+from app.context.session_store import SessionStore
+from app.core.config import settings
 from app.database.session import SessionLocal, engine
 from app.database_intelligence.cache import SchemaCache
 from app.database_intelligence.inspector import DatabaseInspector
@@ -98,8 +100,16 @@ class AppContainer:
         self.agent_graph = self.agent_graph_builder.build()
 
         # 10. Conversational Context Engine (PRODUCT-001) — short-term,
-        # in-memory session context for follow-up question resolution
-        self.context_manager = ContextManager()
+        # in-memory session context for follow-up question resolution.
+        # Process-local only (see SessionStore docstring); storage-agnostic
+        # abstraction so a Redis-backed store can replace it later without
+        # touching ContextManager or callers.
+        self.context_manager = ContextManager(
+            store=SessionStore(
+                ttl_seconds=settings.CHAT_MEMORY_TTL_SECONDS,
+                max_turns=settings.CHAT_MEMORY_MAX_TURNS,
+            )
+        )
 
         # 11. Reporting Service — top-level API entry point backed by compiled agent graph
         self.reporting_service = ReportingService(

@@ -12,17 +12,18 @@ from app.intelligence import templates
 from app.intelligence.models import Observation, ObservationCategory
 
 _RULE_CATEGORIES: dict[str, ObservationCategory] = {
-    "HIGH_GROWTH": ObservationCategory.GROWTH,
-    "MODERATE_GROWTH": ObservationCategory.GROWTH,
-    "DECLINING": ObservationCategory.GROWTH,
-    "POSITIVE_TREND": ObservationCategory.TREND,
-    "NEGATIVE_TREND": ObservationCategory.TREND,
-    "STABLE_TREND": ObservationCategory.TREND,
     "DOMINANT_CATEGORY": ObservationCategory.DISTRIBUTION,
     "BALANCED_DISTRIBUTION": ObservationCategory.DISTRIBUTION,
     "OUTLIER_DETECTED": ObservationCategory.RANKING,
     "SINGLE_METRIC": ObservationCategory.VOLUME,
     "INSUFFICIENT_EVIDENCE": ObservationCategory.DATA_QUALITY,
+    "CONSISTENT_UPWARD_TREND": ObservationCategory.TREND,
+    "CONSISTENT_DOWNWARD_TREND": ObservationCategory.TREND,
+    "MIXED_TREND_SIGNAL": ObservationCategory.TREND,
+    "FLAT_TREND": ObservationCategory.TREND,
+    "INSUFFICIENT_COMPLETE_PERIODS": ObservationCategory.DATA_QUALITY,
+    "PARTIAL_PERIOD_EXCLUDED": ObservationCategory.DATA_QUALITY,
+    "SINGLE_CATEGORY_COMPARISON": ObservationCategory.DISTRIBUTION,
 }
 
 # A max/min ratio beyond this marks the spread between categories as significant.
@@ -66,8 +67,11 @@ def build_observations(
     if InsightRule.INSUFFICIENT_EVIDENCE in rules:
         return observations
 
-    # 2. Metric-driven observations (independent of rules).
-    if metrics.get("top_category") is not None:
+    # 2. Metric-driven observations (independent of rules). "Highest volume"
+    # implies a comparison against other categories — never fired when only
+    # one category exists (SINGLE_CATEGORY_COMPARISON handles that case
+    # instead, via its rule-driven wording above).
+    if metrics.get("top_category") is not None and analytics.comparison_sufficient is not False:
         add(
             "TOP_CATEGORY",
             ObservationCategory.RANKING,

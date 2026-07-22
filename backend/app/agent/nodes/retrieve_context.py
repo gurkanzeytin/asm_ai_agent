@@ -29,7 +29,11 @@ class RetrieveContextNode(IAgentNode):
         try:
             analysis = self.query_analyzer.analyze(question)
             return self.query_planner.build_plan(
-                question, analysis, db_context.tables, semantic_frame=semantic_frame
+                question,
+                analysis,
+                db_context.tables,
+                semantic_frame=semantic_frame,
+                views=db_context.views,
             )
         except Exception as error:
             logger.error(f"Query planning failed; continuing without a plan: {error}")
@@ -53,6 +57,7 @@ class RetrieveContextNode(IAgentNode):
                 required.update(step.to_table for step in query_plan.join_path)
                 required.discard(None)
                 existing = {table.name for table in db_context.tables}
+                existing.update(view.name for view in db_context.views)
                 missing = sorted(required - existing)
                 extend = getattr(self.prompt_service, "extend_context_with_tables", None)
                 if missing and extend is not None:

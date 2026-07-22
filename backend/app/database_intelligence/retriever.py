@@ -316,14 +316,47 @@ class SchemaRetriever(ISchemaRetriever):
                     else:
                         break
 
-            # 7. Views Selection (Fallback to legacy keyword matching for views)
+            # 7. Views Selection — semantic (FAISS, when the index supports it)
+            # combined with keyword/column overlap, mirroring table scoring
+            # instead of relying solely on name/comment keyword matching.
+            view_semantic_scores: dict[str, float] = {}
+            if schema.views and hasattr(index, "search_views"):
+                try:
+                    view_semantic_matches = await index.search_views(
+                        retrieval_query, k=len(schema.views)
+                    )
+                    view_semantic_scores = dict(view_semantic_matches)
+                except Exception as e:
+                    logger.debug(f"Semantic view search unavailable, using keyword-only: {e}")
+
             scored_views = []
-            for _view_name, view in schema.views.items():
-                view_score = self._score_view(query_tokens, view)
-                if view_score > 0:
-                    scored_views.append((view_score, view))
+            for view_name, view in schema.views.items():
+                kw_score = self._score_view(query_tokens, view)
+                sem_score = view_semantic_scores.get(view_name, 0.0)
+                combined_score = kw_score + (sem_score * 10.0)
+                if kw_score > 0 or sem_score >= 0.3:
+                    scored_views.append((combined_score, view))
             scored_views.sort(key=lambda x: x[0], reverse=True)
             selected_views = [v for _, v in scored_views]
+
+            # Fallback: a view-only schema (SQL Server allowed-object setup) must always
+            # surface its views, otherwise the SQL generation context would be empty. With
+            # semantic + column-aware keyword scoring above, this is now a genuine safety
+            # net rather than the normal path for ordinary in-domain questions.
+            if not selected_views and schema.views and not selected_tables:
+                logger.info(
+                    "No views matched query by semantic or keyword score. "
+                    "Including all schema views as a safety-net fallback."
+                )
+                selected_views = sorted(schema.views.values(), key=lambda v: v.name)
+
+            # Token budget accounting for views — previously omitted entirely,
+            # which made "Prompt Budget Utilization" report 0 tokens even when
+            # views were the only content actually sent to the LLM.
+            for view in selected_views:
+                view_text = self._format_view_raw(view)
+                current_tokens += len(view_text) // 4
+
             ranking_ms = (time.perf_counter() - ranking_start) * 1000
 
             # 8. Observability Diagnostics Logging
@@ -537,12 +570,28 @@ class SchemaRetriever(ISchemaRetriever):
         return score
 
     def _score_view(self, query_tokens: set[str], view: ViewMetadata) -> int:
-        """Scores a view metadata object based on intersection with query tokens."""
+        """Scores a view metadata object based on intersection with query tokens.
+
+        Mirrors ``_score_table``: name match weighs most, then column names/
+        comments, then the view-level comment. Previously this only scored the
+        view name and comment, ignoring columns entirely — for a single-view
+        allowed-object deployment, that meant most queries fell through to the
+        blanket "select all views" fallback purely because their tokens matched
+        a column name (e.g. a status or date field) rather than the view name.
+        """
         score = 0
 
         # Match view name words (normalized)
         view_words = self._tokenize(view.name)
         score += len(query_tokens.intersection(view_words)) * 10
+
+        # Match column words (normalized) — same weighting as table columns.
+        for col in view.columns:
+            col_words = self._tokenize(col.name)
+            score += len(query_tokens.intersection(col_words)) * 2
+            if col.comment:
+                comment_words = self._tokenize(col.comment)
+                score += len(query_tokens.intersection(comment_words)) * 1
 
         # Match view comment words (normalized)
         if view.comment:
@@ -550,3 +599,11 @@ class SchemaRetriever(ISchemaRetriever):
             score += len(query_tokens.intersection(comment_words)) * 1
 
         return score
+
+    def _format_view_raw(self, view: ViewMetadata) -> str:
+        """Helper to format a single view metadata model into its prompt representation."""
+        lines = [f"View: {view.name}"]
+        cols = [f"{col.name} ({col.type_name})" for col in view.columns]
+        if cols:
+            lines.append(f"  Columns: {', '.join(cols)}")
+        return "\n".join(lines)

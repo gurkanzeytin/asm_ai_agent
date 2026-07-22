@@ -50,7 +50,7 @@ async def test_prompt_service_render_report_prompt_truncation():
         execution_time_ms=1.5,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
 
     # Backup and set max rows config
@@ -83,7 +83,7 @@ async def test_report_service_generate_report_metadata():
     llm_provider.get_metadata.return_value = {"provider": "mock-ollama"}
 
     llm_response = LLMResponse(
-        content="# Test Report Title\n\nExecutive Summary content.",
+        content="# Test Rapor Başlığı\n\nYönetici özeti içeriği.",
         model="qwen3:8b",
         latency_ms=120.5,
         prompt_tokens=50,
@@ -106,7 +106,7 @@ async def test_report_service_generate_report_metadata():
         execution_time_ms=1.0,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
 
     report = await report_service.generate_report(
@@ -117,7 +117,7 @@ async def test_report_service_generate_report_metadata():
     )
 
     assert isinstance(report, GeneratedReport)
-    assert report.title == "Test Report Title"
+    assert report.title == "Test Rapor Başlığı"
     assert report.markdown == llm_response.content
     assert report.provider == "mock-ollama"
     assert report.model == "qwen3:8b"
@@ -127,6 +127,46 @@ async def test_report_service_generate_report_metadata():
     assert report.execution_id == "exec-123"
     assert report.generated_at is not None
     strategy.generate.assert_called_once_with("Rendered Prompt", llm_provider)
+
+
+@pytest.mark.asyncio
+async def test_report_service_replaces_english_or_missing_title_with_turkish_default():
+    prompt_service = AsyncMock(spec=IPromptService)
+    prompt_service.render_report_prompt.return_value = "Rendered Prompt"
+    llm_provider = AsyncMock(spec=ILLMProvider)
+    llm_provider.get_metadata.return_value = {"provider": "mock-ollama"}
+
+    rows = [{"id": i} for i in range(settings.REPORT_ANALYTICAL_ROW_THRESHOLD + 1)]
+    query_result = QueryResult(
+        columns=["id"],
+        rows=rows,
+        row_count=len(rows),
+        execution_time_ms=1.0,
+        success=True,
+        executed_at=datetime.now(),
+        database_provider="mssql",
+    )
+
+    for content in (
+        "# Appointment Trend Overview\n\nBody.",  # English heading
+        "No heading at all, just body text.",  # no '#' line
+    ):
+        strategy = AsyncMock(spec=IReportGenerator)
+        strategy.generate.return_value = LLMResponse(
+            content=content, model="qwen3:8b", latency_ms=10.0
+        )
+        report_service = ReportService(
+            prompt_service=prompt_service, llm_provider=llm_provider, generator=strategy
+        )
+
+        report = await report_service.generate_report(
+            question="Analyze this result trend",
+            sql="SELECT 1",
+            query_result=query_result,
+            execution_id="exec-123",
+        )
+
+        assert report.title == "Sorgu Sonucu"
 
 
 @pytest.mark.asyncio
@@ -155,7 +195,7 @@ async def test_generate_report_node_execute():
         execution_time_ms=1.0,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
     state_no_sql = AgentState(question="Select count", query_result=query_result)
     output_state = await node.execute(state_no_sql)
@@ -225,7 +265,7 @@ async def test_full_graph_execution_with_report():
         execution_time_ms=4.5,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
     workflow_service.execute_query.return_value = mock_query_result
 
@@ -322,7 +362,7 @@ async def test_report_generation_values_originating_from_query_result():
         execution_time_ms=10.0,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
 
     report = await report_service.generate_report(
@@ -375,7 +415,7 @@ async def test_comparison_query_report_disables_llm_thinking_mode():
         execution_time_ms=4.0,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
 
     report = await report_service.generate_report(
@@ -411,7 +451,7 @@ async def test_non_analytical_query_still_uses_template_without_llm():
         execution_time_ms=2.0,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
 
     report = await report_service.generate_report(
@@ -424,3 +464,42 @@ async def test_non_analytical_query_still_uses_template_without_llm():
     llm_provider.generate.assert_not_awaited()
     prompt_service.render_report_prompt.assert_not_awaited()
 
+
+
+@pytest.mark.asyncio
+async def test_generate_report_node_returns_safe_clarification_when_shape_blocked():
+    workflow_service = AsyncMock(spec=IWorkflowService)
+    node = GenerateReportNode(workflow_service)
+
+    query_result = QueryResult(
+        columns=["appointment_duration_average"],
+        rows=[{"appointment_duration_average": 25.0}],
+        row_count=1,
+        execution_time_ms=1.0,
+        success=True,
+        executed_at=datetime.now(),
+        database_provider="mssql",
+    )
+    generated_sql = GeneratedSQL(
+        sql="SELECT AVG(RandevuSuresi) AS appointment_duration_average FROM dbo.vw_RandevuRaporu",
+        validation_result=SQLValidationResult(valid=True),
+        provider="deterministic",
+        model="deterministic-query-plan-builder",
+        latency_ms=0.0,
+    )
+    state = AgentState(
+        question="Şubelere göre randevu sayısı ve gerçekleşme oranını göster",
+        query_result=query_result,
+        generated_sql=generated_sql,
+        analytics_blocked_reason=(
+            "missing expected columns: appointment_count, completed_appointment_rate"
+        ),
+    )
+
+    output_state = await node.execute(state)
+
+    assert workflow_service.execute_report_generation.await_count == 0
+    assert output_state.generated_report is not None
+    assert output_state.outcome == "SAFE_ERROR"
+    assert "generate_report" in output_state.completed_nodes
+    assert output_state.errors == []

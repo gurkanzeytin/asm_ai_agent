@@ -98,7 +98,7 @@ async def test_template_report_bypasses_llm_for_simple_result():
         execution_time_ms=1.0,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
 
     report = await service.generate_report(
@@ -126,7 +126,7 @@ async def test_large_list_report_bypasses_llm_regression():
         execution_time_ms=1.0,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
 
     started = time.perf_counter()

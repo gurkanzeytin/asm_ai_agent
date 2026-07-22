@@ -37,19 +37,6 @@ export function SettingsDialog({
         </DialogHeader>
 
         <div className="mt-2 flex flex-col gap-5">
-          <Field label={tr.settingsDialog.theme}>
-            <Select defaultValue="dark">
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="dark">{tr.settingsDialog.themeDark}</SelectItem>
-                <SelectItem value="light">{tr.settingsDialog.themeLight}</SelectItem>
-                <SelectItem value="system">{tr.settingsDialog.themeSystem}</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-
           <Field label={tr.settingsDialog.language}>
             <Select defaultValue="tr">
               <SelectTrigger>

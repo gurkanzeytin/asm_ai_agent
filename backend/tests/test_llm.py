@@ -21,11 +21,15 @@ async def test_provider_initialization():
 
 
 @pytest.mark.asyncio
-async def test_factory_creation():
+async def test_factory_creation(monkeypatch):
     # Clear any cached instances first
     await LLMFactory.clear_providers()
 
-    # Get provider using default configuration
+    # Pin the configured provider so this test doesn't depend on the
+    # environment's actual LLM_PROVIDER value.
+    monkeypatch.setattr(settings, "LLM_PROVIDER", "ollama")
+
+    # Get provider using default configuration (no explicit provider_type)
     provider1 = LLMFactory.get_provider()
     assert isinstance(provider1, OllamaProvider)
 

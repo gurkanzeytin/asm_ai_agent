@@ -9,8 +9,27 @@ from app.application_models.query_analysis import AmbiguityResult
 from app.application_models.workflow_metrics import WorkflowMetrics
 from app.application_models.workflow_result import WorkflowResult
 from app.context import ContextManager
+from app.context.analysis_type import resolve_canonical_analysis_type
+from app.context.analytical_signals import FILTER_FAMILIES as _FILTER_FAMILIES
+from app.context.session_store import generate_session_id
 
 logger = logging.getLogger(__name__)
+
+# Memory write policy (Part 7): conversational context is only persisted after
+# a genuinely successful, data-bearing workflow outcome. Every other terminal
+# outcome (clarification, out-of-scope, help, a retry loop that never
+# resolved, or the synthetic SAFE_ERROR fallback) must never overwrite
+# previously valid context with an incomplete/failed turn's signals.
+_MEMORY_WRITE_ELIGIBLE_OUTCOMES = frozenset(
+    {AgentOutcome.EXECUTE_SQL.value, AgentOutcome.NO_RESULT_GUIDANCE.value}
+)
+
+# Sentinel distinguishing "session_id truly omitted" (generate an isolated
+# ephemeral session) from "session_id=None passed explicitly" (bypass the
+# context engine entirely — the existing, deliberate benchmark/eval-harness
+# contract). A plain default value can't call uuid4() per-call, so the actual
+# generation happens once inside run_workflow when this sentinel is seen.
+_UNSET = object()
 
 # AG-022 SAFE_ERROR: friendly, non-technical guidance shown when the pipeline
 # could not produce any report. Guarantees the user never sees an empty or
@@ -52,14 +71,18 @@ class ReportingService:
         self._context_manager = context_manager or ContextManager()
 
     async def run_workflow(
-        self, question: str, session_id: Optional[str] = "default"
+        self, question: str, session_id: Optional[str] = _UNSET
     ) -> WorkflowResult:
         """Runs the full agent graph pipeline and returns a typed WorkflowResult.
 
         Args:
             question: Natural-language question submitted by the user.
             session_id: Conversational session key for follow-up resolution.
-                Pass None to bypass the context engine entirely (e.g. benchmarks).
+                Pass None to bypass the context engine entirely (e.g. benchmarks,
+                evaluation-harness cases that must never share memory). Omit
+                entirely to get a fresh, isolated ephemeral session per call —
+                this never silently pools unrelated callers into one shared
+                "default" session (see app.context.session_store.generate_session_id).
 
         Returns:
             WorkflowResult: Typed DTO containing all workflow outputs including metrics.
@@ -69,6 +92,8 @@ class ReportingService:
             so that the global exception handlers can map them to HTTP responses.
         """
         workflow_id = str(uuid.uuid4())
+        if session_id is _UNSET:
+            session_id = generate_session_id()
         logger.info(f"ReportingService: Starting workflow run [{workflow_id}] for question: {question!r}")
 
         # Conversational context resolution (PRODUCT-001): rewrite follow-up
@@ -76,7 +101,9 @@ class ReportingService:
         resolution = None
         pipeline_question = question
         seeded_ambiguity = None
+        memory_expired = False
         if session_id is not None:
+            memory_expired = self._context_manager.is_expired_or_absent(session_id)
             resolution = self._context_manager.resolve(question, session_id)
             if resolution.clarification_needed:
                 seeded_ambiguity = AmbiguityResult(
@@ -96,9 +123,6 @@ class ReportingService:
         # Run compiled LangGraph workflow pipeline — domain exceptions propagate upward
         final_state = await self._agent_graph.ainvoke(initial_state)
 
-        if resolution is not None and session_id is not None:
-            self._context_manager.update(resolution, session_id)
-
         generated_sql_dto = final_state.get("generated_sql")
         query_result_dto = final_state.get("query_result")
         generated_report_dto = final_state.get("generated_report")
@@ -109,6 +133,8 @@ class ReportingService:
         errors = final_state.get("errors", [])
         node_timings: dict[str, float] = final_state.get("node_timings") or {}
         outcome = final_state.get("outcome")
+        query_plan_dto = final_state.get("query_plan")
+        semantic_frame_dto = final_state.get("semantic_frame")
 
         # AG-022 SAFE_ERROR: the workflow must never end without a user-facing
         # response. If no node produced a report, synthesize friendly guidance.
@@ -128,10 +154,74 @@ class ReportingService:
             )
             outcome = AgentOutcome.SAFE_ERROR.value
 
-        # Build typed WorkflowMetrics from per-node timing accumulator
+        # Memory write policy (Part 7): only persist conversational context after
+        # a genuinely successful, data-bearing outcome. A validation failure,
+        # execution failure, out-of-scope verdict, unresolved clarification, or
+        # the synthetic SAFE_ERROR fallback must never overwrite previously
+        # valid context with an incomplete/failed turn's signals.
+        memory_updated = False
+        memory_turn_count: int | None = None
+        if resolution is not None and session_id is not None:
+            should_persist_memory = (
+                not resolution.clarification_needed
+                and not errors
+                and outcome in _MEMORY_WRITE_ELIGIBLE_OUTCOMES
+                and query_result_dto is not None
+            )
+            if should_persist_memory:
+                canonical_analysis_type = resolve_canonical_analysis_type(
+                    analytics_type=analytics_dto.analytics_type if analytics_dto else None,
+                    outcome=outcome,
+                )
+                self._context_manager.update(
+                    resolution,
+                    session_id,
+                    canonical_analysis_type=canonical_analysis_type,
+                    query_plan=query_plan_dto,
+                )
+                memory_updated = True
+            elif outcome == AgentOutcome.ASK_CLARIFICATION.value and semantic_frame_dto is not None:
+                # Bounded pending clarification (Part 7): an ambiguous ranking
+                # phrase ("en iyi", "en verimli", ...) the semantic engine
+                # already flagged (app.semantics.ontology.AMBIGUOUS_PHRASES) —
+                # reused verbatim, never re-detected here. Touches only
+                # pending_clarification; every other valid context field is
+                # left completely untouched.
+                ambiguities = getattr(semantic_frame_dto, "ambiguities", None) or []
+                if ambiguities:
+                    first = ambiguities[0]
+                    self._context_manager.set_pending_clarification(
+                        session_id,
+                        field="ranking_metric",
+                        reason=first.reason,
+                        choices=[],
+                    )
+            memory_turn_count = self._context_manager.turn_count(session_id)
+            pending_clarification = self._context_manager.get_pending_clarification(session_id)
+        else:
+            pending_clarification = None
+
+        # Build typed WorkflowMetrics from per-node timing accumulator.
+        #
+        # llm_total_ms must sum every stage that can call an LLM, not just SQL/
+        # report generation — the Insight and Observation Engines also make their
+        # own LLM calls (InsightResult.llm_latency_ms / ObservationResult.llm_latency_ms),
+        # and those calls are real (can take seconds) even though the report stage
+        # that reuses their narrative finishes in under a millisecond. Omitting them
+        # here previously made the "LLM Inference" summary report ~0ms even when the
+        # Insight Engine's own LLM call took 8-58s.
         sql_latency = generated_sql_dto.latency_ms if generated_sql_dto else 0.0
         report_latency = generated_report_dto.latency_ms if generated_report_dto else 0.0
-        llm_total_ms = sql_latency + report_latency if (sql_latency or report_latency) else None
+        insight_llm_latency = insights_dto.llm_latency_ms if insights_dto else None
+        observation_llm_latency = observations_dto.llm_latency_ms if observations_dto else None
+        llm_total_ms = (
+            sql_latency
+            + report_latency
+            + (insight_llm_latency or 0.0)
+            + (observation_llm_latency or 0.0)
+            if (sql_latency or report_latency or insight_llm_latency or observation_llm_latency)
+            else None
+        )
 
         metrics = WorkflowMetrics(
             retrieve_context_ms=node_timings.get("retrieve_context"),
@@ -143,6 +233,8 @@ class ReportingService:
             analyze_results_ms=node_timings.get("analyze_results"),
             generate_insights_ms=node_timings.get("generate_insights"),
             generate_observations_ms=node_timings.get("generate_observations"),
+            insight_llm_ms=insight_llm_latency,
+            observation_llm_ms=observation_llm_latency,
             llm_total_ms=llm_total_ms,
             total_ms=sum(node_timings.values()),
         )
@@ -219,6 +311,36 @@ class ReportingService:
             insights=insights_dto,
             observations=observations_dto,
             outcome=outcome,
+            session_id=session_id,
+            follow_up_detected=resolution.follow_up_detected if resolution else False,
+            follow_up_confidence=resolution.follow_up_confidence if resolution else 1.0,
+            follow_up_signals=resolution.follow_up_signals if resolution else [],
+            context_applied=resolution.context_applied if resolution else False,
+            inherited_fields=list(resolution.inherited.keys()) if resolution else [],
+            overridden_fields=resolution.overridden_fields if resolution else [],
+            memory_updated=memory_updated,
+            memory_turn_count=memory_turn_count,
+            memory_expired=memory_expired,
+            explicit_context_fields=resolution.explicit_fields if resolution else [],
+            inherited_context_fields=list(resolution.inherited.keys()) if resolution else [],
+            overridden_context_fields=resolution.overridden_fields if resolution else [],
+            removed_context_fields=resolution.removed_fields if resolution else [],
+            resolved_metrics=resolution.resolved_signals.metrics if resolution else [],
+            resolved_dimensions=resolution.resolved_signals.dimensions if resolution else [],
+            resolved_filters=(
+                {
+                    family: getattr(resolution.resolved_signals, family)
+                    for family in _FILTER_FAMILIES
+                }
+                if resolution
+                else {}
+            ),
+            resolved_time_grain=resolution.resolved_signals.time_grain if resolution else None,
+            resolved_ranking=resolution.resolved_signals.ranking if resolution else None,
+            resolved_limit=resolution.resolved_signals.limit if resolution else None,
+            pending_clarification_field=(
+                pending_clarification.field if pending_clarification else None
+            ),
         )
 
 

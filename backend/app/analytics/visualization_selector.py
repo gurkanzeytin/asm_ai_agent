@@ -33,6 +33,7 @@ class VisualizationSelector:
         intents: list[AnalyticsIntent],
         row_count: int,
         category_count: int = 0,
+        metric_count: int = 1,
     ) -> VisualizationRecommendation:
         if data_shape == DataShape.EMPTY:
             return VisualizationRecommendation(
@@ -51,11 +52,22 @@ class VisualizationSelector:
             )
 
         if data_shape == DataShape.TIME_SERIES:
+            if metric_count >= 2:
+                return VisualizationRecommendation(
+                    type=VisualizationType.MULTI_SERIES_BAR_CHART,
+                    reason=f"Time series with {metric_count} independent metrics",
+                )
             return VisualizationRecommendation(
                 type=VisualizationType.LINE_CHART, reason="Time-series data detected"
             )
 
         if data_shape == DataShape.CATEGORICAL:
+            if metric_count >= 2:
+                return VisualizationRecommendation(
+                    type=VisualizationType.GROUPED_BAR_CHART,
+                    reason=f"Category comparison across {metric_count} independent metrics "
+                    "(mixed units — never plotted on one shared scale)",
+                )
             if (
                 AnalyticsIntent.DISTRIBUTION in intents
                 and 0 < category_count <= self.max_pie_categories

@@ -218,7 +218,7 @@ def test_ambiguous_queries_detected(analyzer, query):
     assert analysis.is_ambiguous
     assert analysis.ambiguity is not None
     assert analysis.ambiguity.question
-    assert "Randevu sayısı" in analysis.ambiguity.options
+    assert "Toplam randevu hacmi" in analysis.ambiguity.options
 
 
 @pytest.mark.parametrize(

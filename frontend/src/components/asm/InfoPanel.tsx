@@ -1,19 +1,32 @@
 import { motion, AnimatePresence } from "motion/react";
-import { Clock, Database, Wrench, Brain, ChevronRight, X } from "lucide-react";
+import { Clock, Database, ChevronRight, Copy, Check } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { tr } from "@/locales/tr";
 
 interface Props {
   open: boolean;
-  onClose: () => void;
   responseMs: number;
   isThinking: boolean;
   /** Exact SQL generated/executed by the backend for the last request. */
   sql?: string | null;
 }
 
-export function InfoPanel({ open, onClose, responseMs, isThinking, sql }: Props) {
+export function InfoPanel({ open, responseMs, isThinking, sql }: Props) {
+  const [copied, setCopied] = useState(false);
+
+  const copySql = async () => {
+    if (!sql) return;
+    try {
+      await navigator.clipboard.writeText(sql);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error(tr.common.copyFailed);
+    }
+  };
+
   return (
     <AnimatePresence>
       {open && (
@@ -24,15 +37,8 @@ export function InfoPanel({ open, onClose, responseMs, isThinking, sql }: Props)
           transition={{ type: "spring", stiffness: 260, damping: 30 }}
           className="hidden h-full w-[340px] shrink-0 border-l border-border bg-sidebar/40 lg:block"
         >
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div className="flex h-16 shrink-0 items-center border-b border-border px-4">
             <div className="text-sm font-semibold">{tr.details.title}</div>
-            <button
-              onClick={onClose}
-              aria-label={tr.details.close}
-              className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
           </div>
           <div className="flex flex-col gap-3 overflow-y-auto p-4">
             <Card title={tr.details.conversation}>
@@ -57,7 +63,27 @@ export function InfoPanel({ open, onClose, responseMs, isThinking, sql }: Props)
               </div>
             </Card>
 
-            <Expandable icon={Database} title={tr.details.sqlQuery}>
+            <Expandable
+              icon={Database}
+              title={tr.details.sqlQuery}
+              action={
+                sql ? (
+                  <button
+                    type="button"
+                    onClick={copySql}
+                    title={tr.details.copySql}
+                    aria-label={tr.details.copySql}
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                  >
+                    {copied ? (
+                      <Check className="h-3.5 w-3.5 text-success" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                ) : undefined
+              }
+            >
               {sql ? (
                 <pre className="max-h-72 overflow-auto whitespace-pre rounded-lg bg-background/60 p-3 text-[11px] leading-relaxed text-cyan">
                   {sql}
@@ -68,17 +94,6 @@ export function InfoPanel({ open, onClose, responseMs, isThinking, sql }: Props)
                 </p>
               )}
             </Expandable>
-
-            <Expandable icon={Wrench} title={tr.details.toolCalls} badge="2">
-              <ToolRow name="query_database" status="success" ms={412} />
-              <ToolRow name="format_table" status="success" ms={38} />
-            </Expandable>
-
-            <Card title={tr.details.processSummary} icon={Brain}>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {tr.details.processSummaryDescription}
-              </p>
-            </Card>
           </div>
         </motion.aside>
       )}
@@ -96,7 +111,7 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <div className="glass rounded-2xl p-4">
+    <div className="glass rounded-lg p-4">
       <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         {Icon && <Icon className="h-3.5 w-3.5" />}
         {title}
@@ -129,34 +144,33 @@ function Row({
 function Expandable({
   icon: Icon,
   title,
-  badge,
   children,
   defaultOpen,
+  action,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
-  badge?: string;
   children: React.ReactNode;
   defaultOpen?: boolean;
+  action?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(!!defaultOpen);
   return (
-    <div className="glass rounded-2xl">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-4 py-3 text-sm font-medium"
-      >
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        <span className="flex-1 text-left">{title}</span>
-        {badge && (
-          <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
-            {badge}
-          </span>
-        )}
-        <ChevronRight
-          className={cn("h-4 w-4 text-muted-foreground transition", open && "rotate-90")}
-        />
-      </button>
+    <div className="glass rounded-lg">
+      <div className="flex items-center pr-2">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex min-w-0 flex-1 items-center gap-2 px-4 py-3 text-sm font-medium"
+        >
+          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="flex-1 truncate text-left">{title}</span>
+          <ChevronRight
+            className={cn("h-4 w-4 shrink-0 text-muted-foreground transition", open && "rotate-90")}
+          />
+        </button>
+        {action}
+      </div>
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
@@ -169,21 +183,6 @@ function Expandable({
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  );
-}
-
-function ToolRow({ name, status, ms }: { name: string; status: "success" | "error"; ms: number }) {
-  return (
-    <div className="flex items-center gap-2 rounded-lg bg-background/40 px-3 py-2 text-xs">
-      <span
-        className={cn(
-          "h-1.5 w-1.5 rounded-full",
-          status === "success" ? "bg-success" : "bg-destructive",
-        )}
-      />
-      <span className="flex-1 font-mono text-[11px]">{name}</span>
-      <span className="text-muted-foreground">{ms}ms</span>
     </div>
   );
 }

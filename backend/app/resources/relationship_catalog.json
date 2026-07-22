@@ -1,0 +1,596 @@
+{
+  "view": "dbo.vw_RandevuRaporu",
+  "relationships": [
+    {
+      "id": "branch_appointment_status_performance",
+      "name": "Şube × Randevu durumu",
+      "columns": [
+        "SubeAdi",
+        "RandevuDurumu",
+        "Id"
+      ],
+      "dimensions": [
+        "SubeAdi"
+      ],
+      "metrics": [
+        "appointment_count",
+        "completed_appointment_rate",
+        "no_show_rate"
+      ],
+      "supported_analyses": [
+        "distribution",
+        "ranking",
+        "comparison",
+        "trend"
+      ],
+      "example_questions": [
+        "Şubelerin gerçekleşme oranlarını karşılaştır",
+        "Gelmeme oranı en yüksek şube hangisi?"
+      ],
+      "warnings": [
+        "Düşük hacimli şubelerde oranlar yanıltıcı olabilir"
+      ]
+    },
+    {
+      "id": "department_appointment_status",
+      "name": "Bölüm × Randevu durumu",
+      "columns": [
+        "GenelRandevuBolumAdi",
+        "RandevuDurumu",
+        "Id"
+      ],
+      "dimensions": [
+        "GenelRandevuBolumAdi"
+      ],
+      "metrics": [
+        "appointment_count",
+        "completed_appointment_rate",
+        "no_show_rate"
+      ],
+      "supported_analyses": [
+        "distribution",
+        "ranking",
+        "comparison",
+        "trend"
+      ],
+      "example_questions": [
+        "Bölüm bazında gelmeme oranları nedir?",
+        "Hangi bölümde iptal oranı en yüksek?"
+      ],
+      "warnings": [
+        "Düşük hacimli bölümlerde oranlar yanıltıcı olabilir"
+      ]
+    },
+    {
+      "id": "branch_department_volume",
+      "name": "Şube × Bölüm",
+      "columns": [
+        "SubeAdi",
+        "GenelRandevuBolumAdi",
+        "Id"
+      ],
+      "dimensions": [
+        "SubeAdi",
+        "GenelRandevuBolumAdi"
+      ],
+      "metrics": [
+        "appointment_count",
+        "unique_patient_count"
+      ],
+      "supported_analyses": [
+        "cross_analysis",
+        "distribution",
+        "ranking"
+      ],
+      "example_questions": [
+        "Şube ve bölüm kırılımında randevu sayıları nedir?"
+      ],
+      "warnings": [
+        "İki boyutlu kırılım satır sayısını hızla büyütür; TOP kullanılmalı"
+      ]
+    },
+    {
+      "id": "department_appointment_type",
+      "name": "Bölüm × Randevu tipi",
+      "columns": [
+        "GenelRandevuBolumAdi",
+        "RandevuTipiAdi",
+        "Id"
+      ],
+      "dimensions": [
+        "GenelRandevuBolumAdi",
+        "RandevuTipiAdi"
+      ],
+      "metrics": [
+        "appointment_count"
+      ],
+      "supported_analyses": [
+        "cross_analysis",
+        "distribution"
+      ],
+      "example_questions": [
+        "Bölümlere göre randevu tipi dağılımı nedir?"
+      ],
+      "warnings": []
+    },
+    {
+      "id": "source_appointment_status",
+      "name": "Kaynak × Randevu durumu",
+      "columns": [
+        "GenelRandevuKaynakAdi",
+        "RandevuDurumu",
+        "Id"
+      ],
+      "dimensions": [
+        "GenelRandevuKaynakAdi"
+      ],
+      "metrics": [
+        "appointment_count",
+        "completed_appointment_rate",
+        "no_show_rate"
+      ],
+      "supported_analyses": [
+        "ranking",
+        "comparison",
+        "distribution"
+      ],
+      "example_questions": [
+        "Doktor bazında gerçekleşme oranları nedir?"
+      ],
+      "warnings": [
+        "Kaynak her zaman doktor değildir; cihaz/oda kaynakları da içerir"
+      ]
+    },
+    {
+      "id": "doctor_department",
+      "name": "Doktor × Bölüm",
+      "columns": [
+        "DoktorId",
+        "GenelRandevuBolumAdi",
+        "Id"
+      ],
+      "dimensions": [
+        "DoktorId",
+        "GenelRandevuBolumAdi"
+      ],
+      "metrics": [
+        "appointment_count",
+        "appointments_per_doctor"
+      ],
+      "supported_analyses": [
+        "cross_analysis",
+        "ranking"
+      ],
+      "example_questions": [
+        "Bölümlere göre doktor başına randevu sayısı nedir?"
+      ],
+      "warnings": [
+        "Doktor adı yoktur; DoktorId veya kaynak adı kullanılır"
+      ]
+    },
+    {
+      "id": "doctor_appointment_status",
+      "name": "Doktor × Randevu durumu",
+      "columns": [
+        "DoktorId",
+        "RandevuDurumu",
+        "Id"
+      ],
+      "dimensions": [
+        "DoktorId"
+      ],
+      "metrics": [
+        "appointment_count",
+        "completed_appointment_rate",
+        "no_show_rate"
+      ],
+      "supported_analyses": [
+        "ranking",
+        "comparison"
+      ],
+      "example_questions": [
+        "Hangi doktorun gelmeme oranı en yüksek?"
+      ],
+      "warnings": [
+        "Düşük randevu hacimli doktorlarda oranlar yanıltıcı olabilir"
+      ]
+    },
+    {
+      "id": "service_department",
+      "name": "Hizmet × Bölüm",
+      "columns": [
+        "HizmetAdi",
+        "GenelRandevuBolumAdi",
+        "Id"
+      ],
+      "dimensions": [
+        "HizmetAdi",
+        "GenelRandevuBolumAdi"
+      ],
+      "metrics": [
+        "appointment_count"
+      ],
+      "supported_analyses": [
+        "cross_analysis",
+        "ranking",
+        "distribution"
+      ],
+      "example_questions": [
+        "Bölümlere göre en çok verilen hizmetler neler?"
+      ],
+      "warnings": []
+    },
+    {
+      "id": "service_branch",
+      "name": "Hizmet × Şube",
+      "columns": [
+        "HizmetAdi",
+        "SubeAdi",
+        "Id"
+      ],
+      "dimensions": [
+        "HizmetAdi",
+        "SubeAdi"
+      ],
+      "metrics": [
+        "appointment_count"
+      ],
+      "supported_analyses": [
+        "cross_analysis",
+        "ranking"
+      ],
+      "example_questions": [
+        "Şubelere göre hizmet dağılımı nedir?"
+      ],
+      "warnings": []
+    },
+    {
+      "id": "category_department",
+      "name": "Kategori × Bölüm",
+      "columns": [
+        "KategoriAdi",
+        "GenelRandevuBolumAdi",
+        "Id"
+      ],
+      "dimensions": [
+        "KategoriAdi",
+        "GenelRandevuBolumAdi"
+      ],
+      "metrics": [
+        "appointment_count"
+      ],
+      "supported_analyses": [
+        "cross_analysis",
+        "distribution"
+      ],
+      "example_questions": [
+        "Kategori ve bölüm kırılımında randevular nasıl dağılıyor?"
+      ],
+      "warnings": [
+        "KategoriAdi bölüm değildir; iki ayrı boyuttur"
+      ]
+    },
+    {
+      "id": "nationality_department",
+      "name": "Uyruk × Bölüm",
+      "columns": [
+        "Uyruk",
+        "GenelRandevuBolumAdi",
+        "Id"
+      ],
+      "dimensions": [
+        "Uyruk",
+        "GenelRandevuBolumAdi"
+      ],
+      "metrics": [
+        "appointment_count",
+        "unique_patient_count"
+      ],
+      "supported_analyses": [
+        "cross_analysis",
+        "distribution"
+      ],
+      "example_questions": [
+        "Yabancı hastalar en çok hangi bölümlere geliyor?"
+      ],
+      "warnings": [
+        "Uyruk alanı boş olabilir"
+      ]
+    },
+    {
+      "id": "gender_department",
+      "name": "Cinsiyet × Bölüm",
+      "columns": [
+        "CinsiyetId",
+        "GenelRandevuBolumAdi",
+        "Id"
+      ],
+      "dimensions": [
+        "CinsiyetId",
+        "GenelRandevuBolumAdi"
+      ],
+      "metrics": [
+        "appointment_count",
+        "unique_patient_count"
+      ],
+      "supported_analyses": [
+        "cross_analysis",
+        "distribution"
+      ],
+      "example_questions": [
+        "Bölümlere göre cinsiyet dağılımı nedir?"
+      ],
+      "warnings": [
+        "CinsiyetId kod içerir (E/K/D)"
+      ]
+    },
+    {
+      "id": "age_group_department",
+      "name": "Yaş grubu × Bölüm",
+      "columns": [
+        "DogumTarihi",
+        "GenelRandevuBolumAdi",
+        "Id"
+      ],
+      "dimensions": [
+        "DogumTarihi",
+        "GenelRandevuBolumAdi"
+      ],
+      "metrics": [
+        "appointment_count",
+        "unique_patient_count"
+      ],
+      "supported_analyses": [
+        "cross_analysis",
+        "distribution"
+      ],
+      "example_questions": [
+        "Yaş gruplarına göre bölüm dağılımı nedir?"
+      ],
+      "warnings": [
+        "Yaş DogumTarihi'nden türetilir (DATEDIFF); hazır yaş kolonu yoktur"
+      ]
+    },
+    {
+      "id": "patient_time_behavior",
+      "name": "Hasta × Zaman",
+      "columns": [
+        "HastaId",
+        "BaslangicTarihi",
+        "Id"
+      ],
+      "dimensions": [
+        "HastaId"
+      ],
+      "metrics": [
+        "appointments_per_patient",
+        "repeat_patient_count",
+        "unique_patient_count"
+      ],
+      "supported_analyses": [
+        "repeat_behavior",
+        "trend"
+      ],
+      "example_questions": [
+        "Birden fazla randevu alan kaç hasta var?"
+      ],
+      "warnings": [
+        "Hasta kimlik/isim bilgisi asla listelenmez; yalnız sayım yapılır"
+      ]
+    },
+    {
+      "id": "created_vs_start_leadtime",
+      "name": "CreatedDate × BaslangicTarihi (lead time)",
+      "columns": [
+        "CreatedDate",
+        "BaslangicTarihi",
+        "Id"
+      ],
+      "dimensions": [
+        "SubeAdi",
+        "GenelRandevuBolumAdi"
+      ],
+      "metrics": [
+        "appointment_lead_time_average",
+        "same_day_booking_count",
+        "same_day_booking_rate"
+      ],
+      "supported_analyses": [
+        "lead_time_analysis",
+        "comparison",
+        "trend"
+      ],
+      "example_questions": [
+        "Randevular ortalama kaç gün önceden alınıyor?"
+      ],
+      "warnings": [
+        "Negatif lead time veri kalitesi sorununa işaret eder"
+      ]
+    },
+    {
+      "id": "start_vs_end_duration",
+      "name": "BaslangicTarihi × BitisTarihi (fiili süre)",
+      "columns": [
+        "BaslangicTarihi",
+        "BitisTarihi",
+        "RandevuSuresi",
+        "Id"
+      ],
+      "dimensions": [
+        "GenelRandevuBolumAdi",
+        "RandevuTipiAdi"
+      ],
+      "metrics": [
+        "actual_duration_from_dates",
+        "duration_difference",
+        "invalid_date_range_count"
+      ],
+      "supported_analyses": [
+        "duration_analysis",
+        "data_quality"
+      ],
+      "example_questions": [
+        "Fiili süre planlanan süreden ne kadar sapıyor?"
+      ],
+      "warnings": [
+        "BitisTarihi < BaslangicTarihi kayıtlar analiz dışı bırakılmalı"
+      ]
+    },
+    {
+      "id": "start_vs_protocol_delay",
+      "name": "BaslangicTarihi × ProtokolAcilisTarihi",
+      "columns": [
+        "BaslangicTarihi",
+        "ProtokolAcilisTarihi",
+        "Id"
+      ],
+      "dimensions": [
+        "SubeAdi",
+        "GenelRandevuBolumAdi"
+      ],
+      "metrics": [
+        "protocol_opening_delay_average",
+        "protocol_conversion_rate",
+        "protocol_created_count"
+      ],
+      "supported_analyses": [
+        "lead_time_analysis",
+        "conversion",
+        "comparison"
+      ],
+      "example_questions": [
+        "Randevuların yüzde kaçı protokole dönüşüyor?"
+      ],
+      "warnings": [
+        "NULL protokol tarihi 'açılmadı' olarak yorumlanır (yapısal çıkarım)"
+      ]
+    },
+    {
+      "id": "status_vs_protocol_state",
+      "name": "RandevuDurumu × ProtokolIslemState",
+      "columns": [
+        "RandevuDurumu",
+        "ProtokolIslemState",
+        "Id"
+      ],
+      "dimensions": [
+        "RandevuDurumu",
+        "ProtokolIslemState"
+      ],
+      "metrics": [
+        "appointment_count"
+      ],
+      "supported_analyses": [
+        "cross_analysis",
+        "data_quality"
+      ],
+      "example_questions": [
+        "Randevu durumu ile protokol durumu birlikte nasıl dağılıyor?"
+      ],
+      "warnings": [
+        "ProtokolIslemState kod eşlemesi doğrulanmamıştır; yalnız dağılım incelenebilir, anlam çıkarımı yapılmaz"
+      ]
+    },
+    {
+      "id": "type_appointment_status",
+      "name": "Randevu tipi × Randevu durumu",
+      "columns": [
+        "RandevuTipiAdi",
+        "RandevuDurumu",
+        "Id"
+      ],
+      "dimensions": [
+        "RandevuTipiAdi"
+      ],
+      "metrics": [
+        "appointment_count",
+        "completed_appointment_rate",
+        "no_show_rate"
+      ],
+      "supported_analyses": [
+        "cross_analysis",
+        "comparison",
+        "distribution"
+      ],
+      "example_questions": [
+        "Ameliyat randevularının gerçekleşme oranı poliklinikten farklı mı?"
+      ],
+      "warnings": []
+    },
+    {
+      "id": "source_branch",
+      "name": "Kaynak × Şube",
+      "columns": [
+        "GenelRandevuKaynakAdi",
+        "SubeAdi",
+        "Id"
+      ],
+      "dimensions": [
+        "GenelRandevuKaynakAdi",
+        "SubeAdi"
+      ],
+      "metrics": [
+        "appointment_count"
+      ],
+      "supported_analyses": [
+        "cross_analysis",
+        "ranking"
+      ],
+      "example_questions": [
+        "Şubelere göre en yoğun kaynaklar hangileri?"
+      ],
+      "warnings": []
+    },
+    {
+      "id": "source_department",
+      "name": "Kaynak × Bölüm",
+      "columns": [
+        "GenelRandevuKaynakAdi",
+        "GenelRandevuBolumAdi",
+        "Id"
+      ],
+      "dimensions": [
+        "GenelRandevuKaynakAdi",
+        "GenelRandevuBolumAdi"
+      ],
+      "metrics": [
+        "appointment_count"
+      ],
+      "supported_analyses": [
+        "cross_analysis",
+        "ranking"
+      ],
+      "example_questions": [
+        "Bölümlere göre en çok randevu alan kaynaklar kimler?"
+      ],
+      "warnings": [
+        "Kaynak her zaman doktor değildir"
+      ]
+    },
+    {
+      "id": "creator_volume",
+      "name": "Randevuyu veren × Hacim",
+      "columns": [
+        "RandevuyuVeren",
+        "Id",
+        "CreatedDate"
+      ],
+      "dimensions": [
+        "RandevuyuVeren"
+      ],
+      "metrics": [
+        "appointment_count"
+      ],
+      "supported_analyses": [
+        "ranking",
+        "trend"
+      ],
+      "example_questions": [
+        "En çok randevu oluşturan kişiler kimler?"
+      ],
+      "warnings": [
+        "RandevuyuVeren doktor değildir; kayıt açan kişi/sistemdir"
+      ]
+    }
+  ]
+}

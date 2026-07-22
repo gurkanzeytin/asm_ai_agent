@@ -4,6 +4,9 @@ import time
 from app.agent.nodes.node_interface import IAgentNode
 from app.agent.state import AgentState
 from app.analytics.analytics_engine import AnalyticsEngine
+from app.analytics.result_contracts import TypedResultNormalizer
+from app.analytics.result_reasoning import ResultReasoner
+from app.analytics.result_validation import ResultValidator
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +39,27 @@ class AnalyzeResultsNode(IAgentNode):
                 }
             )
 
+        # An invalid result shape (missing/renamed expected columns — never a
+        # legitimate all-zero result) must never reach analytics/insight
+        # routing/report generation as if it were a normal success: skip
+        # analytics entirely and record why, so downstream nodes can produce a
+        # safe clarification instead of fabricating insight over a
+        # structurally wrong result.
+        if state.result_shape_verdict is not None and not state.result_shape_verdict.valid:
+            logger.warning(
+                "AnalyzeResultsNode skipped: invalid result shape (%s).",
+                state.result_shape_verdict.reason,
+            )
+            duration = (time.perf_counter() - start_time) * 1000
+            return state.model_copy(
+                update={
+                    "analytics_blocked_reason": state.result_shape_verdict.reason,
+                    "current_node": "analyze_results",
+                    "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "analyze_results": duration},
+                }
+            )
+
         try:
             # Analyze against the NLU-normalized question when available so
             # analytical wording matches the same canonical vocabulary as SQL.
@@ -43,7 +67,57 @@ class AnalyzeResultsNode(IAgentNode):
             if state.database_context and state.database_context.normalized_query:
                 question = state.database_context.normalized_query
 
-            analytics_result = self.analytics_engine.analyze(question, state.query_result)
+            normalizer = TypedResultNormalizer()
+            normalized = normalizer.normalize(
+                state.query_result,
+                plan=state.query_plan,
+                schema_name=state.generated_sql.result_schema if state.generated_sql else None,
+                expected_aliases=state.generated_sql.expected_aliases if state.generated_sql else None,
+            )
+            query_result = normalizer.as_query_result(state.query_result, normalized)
+
+            metric_aliases = state.generated_sql.metric_aliases if state.generated_sql else None
+            analytics_result = self.analytics_engine.analyze(
+                question, query_result, plan=state.query_plan, metric_aliases=metric_aliases
+            )
+
+            # AI-INTELLIGENCE-008: deterministic result reasoning (baseline delta,
+            # low-sample flags, top findings) rides on the analytics insights dict
+            # so the narrative layers downstream can surface it.
+            reasoning_outcome = ResultReasoner().reason(
+                query_result,
+                plan=state.query_plan,
+                result_schema=normalized.schema_name,
+                warnings=normalized.warnings,
+            )
+            if reasoning_outcome.findings or reasoning_outcome.assumptions or normalized.warnings:
+                analytics_result = analytics_result.model_copy(
+                    update={
+                        "insights": {
+                            **analytics_result.insights,
+                            "typed_result_schema": normalized.schema_name,
+                            "typed_result_warnings": normalized.warnings,
+                            "reasoning_findings": reasoning_outcome.findings,
+                            "reasoning_assumptions": reasoning_outcome.assumptions,
+                            "low_sample_groups": reasoning_outcome.low_sample_groups,
+                            "baseline_delta": reasoning_outcome.baseline_delta,
+                        }
+                    }
+                )
+
+            # Internal result validation (Agent Intelligence Foundation): rule-based
+            # sanity findings are logged for observability; they never block the flow.
+            validation = ResultValidator().validate(
+                query_result,
+                plan=state.query_plan,
+                sql=state.generated_sql.sql if state.generated_sql else "",
+            )
+            if validation.findings:
+                logger.warning(
+                    "Result validation findings: %s",
+                    [f"{finding.check}: {finding.detail}" for finding in validation.findings],
+                    extra={"result_validation": validation.model_dump()},
+                )
 
             logger.info("AnalyzeResultsNode execution completed successfully.")
             duration = (time.perf_counter() - start_time) * 1000

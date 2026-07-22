@@ -1,0 +1,868 @@
+{
+  "view": "dbo.vw_RandevuRaporu",
+  "columns": [
+    {
+      "column": "Id",
+      "business_name": "Randevu kimliği",
+      "description": "Randevu kaydının benzersiz kimliği; satır sayımının temel kaynağı.",
+      "data_role": "identifier",
+      "semantic_type": "integer",
+      "synonyms": [
+        "randevu no",
+        "randevu kimligi",
+        "kayit no"
+      ],
+      "supported_operations": [
+        "count",
+        "filter"
+      ],
+      "related_columns": [
+        "HastaId",
+        "BaslangicTarihi"
+      ],
+      "common_mistakes": [
+        "Randevu sayısı COUNT(*) ile alınır; Id toplanmaz veya ortalaması alınmaz."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": false,
+      "aggregatable": "count_only",
+      "listable_default": false
+    },
+    {
+      "column": "BaslangicTarihi",
+      "business_name": "Randevu başlangıç tarihi",
+      "description": "Randevunun planlanan başlangıç tarih ve saati; varsayılan zaman ekseni.",
+      "data_role": "time_dimension",
+      "semantic_type": "datetime",
+      "synonyms": [
+        "randevu tarihi",
+        "randevu gunu",
+        "baslangic tarihi",
+        "randevu saati",
+        "randevu zamani"
+      ],
+      "supported_operations": [
+        "filter",
+        "group_by_day",
+        "group_by_week",
+        "group_by_month",
+        "group_by_hour",
+        "trend",
+        "comparison"
+      ],
+      "related_columns": [
+        "BitisTarihi",
+        "RandevuSuresi",
+        "CreatedDate",
+        "ProtokolAcilisTarihi"
+      ],
+      "common_mistakes": [
+        "CreatedDate ile karıştırılmamalıdır; CreatedDate kaydın oluşturulma zamanıdır."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "min_max_only",
+      "listable_default": true
+    },
+    {
+      "column": "BitisTarihi",
+      "business_name": "Randevu bitiş tarihi",
+      "description": "Randevunun planlanan bitiş tarih ve saati; fiili süre türetiminde kullanılır.",
+      "data_role": "derived_measure_source",
+      "semantic_type": "datetime",
+      "synonyms": [
+        "bitis tarihi",
+        "bitis saati",
+        "randevu bitisi"
+      ],
+      "supported_operations": [
+        "filter",
+        "derive_duration"
+      ],
+      "related_columns": [
+        "BaslangicTarihi",
+        "RandevuSuresi"
+      ],
+      "common_mistakes": [
+        "Tek başına zaman ekseni olarak kullanılmaz; trend BaslangicTarihi üzerinden yapılır."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": false,
+      "aggregatable": "min_max_only",
+      "listable_default": false
+    },
+    {
+      "column": "RandevuSuresi",
+      "business_name": "Randevu süresi (dakika)",
+      "description": "Planlanan randevu süresi; ortalama/min/max süre analizlerinin ölçüsü.",
+      "data_role": "measure",
+      "semantic_type": "integer_minutes",
+      "synonyms": [
+        "randevu suresi",
+        "sure",
+        "kac dakika",
+        "ne kadar suruyor"
+      ],
+      "supported_operations": [
+        "avg",
+        "min",
+        "max",
+        "sum",
+        "filter"
+      ],
+      "related_columns": [
+        "BaslangicTarihi",
+        "BitisTarihi"
+      ],
+      "common_mistakes": [
+        "BitisTarihi-BaslangicTarihi farkı ile aynı olmayabilir; fark ayrı bir kalite metriğidir."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": false,
+      "aggregatable": "numeric",
+      "listable_default": true
+    },
+    {
+      "column": "RandevuDurumu",
+      "business_name": "Randevu durumu",
+      "description": "Okunabilir randevu durumu. Doğrulanmış değerler: Beklemede, Gelmedi, Gerçekleşti, Giriş Yapılmış, İşlem Sürmekte. 'İptal' değeri veride bulunmaz.",
+      "data_role": "status_dimension",
+      "semantic_type": "categorical",
+      "synonyms": [
+        "randevu durumu",
+        "durum dagilimi",
+        "duruma gore",
+        "durum bazinda",
+        "durumlara gore"
+      ],
+      "supported_operations": [
+        "filter",
+        "group_by",
+        "distribution",
+        "conditional_aggregation"
+      ],
+      "related_columns": [
+        "ProtokolIslemState"
+      ],
+      "common_mistakes": [
+        "ProtokolIslemState sayısal koddur ve değer eşlemesi doğrulanmamıştır; ikisi aynı alan değildir."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "none",
+      "listable_default": true
+    },
+    {
+      "column": "HastaId",
+      "business_name": "Hasta kimliği",
+      "description": "Hastanın iç sistem kimliği; tekil hasta sayımının kaynağı.",
+      "data_role": "person_identifier",
+      "semantic_type": "integer",
+      "synonyms": [
+        "hasta no",
+        "hasta kimligi",
+        "tekil hasta",
+        "farkli hasta"
+      ],
+      "supported_operations": [
+        "distinct_count",
+        "filter",
+        "group_by"
+      ],
+      "related_columns": [
+        "HastaId2",
+        "HastaAdi",
+        "HastaSoyadi"
+      ],
+      "common_mistakes": [
+        "HastaId2 ile ilişkisi doğrulanmamıştır; aynı alanmış gibi kesin hüküm verilmez."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "count_only",
+      "listable_default": false
+    },
+    {
+      "column": "RandevuTipiAdi",
+      "business_name": "Randevu tipi",
+      "description": "Okunabilir randevu tipi. Doğrulanmış değerler: Poliklinik, Ameliyat, Radyoloji, Kemoterapi (başka değerler olabilir).",
+      "data_role": "dimension",
+      "semantic_type": "categorical",
+      "synonyms": [
+        "randevu tipi",
+        "randevu turu",
+        "tip",
+        "tur"
+      ],
+      "supported_operations": [
+        "filter",
+        "group_by",
+        "distribution"
+      ],
+      "related_columns": [
+        "RandevuDurumu",
+        "GenelRandevuBolumAdi"
+      ],
+      "common_mistakes": [],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "none",
+      "listable_default": true
+    },
+    {
+      "column": "RandevuyuVeren",
+      "business_name": "Randevuyu veren",
+      "description": "Randevuyu oluşturan/atayan kişi veya sistem. DOKTOR DEĞİLDİR.",
+      "data_role": "dimension",
+      "semantic_type": "categorical",
+      "synonyms": [
+        "randevuyu veren",
+        "randevu veren",
+        "olusturan kisi",
+        "kaydeden",
+        "olusturan kullanici",
+        "randevu olusturan kullanici",
+        "olusturan kisiler"
+      ],
+      "supported_operations": [
+        "filter",
+        "group_by",
+        "ranking"
+      ],
+      "related_columns": [
+        "GenelRandevuKaynakAdi",
+        "CreatedDate"
+      ],
+      "common_mistakes": [
+        "GenelRandevuKaynakAdi (randevu kaynağı) ile karıştırılmamalıdır; doktor analizi kaynak üzerinden yapılır."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "none",
+      "listable_default": true
+    },
+    {
+      "column": "HastaAdi",
+      "business_name": "Hasta adı",
+      "description": "Hastanın adı; kişisel veridir, varsayılan olarak seçilmez.",
+      "data_role": "person_identifier",
+      "semantic_type": "text",
+      "synonyms": [
+        "hasta adi"
+      ],
+      "supported_operations": [
+        "filter"
+      ],
+      "related_columns": [
+        "HastaSoyadi",
+        "HastaId"
+      ],
+      "common_mistakes": [
+        "Doktor/kaynak alanı değildir; doktor analizi GenelRandevuKaynakAdi üzerinden yapılır."
+      ],
+      "pii": true,
+      "selectable": false,
+      "filterable": true,
+      "groupable": false,
+      "aggregatable": "none",
+      "listable_default": false
+    },
+    {
+      "column": "HastaSoyadi",
+      "business_name": "Hasta soyadı",
+      "description": "Hastanın soyadı; kişisel veridir, varsayılan olarak seçilmez.",
+      "data_role": "person_identifier",
+      "semantic_type": "text",
+      "synonyms": [
+        "hasta soyadi"
+      ],
+      "supported_operations": [
+        "filter"
+      ],
+      "related_columns": [
+        "HastaAdi",
+        "HastaId"
+      ],
+      "common_mistakes": [],
+      "pii": true,
+      "selectable": false,
+      "filterable": true,
+      "groupable": false,
+      "aggregatable": "none",
+      "listable_default": false
+    },
+    {
+      "column": "DogumTarihi",
+      "business_name": "Doğum tarihi",
+      "description": "Hastanın doğum tarihi; yaş ve yaş grubu türetiminin kaynağı.",
+      "data_role": "demographic_dimension",
+      "semantic_type": "date",
+      "synonyms": [
+        "dogum tarihi",
+        "yas",
+        "yas grubu",
+        "yas dagilimi"
+      ],
+      "supported_operations": [
+        "filter",
+        "derive_age",
+        "derive_age_group"
+      ],
+      "related_columns": [
+        "CinsiyetId",
+        "Uyruk"
+      ],
+      "common_mistakes": [
+        "Yaş doğrudan kolon değildir; DATEDIFF(year, DogumTarihi, GETDATE()) ile türetilir."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "min_max_only",
+      "listable_default": false
+    },
+    {
+      "column": "CinsiyetId",
+      "business_name": "Cinsiyet kodu",
+      "description": "Hastanın cinsiyet kodu. Doğrulanmış değerler: E (erkek), K (kadın), D (diğer/bilinmiyor).",
+      "data_role": "demographic_dimension",
+      "semantic_type": "categorical_code",
+      "synonyms": [
+        "cinsiyet",
+        "kadin erkek",
+        "cinsiyete gore"
+      ],
+      "supported_operations": [
+        "filter",
+        "group_by",
+        "distribution"
+      ],
+      "related_columns": [
+        "DogumTarihi",
+        "Uyruk"
+      ],
+      "common_mistakes": [
+        "Değerler kod olarak saklanır (E/K/D); okunabilir etiket kolonu yoktur."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "none",
+      "listable_default": true
+    },
+    {
+      "column": "HastaId2",
+      "business_name": "İkincil hasta kimliği",
+      "description": "İkincil hasta tanımlayıcısı; HastaId ile ilişkisi DOĞRULANMAMIŞTIR.",
+      "data_role": "identifier",
+      "semantic_type": "integer",
+      "synonyms": [
+        "ikincil hasta kimligi",
+        "hasta id 2"
+      ],
+      "supported_operations": [
+        "null_check",
+        "mismatch_check"
+      ],
+      "related_columns": [
+        "HastaId"
+      ],
+      "common_mistakes": [
+        "HastaId ile aynı alanmış gibi kesin hüküm verilmez; fark analizi veri kalitesi adayıdır."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": false,
+      "aggregatable": "count_only",
+      "listable_default": false
+    },
+    {
+      "column": "Uyruk",
+      "business_name": "Uyruk",
+      "description": "Hastanın uyruğu / ülke adı.",
+      "data_role": "demographic_dimension",
+      "semantic_type": "categorical",
+      "synonyms": [
+        "uyruk",
+        "ulke",
+        "yabanci hasta",
+        "uyruguna gore"
+      ],
+      "supported_operations": [
+        "filter",
+        "group_by",
+        "distribution"
+      ],
+      "related_columns": [
+        "CinsiyetId"
+      ],
+      "common_mistakes": [],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "none",
+      "listable_default": true
+    },
+    {
+      "column": "BolumId",
+      "business_name": "Bölüm kimliği",
+      "description": "Bölümün sayısal kimliği. GenelRandevuBolumAdi ile birebir ilişkisi bu repoda DOĞRULANMAMIŞTIR.",
+      "data_role": "identifier",
+      "semantic_type": "integer",
+      "synonyms": [
+        "bolum id",
+        "bolum kimligi",
+        "bolum no"
+      ],
+      "supported_operations": [
+        "filter",
+        "group_by",
+        "count"
+      ],
+      "related_columns": [
+        "GenelRandevuBolumAdi",
+        "DoktorId"
+      ],
+      "common_mistakes": [
+        "Bölüm analizi raporlamada GenelRandevuBolumAdi ile yapılır; BolumId=GenelRandevuBolumAdi eşleşmesi varsayılmaz."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "count_only",
+      "listable_default": false
+    },
+    {
+      "column": "DoktorId",
+      "business_name": "Doktor kimliği",
+      "description": "Doktorun sayısal kimliği. Doktor ADI kolonu view'da YOKTUR; ad gerektiren analizler GenelRandevuKaynakAdi (kaynak, çoğunlukla doktor adı) üzerinden yapılır.",
+      "data_role": "identifier",
+      "semantic_type": "integer",
+      "synonyms": [
+        "doktor id",
+        "doktor bazinda",
+        "doktor kirilim"
+      ],
+      "supported_operations": [
+        "filter",
+        "group_by",
+        "count",
+        "distinct_count"
+      ],
+      "related_columns": [
+        "GenelRandevuKaynakAdi",
+        "GenelRandevuBolumAdi"
+      ],
+      "common_mistakes": [
+        "DoktorAdi diye bir kolon uydurulmaz.",
+        "RandevuyuVeren doktor değildir."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "count_only",
+      "listable_default": false
+    },
+    {
+      "column": "HizmetAdi",
+      "business_name": "Hizmet adı",
+      "description": "Verilen hizmetin adı.",
+      "data_role": "dimension",
+      "semantic_type": "categorical",
+      "synonyms": [
+        "hizmet",
+        "hizmet adi",
+        "hizmete gore",
+        "islem adi"
+      ],
+      "supported_operations": [
+        "filter",
+        "group_by",
+        "distribution",
+        "ranking"
+      ],
+      "related_columns": [
+        "GenelRandevuBolumAdi",
+        "SubeAdi"
+      ],
+      "common_mistakes": [],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "none",
+      "listable_default": true
+    },
+    {
+      "column": "ProtokolIslemState",
+      "business_name": "Protokol işlem durumu",
+      "description": "Muayene/protokol işlem durumu (sayısal kod). Kod değerlerinin anlamı DOĞRULANMAMIŞTIR.",
+      "data_role": "status_dimension",
+      "semantic_type": "integer_code",
+      "synonyms": [
+        "protokol durumu",
+        "muayene durumu"
+      ],
+      "supported_operations": [
+        "group_by",
+        "distribution",
+        "null_check"
+      ],
+      "related_columns": [
+        "RandevuDurumu",
+        "ProtokolAcilisTarihi"
+      ],
+      "common_mistakes": [
+        "Kod-anlam eşlemesi doğrulanmadan gerçekleşme/iptal çıkarımı yapılmaz."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "none",
+      "listable_default": false
+    },
+    {
+      "column": "KategoriAdi",
+      "business_name": "Kategori adı",
+      "description": "Randevu kategorisi adı; bölüm (GenelRandevuBolumAdi) DEĞİLDİR.",
+      "data_role": "dimension",
+      "semantic_type": "categorical",
+      "synonyms": [
+        "kategori",
+        "kategoriye gore"
+      ],
+      "supported_operations": [
+        "filter",
+        "group_by",
+        "distribution"
+      ],
+      "related_columns": [
+        "GenelRandevuBolumAdi",
+        "RandevuTipiAdi"
+      ],
+      "common_mistakes": [
+        "Bölüm soruları KategoriAdi ile değil GenelRandevuBolumAdi ile cevaplanır."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "none",
+      "listable_default": true
+    },
+    {
+      "column": "GenelRandevuKaynakAdi",
+      "business_name": "Randevu kaynağı",
+      "description": "Randevu kaynağı; çoğunlukla doktor adıdır ancak cihaz/oda/birim de olabilir. Kullanıcı 'doktor' dediğinde bu kolon kullanılır.",
+      "data_role": "dimension",
+      "semantic_type": "categorical",
+      "synonyms": [
+        "doktor",
+        "hekim",
+        "uzman",
+        "kaynak",
+        "kaynaga gore",
+        "doktor adi",
+        "randevu kaynagi"
+      ],
+      "supported_operations": [
+        "filter",
+        "group_by",
+        "ranking",
+        "distribution"
+      ],
+      "related_columns": [
+        "DoktorId",
+        "RandevuyuVeren",
+        "GenelRandevuBolumAdi"
+      ],
+      "common_mistakes": [
+        "RandevuyuVeren ile karıştırılmaz.",
+        "Değerlerin tamamının doktor olduğu varsayılmaz."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "none",
+      "listable_default": true
+    },
+    {
+      "column": "GenelRandevuBolumAdi",
+      "business_name": "Bölüm adı (raporlama)",
+      "description": "Raporlamada kullanılan pratik bölüm adı; bölüm/branş/klinik analizlerinin boyutu.",
+      "data_role": "organization_dimension",
+      "semantic_type": "categorical",
+      "synonyms": [
+        "bolum",
+        "brans",
+        "klinik",
+        "poliklinik",
+        "bolum bazinda",
+        "bolumlere gore"
+      ],
+      "supported_operations": [
+        "filter",
+        "group_by",
+        "ranking",
+        "distribution",
+        "comparison"
+      ],
+      "related_columns": [
+        "BolumId",
+        "SubeAdi",
+        "HizmetAdi"
+      ],
+      "common_mistakes": [
+        "SubeAdi (şube/lokasyon) ile karıştırılmaz.",
+        "KategoriAdi bölüm değildir."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "none",
+      "listable_default": true
+    },
+    {
+      "column": "ProtokolAcilisTarihi",
+      "business_name": "Protokol açılış tarihi",
+      "description": "Protokol açılış/kabul tarihi; protokole dönüşüm ve gecikme analizlerinin kaynağı. NULL olması protokol açılmadığına işaret eder (yapısal çıkarım).",
+      "data_role": "time_dimension",
+      "semantic_type": "datetime",
+      "synonyms": [
+        "protokol acilis",
+        "protokol tarihi",
+        "kabul tarihi",
+        "protokolu acilan"
+      ],
+      "supported_operations": [
+        "filter",
+        "null_check",
+        "derive_delay",
+        "group_by_day"
+      ],
+      "related_columns": [
+        "BaslangicTarihi",
+        "ProtokolIslemState"
+      ],
+      "common_mistakes": [
+        "Randevu tarihi (BaslangicTarihi) yerine kullanılmaz."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "min_max_only",
+      "listable_default": false
+    },
+    {
+      "column": "SubeAdi",
+      "business_name": "Şube adı",
+      "description": "Şube / hastane lokasyonu adı; şube bazlı analizlerin boyutu.",
+      "data_role": "organization_dimension",
+      "semantic_type": "categorical",
+      "synonyms": [
+        "sube",
+        "hastane",
+        "lokasyon",
+        "sube bazinda",
+        "subelere gore"
+      ],
+      "supported_operations": [
+        "filter",
+        "group_by",
+        "ranking",
+        "distribution",
+        "comparison"
+      ],
+      "related_columns": [
+        "GenelRandevuBolumAdi"
+      ],
+      "common_mistakes": [
+        "Bölüm (GenelRandevuBolumAdi) ile karıştırılmaz."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "none",
+      "listable_default": true
+    },
+    {
+      "column": "CreatedDate",
+      "business_name": "Kayıt oluşturma tarihi",
+      "description": "Randevu kaydının oluşturulma zamanı; 'bugün oluşturulan' soruları ve lead-time türetiminin kaynağı.",
+      "data_role": "time_dimension",
+      "semantic_type": "datetime",
+      "synonyms": [
+        "olusturulma tarihi",
+        "kayit tarihi",
+        "olusturulan",
+        "kaydedilen"
+      ],
+      "supported_operations": [
+        "filter",
+        "group_by_day",
+        "trend",
+        "derive_lead_time"
+      ],
+      "related_columns": [
+        "BaslangicTarihi",
+        "RandevuyuVeren"
+      ],
+      "common_mistakes": [
+        "BaslangicTarihi (randevu tarihi) ile karıştırılmaz; 'bugünkü randevular' BaslangicTarihi kullanır."
+      ],
+      "pii": false,
+      "selectable": true,
+      "filterable": true,
+      "groupable": true,
+      "aggregatable": "min_max_only",
+      "listable_default": false
+    }
+  ],
+  "unanswerable_concepts": [
+    {
+      "terms": [
+        "iptal"
+      ],
+      "reason": "Bu veri görünümünde 'İptal' durumunda kayıt bulunmuyor; iptal analizi yapılamıyor.",
+      "alternative": "Şubelere göre 'Gelmedi' (gelmeme) oranını veya gerçekleşme oranındaki değişimi karşılaştırabilirim."
+    },
+    {
+      "terms": [
+        "doktor adi",
+        "doktorun adi",
+        "doktor ismi",
+        "doktor isimleri",
+        "hekim adi",
+        "hekim ismi",
+        "hangi doktorlar var",
+        "doktor adlari",
+        "hekim adlari",
+        "doktor isim"
+      ],
+      "reason": "Doktor adı bilgisi view içinde bulunmuyor; yalnız DoktorId alanı mevcut.",
+      "alternative": "DoktorId bazında analiz yapılabilir."
+    },
+    {
+      "terms": [
+        "tani",
+        "teshis"
+      ],
+      "reason": "Tanı/teşhis bilgisi dbo.vw_RandevuRaporu içinde bulunmuyor.",
+      "alternative": "Randevu tipi (RandevuTipiAdi) veya hizmet (HizmetAdi) bazında analiz yapılabilir."
+    },
+    {
+      "terms": [
+        "uzmanlik",
+        "uzmanlik alani",
+        "brans uzmanligi"
+      ],
+      "reason": "Doktor uzmanlık bilgisi view içinde bulunmuyor; yalnız DoktorId ve kaynak adı mevcut.",
+      "alternative": "Bölüm (GenelRandevuBolumAdi) bazında analiz yapılabilir."
+    },
+    {
+      "terms": [
+        "odeme",
+        "ucret",
+        "tutar",
+        "fatura",
+        "gelir",
+        "ciro",
+        "fiyat"
+      ],
+      "reason": "Ödeme/tutar bilgisi view içinde bulunmuyor.",
+      "alternative": "Randevu hacmi ve gerçekleşme oranı analiz edilebilir."
+    },
+    {
+      "terms": [
+        "recete",
+        "ilac"
+      ],
+      "reason": "Reçete/ilaç bilgisi view içinde bulunmuyor.",
+      "alternative": "Hizmet (HizmetAdi) bazında analiz yapılabilir."
+    },
+    {
+      "terms": [
+        "adres",
+        "ikamet",
+        "sehirde oturan",
+        "oturan hasta",
+        "da oturan",
+        "ikamet eden"
+      ],
+      "reason": "Hasta adres bilgisi view içinde bulunmuyor.",
+      "alternative": "Uyruk (Uyruk) bazında demografik analiz yapılabilir."
+    },
+    {
+      "terms": [
+        "sigorta",
+        "anlasmali kurum"
+      ],
+      "reason": "Sigorta/kurum bilgisi view içinde bulunmuyor.",
+      "alternative": "Kategori (KategoriAdi) bazında analiz yapılabilir."
+    },
+    {
+      "terms": [
+        "telefon numarasi",
+        "telefon bilgisi",
+        "telefonu olmayan",
+        "telefon doluluk",
+        "telefon eksigi",
+        "telefon eksik",
+        "gsm",
+        "cep telefonu",
+        "iletisim bilgisi",
+        "iletisim numarasi",
+        "iletisim bilgileri"
+      ],
+      "reason": "Telefon/iletişim bilgisi bu veri görünümünde bulunmuyor.",
+      "alternative": "Hasta sayısı, yaş, cinsiyet, uyruk ve randevu davranışları üzerinden analiz yapılabilir."
+    },
+    {
+      "terms": [
+        "tc kimlik",
+        "t c kimlik",
+        "kimlik numarasi",
+        "kimlik bilgisi",
+        "kimligi olmayan",
+        "kimlik eksik",
+        "kimlik dolulugu"
+      ],
+      "reason": "Kimlik numarası bilgisi bu veri görünümünde bulunmuyor.",
+      "alternative": "HastaId üzerinden tekil hasta analizleri yapılabilir."
+    },
+    {
+      "terms": [
+        "pasaport"
+      ],
+      "reason": "Pasaport bilgisi bu veri görünümünde bulunmuyor.",
+      "alternative": "Uyruk (Uyruk) bazında yabancı hasta analizi yapılabilir."
+    }
+  ]
+}

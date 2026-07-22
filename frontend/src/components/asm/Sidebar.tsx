@@ -1,15 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import {
-  Plus,
-  Search,
-  Star,
-  MessageSquare,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  Trash2,
-} from "lucide-react";
+import { Plus, Search, Star, MessageSquare, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Conversation } from "./types";
 import { Input } from "@/components/ui/input";
@@ -23,7 +14,6 @@ interface Props {
   onNew: () => void;
   onToggleFavorite: (id: string) => void;
   onDelete: (id: string) => void;
-  onOpenSettings: () => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
 }
@@ -35,7 +25,6 @@ export function Sidebar({
   onNew,
   onToggleFavorite,
   onDelete,
-  onOpenSettings,
   collapsed,
   onToggleCollapse,
 }: Props) {
@@ -52,9 +41,9 @@ export function Sidebar({
       className="relative z-20 flex h-full flex-col border-r border-border bg-sidebar"
     >
       {/* Header */}
-      <div className="flex items-center gap-3 p-4">
+      <div className="flex h-16 shrink-0 items-center gap-3 border-b border-border px-4">
         <div className="shrink-0">
-          <MedAgentLogo size={36} noIntro className="[&_svg]:!block" />
+          <MedAgentLogo size={40} noIntro />
         </div>
         <AnimatePresence>
           {!collapsed && (
@@ -64,8 +53,10 @@ export function Sidebar({
               exit={{ opacity: 0, x: -8 }}
               className="min-w-0 flex-1"
             >
-              <div className="truncate text-sm font-semibold">ASM AI Agent</div>
-              <div className="truncate text-[11px] text-muted-foreground">
+              <div className="truncate text-[15px] font-semibold leading-5 text-foreground">
+                Med Agent
+              </div>
+              <div className="truncate text-xs leading-4 text-muted-foreground">
                 {tr.sidebar.appTagline}
               </div>
             </motion.div>
@@ -77,6 +68,8 @@ export function Sidebar({
       <div className="px-3">
         <button
           onClick={onNew}
+          aria-label={tr.sidebar.newChat}
+          title={collapsed ? tr.sidebar.newChat : undefined}
           className={cn(
             "flex w-full items-center gap-2 rounded-xl bg-primary/10 px-3 py-2.5 text-sm font-medium text-primary transition-all hover:bg-primary/20 hover:shadow-[var(--shadow-glow)]",
             collapsed && "justify-center px-0",
@@ -106,16 +99,18 @@ export function Sidebar({
       <div className="mt-3 flex-1 overflow-y-auto px-2 pb-2">
         {!collapsed && favorites.length > 0 && (
           <Section title={tr.sidebar.favorites}>
-            {favorites.map((c) => (
-              <ConvItem
-                key={c.id}
-                conv={c}
-                active={c.id === activeId}
-                onSelect={onSelect}
-                onFav={onToggleFavorite}
-                onDelete={onDelete}
-              />
-            ))}
+            <AnimatePresence initial={false}>
+              {favorites.map((c) => (
+                <ConvItem
+                  key={c.id}
+                  conv={c}
+                  active={c.id === activeId}
+                  onSelect={onSelect}
+                  onFav={onToggleFavorite}
+                  onDelete={onDelete}
+                />
+              ))}
+            </AnimatePresence>
           </Section>
         )}
         {!collapsed && (
@@ -125,16 +120,18 @@ export function Sidebar({
                 {tr.sidebar.noConversations}
               </div>
             )}
-            {recents.map((c) => (
-              <ConvItem
-                key={c.id}
-                conv={c}
-                active={c.id === activeId}
-                onSelect={onSelect}
-                onFav={onToggleFavorite}
-                onDelete={onDelete}
-              />
-            ))}
+            <AnimatePresence initial={false}>
+              {recents.map((c) => (
+                <ConvItem
+                  key={c.id}
+                  conv={c}
+                  active={c.id === activeId}
+                  onSelect={onSelect}
+                  onFav={onToggleFavorite}
+                  onDelete={onDelete}
+                />
+              ))}
+            </AnimatePresence>
           </Section>
         )}
         {collapsed &&
@@ -153,25 +150,12 @@ export function Sidebar({
           ))}
       </div>
 
-      {/* Footer */}
-      <div className="border-t border-border p-3">
-        <button
-          onClick={onOpenSettings}
-          className={cn(
-            "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-muted-foreground transition hover:bg-accent hover:text-foreground",
-            collapsed && "justify-center",
-          )}
-        >
-          <Settings className="h-4 w-4 shrink-0" />
-          {!collapsed && <span>{tr.common.settings}</span>}
-        </button>
-      </div>
-
       {/* Collapse toggle */}
       <button
         onClick={onToggleCollapse}
-        className="absolute -right-3 top-6 z-30 grid h-6 w-6 place-items-center rounded-full border border-border bg-card text-muted-foreground shadow-md transition hover:text-foreground"
+        className="absolute -right-3 top-5 z-30 grid h-6 w-6 place-items-center rounded-full border border-border bg-card text-muted-foreground shadow-md transition hover:text-foreground"
         aria-label={tr.sidebar.toggleSidebar}
+        aria-expanded={!collapsed}
       >
         {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
       </button>
@@ -204,26 +188,37 @@ function ConvItem({
   onDelete: (id: string) => void;
 }) {
   return (
-    <div
+    <motion.div
+      layout
+      initial={{ opacity: 0, x: -12, scale: 0.98 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={{ opacity: 0, x: -8, scale: 0.98 }}
+      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
       className={cn(
-        "group relative flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition cursor-pointer",
+        "group relative flex items-center rounded-lg text-sm transition",
         active
           ? "bg-primary/15 text-foreground"
           : "text-muted-foreground hover:bg-accent hover:text-foreground",
       )}
-      onClick={() => onSelect(conv.id)}
     >
       {active && (
         <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-primary" />
       )}
-      <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-      <span className="truncate flex-1">{conv.title}</span>
-      <div className="hidden shrink-0 items-center gap-1 group-hover:flex">
+      <button
+        type="button"
+        onClick={() => onSelect(conv.id)}
+        aria-current={active ? "page" : undefined}
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-l-lg px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+      >
+        <MessageSquare className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <span className="truncate flex-1">{conv.title}</span>
+      </button>
+      <div className="flex shrink-0 items-center gap-0.5 pr-1">
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onFav(conv.id);
-          }}
+          type="button"
+          onClick={() => onFav(conv.id)}
+          aria-label={tr.sidebar.favoriteConversation}
+          title={tr.sidebar.favoriteConversation}
           className="grid h-6 w-6 place-items-center rounded hover:bg-background/40"
         >
           <Star
@@ -234,15 +229,15 @@ function ConvItem({
           />
         </button>
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(conv.id);
-          }}
+          type="button"
+          onClick={() => onDelete(conv.id)}
+          aria-label={tr.sidebar.deleteConversation}
+          title={tr.sidebar.deleteConversation}
           className="grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-background/40 hover:text-destructive"
         >
           <Trash2 className="h-3 w-3" />
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }

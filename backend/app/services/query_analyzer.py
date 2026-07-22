@@ -43,6 +43,24 @@ _TURKISH_FOLD_TABLE = str.maketrans(
     }
 )
 
+# Spelled-out Turkish counts (folded: ü->u, ç->c...), used alongside digits so
+# "son üç ay" is detected exactly like "son 3 ay" — previously only \d+ was
+# recognized, so a spelled-number relative period was silently invisible to
+# date detection (detected_dates stayed empty for it).
+_NUMBER_WORDS: dict[str, int] = {
+    "bir": 1,
+    "iki": 2,
+    "uc": 3,
+    "dort": 4,
+    "bes": 5,
+    "alti": 6,
+    "yedi": 7,
+    "sekiz": 8,
+    "dokuz": 9,
+    "on": 10,
+}
+_NUMBER_TOKEN = r"(\d+|" + "|".join(_NUMBER_WORDS) + r")"
+
 _MONTHS = {
     "ocak": 1,
     "subat": 2,
@@ -116,9 +134,28 @@ class QueryAnalyzer:
         return analysis
 
     def detect_ambiguity(self, query: str) -> AmbiguityResult | None:
-        """Checks whether a query contains a ranking phrase without a deterministic metric."""
+        """Checks whether a query is ambiguous or unanswerable with the available columns.
+
+        Ambiguous ranking phrases ('en başarılı') and questions requiring data the
+        view does not contain (diagnoses, payments, ...) both divert to the existing
+        clarification flow instead of generating SQL over invented columns.
+        """
         rules = self._load_rules()
-        return self._match_ambiguity(self._normalize_query_text(query), rules)
+        ambiguity = self._match_ambiguity(self._normalize_query_text(query), rules)
+        if ambiguity is not None:
+            return ambiguity
+
+        from app.semantics import catalog
+
+        folded = self._fold(self._normalize_query_text(query))
+        answerable, reason, alternative = catalog.check_answerability(folded)
+        if not answerable:
+            return AmbiguityResult(
+                matched_phrase="unanswerable_concept",
+                question=f"{reason} {alternative}",
+                options=[alternative or "Farklı bir analiz", "Sorumu değiştireceğim"],
+            )
+        return None
 
     def _load_rules(self) -> dict[str, Any]:
         mtime = self.synonyms_path.stat().st_mtime
@@ -143,9 +180,7 @@ class QueryAnalyzer:
         normalized = lowered.translate(translator)
         return re.sub(r"\s+", " ", normalized).strip()
 
-    def _rewrite_stages(
-        self, query: str, rules: dict[str, Any]
-    ) -> tuple[str, str, list[str]]:
+    def _rewrite_stages(self, query: str, rules: dict[str, Any]) -> tuple[str, str, list[str]]:
         """Applies configured rewrite groups in order and returns staged outputs.
 
         Groups run in configuration order. The ``expansion`` group runs last and
@@ -181,9 +216,7 @@ class QueryAnalyzer:
             groups.append((str(name), list(group_rules)))
         return groups
 
-    def _apply_rewrite_rules(
-        self, query: str, rewrite_rules: list[dict]
-    ) -> tuple[str, list[str]]:
+    def _apply_rewrite_rules(self, query: str, rewrite_rules: list[dict]) -> tuple[str, list[str]]:
         rewritten = query
         matched: list[str] = []
         for rule in rewrite_rules:
@@ -281,6 +314,12 @@ class QueryAnalyzer:
     def _fold(self, text: str) -> str:
         return text.translate(_TURKISH_FOLD_TABLE)
 
+    def _parse_number(self, token: str) -> int:
+        """Parses a digit or spelled-out Turkish count ('uc' -> 3)."""
+        if token.isdigit():
+            return int(token)
+        return _NUMBER_WORDS.get(token, 0)
+
     def _detect_operations(self, normalized_query: str, rules: dict[str, Any]) -> list[str]:
         """Maps natural action/aggregation wording to canonical operations (LIST, COUNT...)."""
         folded = self._fold(normalized_query)
@@ -308,6 +347,12 @@ class QueryAnalyzer:
         match = re.search(r"\bson\s+(\d+)\b(?!\s*(?:gun|hafta|ay|yil)\w*)", folded)
         if match:
             return int(match.group(1)), "DESC"
+        # Ranking phrases carrying an explicit count: "en çok ... 10 doktoru",
+        # "en yoğun 5 bölümü". Date units are temporal wording, not row limits.
+        if re.search(r"\ben\s+(cok|fazla|az|yogun|dusuk|yuksek)\b", folded):
+            match = re.search(r"\b(\d{1,3})\b(?!\s*(?:gun|hafta|ay|yil|saat)\w*)", folded)
+            if match:
+                return int(match.group(1)), None
         return None, None
 
     def _match_ambiguity(
@@ -318,13 +363,36 @@ class QueryAnalyzer:
             pattern = self._fold(self._normalize_query_text(str(spec.get("pattern", ""))))
             if not pattern:
                 continue
-            if re.search(r"\b" + re.escape(pattern) + r"\b", folded):
+            # Suffix-tolerant: 'performans' must also match 'performansı en yüksek'.
+            if re.search(r"\b" + re.escape(pattern) + r"\w*", folded):
+                if spec.get("resolvable_by_metrics") and self._resolved_by_explicit_context(folded):
+                    # A generic analytical word ("performans") is only ambiguous in
+                    # isolation. When the question already states enough explicit,
+                    # catalog-resolvable metrics/dimensions to satisfy it (e.g.
+                    # "randevu sayısı, gelmeme oranı ve bölüm performansı"), it is
+                    # redundant, not undefined — never divert the whole request to
+                    # clarification just because this word also appears. Superlative
+                    # phrases like "en iyi"/"en başarılı" are NOT flagged this way:
+                    # the comparison criterion itself stays undefined regardless of
+                    # what else is explicit, so those always keep asking.
+                    continue
                 return AmbiguityResult(
                     matched_phrase=str(spec.get("pattern", "")),
                     question=str(spec.get("question", "")),
                     options=[str(option) for option in spec.get("options", [])],
                 )
         return None
+
+    def _resolved_by_explicit_context(self, folded_question: str) -> bool:
+        """True when the question already carries enough explicit, catalog-
+        resolvable signal (metrics/dimensions) that a generic analytical word
+        elsewhere in the same question is redundant, not undefined.
+        """
+        from app.semantics import catalog
+
+        metrics = catalog.match_metrics(folded_question)
+        dimensions = catalog.match_dimensions(folded_question)
+        return len(metrics) >= 2 or (len(metrics) >= 1 and bool(dimensions))
 
     def _resolve_dates(self, text: str, detected_dates: list[DateRange]) -> str:
         """Replaces relative temporal wording with explicit ISO date ranges.
@@ -390,6 +458,27 @@ class QueryAnalyzer:
         query_ascii = self._strip_diacritics(query)
         ranges: list[DateRange] = []
 
+        months_ascii = {self._strip_diacritics(name): number for name, number in _MONTHS.items()}
+        month_alternatives = "|".join(sorted(months_ascii, key=len, reverse=True))
+        explicit_date_pattern = re.compile(
+            rf"\b(\d{{1,2}})\s+({month_alternatives})\s+(19\d{{2}}|20\d{{2}})\b"
+        )
+        explicit_dates = list(explicit_date_pattern.finditer(query_ascii))
+        explicit_date_spans = [match.span() for match in explicit_dates]
+        if len(explicit_dates) >= 2:
+            for index in range(0, len(explicit_dates) - 1, 2):
+                first, second = explicit_dates[index], explicit_dates[index + 1]
+                first_date = date(
+                    int(first.group(3)), months_ascii[first.group(2)], int(first.group(1))
+                )
+                second_date = date(
+                    int(second.group(3)), months_ascii[second.group(2)], int(second.group(1))
+                )
+                if second_date < first_date:
+                    first_date, second_date = second_date, first_date
+                expression = query_ascii[first.start() : second.end()]
+                ranges.append(self._date_range(expression, first_date, second_date, "custom"))
+
         # Suffixed forms ("bugunku", "yarinki", "dunku") must also match; the
         # actual matched text is stored so date resolution can replace it.
         # "dun" stays anchored to avoid false positives like "dunya".
@@ -429,25 +518,49 @@ class QueryAnalyzer:
                 self._date_range("gecen yil", date(year, 1, 1), date(year, 12, 31), "year")
             )
 
-        for match in re.finditer(r"\bson\s+(\d+)\s+gun\w*\b", query_ascii):
-            days = int(match.group(1))
+        for match in re.finditer(rf"\bson\s+{_NUMBER_TOKEN}\s+gun\w*\b", query_ascii):
+            days = self._parse_number(match.group(1))
             start = today - timedelta(days=max(days - 1, 0))
             ranges.append(self._date_range(match.group(0), start, today, "day"))
 
-        for match in re.finditer(r"\bson\s+(\d+)\s+hafta\w*\b", query_ascii):
-            weeks = int(match.group(1))
+        for match in re.finditer(rf"\bonceki\s+{_NUMBER_TOKEN}\s+gun\w*\b", query_ascii):
+            days = self._parse_number(match.group(1))
+            end = today - timedelta(days=days)
+            start = end - timedelta(days=max(days - 1, 0))
+            ranges.append(self._date_range(match.group(0), start, end, "day"))
+
+        for match in re.finditer(rf"\bson\s+{_NUMBER_TOKEN}\s+hafta\w*\b", query_ascii):
+            weeks = self._parse_number(match.group(1))
             start = today - timedelta(days=max(weeks * 7 - 1, 0))
             ranges.append(self._date_range(match.group(0), start, today, "week"))
 
-        for match in re.finditer(r"\bson\s+(\d+)\s+ay\w*\b", query_ascii):
-            months = int(match.group(1))
+        for match in re.finditer(rf"\bonceki\s+{_NUMBER_TOKEN}\s+hafta\w*\b", query_ascii):
+            weeks = self._parse_number(match.group(1))
+            end = today - timedelta(weeks=weeks)
+            start = end - timedelta(days=max(weeks * 7 - 1, 0))
+            ranges.append(self._date_range(match.group(0), start, end, "week"))
+
+        for match in re.finditer(rf"\bson\s+{_NUMBER_TOKEN}\s+ay\w*\b", query_ascii):
+            months = self._parse_number(match.group(1))
             start = self._shift_months(today, months)
             ranges.append(self._date_range(match.group(0), start, today, "month"))
 
-        for match in re.finditer(r"\bson\s+(\d+)\s+yil\w*\b", query_ascii):
-            years = int(match.group(1))
+        for match in re.finditer(rf"\bonceki\s+{_NUMBER_TOKEN}\s+ay\w*\b", query_ascii):
+            months = self._parse_number(match.group(1))
+            end = self._shift_months(today, months)
+            start = self._shift_months(today, months * 2)
+            ranges.append(self._date_range(match.group(0), start, end, "month"))
+
+        for match in re.finditer(rf"\bson\s+{_NUMBER_TOKEN}\s+yil\w*\b", query_ascii):
+            years = self._parse_number(match.group(1))
             start = self._shift_months(today, years * 12)
             ranges.append(self._date_range(match.group(0), start, today, "year"))
+
+        for match in re.finditer(rf"\bonceki\s+{_NUMBER_TOKEN}\s+yil\w*\b", query_ascii):
+            years = self._parse_number(match.group(1))
+            end = self._shift_months(today, years * 12)
+            start = self._shift_months(today, years * 24)
+            ranges.append(self._date_range(match.group(0), start, end, "year"))
 
         for month_name, month in _MONTHS.items():
             if re.search(rf"\b{self._strip_diacritics(month_name)}\s+ayinda\b", query_ascii):
@@ -459,7 +572,43 @@ class QueryAnalyzer:
                 self._date_range(match.group(0), date(year, 1, 1), date(year, 12, 31), "year")
             )
 
-        return ranges
+        # Explicit month-year pairs resolve as separate ordered periods.
+        for match in re.finditer(
+            rf"\b(20\d{{2}}|19\d{{2}})\s+({month_alternatives})\b", query_ascii
+        ):
+            if self._overlaps_any(match.span(), explicit_date_spans):
+                continue
+            year, month = int(match.group(1)), months_ascii[match.group(2)]
+            ranges.append(self._month_range(match.group(0), year, month))
+        for match in re.finditer(
+            rf"\b({month_alternatives})\s+(20\d{{2}}|19\d{{2}})\b", query_ascii
+        ):
+            if self._overlaps_any(match.span(), explicit_date_spans):
+                continue
+            year, month = int(match.group(2)), months_ascii[match.group(1)]
+            ranges.append(self._month_range(match.group(0), year, month))
+
+        # Bare year pairs joined by a comparison word.
+        for match in re.finditer(r"\b(20\d{2})\s+(?:ile|ve)\s+(20\d{2})\b(?!\s*yil)", query_ascii):
+            for year_text in (match.group(1), match.group(2)):
+                year = int(year_text)
+                ranges.append(
+                    self._date_range(year_text, date(year, 1, 1), date(year, 12, 31), "year")
+                )
+
+        # Preserve repeated periods when the user explicitly states both sides.
+        # Detector overlap is prevented at the matching sites above.
+        return sorted(
+            ranges,
+            key=lambda item: self._expression_position(query_ascii, item.expression),
+        )
+
+    def _overlaps_any(self, span: tuple[int, int], occupied: list[tuple[int, int]]) -> bool:
+        return any(span[0] < end and start < span[1] for start, end in occupied)
+
+    def _expression_position(self, query: str, expression: str) -> int:
+        position = query.find(self._strip_diacritics(expression))
+        return position if position >= 0 else len(query)
 
     def _date_range(
         self,

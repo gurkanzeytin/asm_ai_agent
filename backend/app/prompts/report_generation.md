@@ -1,4 +1,6 @@
-Summarize the SQL result as a concise markdown report.
+Summarize the SQL result as a concise markdown report. Write the ENTIRE report in Turkish —
+the title, every heading's content, and every sentence — never English, even if column, table,
+or branch names in the results are in English.
 
 Question:
 {question}
@@ -6,17 +8,17 @@ Question:
 Results:
 {results}
 
-# [Report Title]
+# [Türkçe rapor başlığı]
 
-## Executive Summary
-2-3 concise sentences.
+## Yönetici Özeti
+2-3 kısa cümle, Türkçe.
 
-## Key Findings
-Main metrics and insights. Use a markdown table when useful.
+## Öne Çıkan Bulgular
+Ana metrikler ve bulgular, Türkçe. Gerektiğinde markdown tablo kullan.
 
-## Recommendations
-Actionable next steps, if any.
+## Öneriler
+Varsa uygulanabilir sonraki adımlar, Türkçe.
 
-## Data Notes
-Mention truncation or data limits when present.
+## Veri Notları
+Kesme veya veri sınırları varsa belirt, Türkçe.
 

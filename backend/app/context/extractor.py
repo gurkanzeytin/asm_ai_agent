@@ -22,16 +22,23 @@ _FOLD_TABLE = str.maketrans(
     }
 )
 
-_MONTH_NAMES = (
-    "ocak|subat|mart|nisan|mayis|haziran|temmuz|agustos|eylul|ekim|kasim|aralik"
-)
+_MONTH_NAMES = "ocak|subat|mart|nisan|mayis|haziran|temmuz|agustos|eylul|ekim|kasim|aralik"
+
+# Spelled-out Turkish counts, folded (ç->c, ü->u...). "Son üç ay" must be
+# detected exactly like "son 3 ay" — a digit-only pattern here previously let
+# spelled-number periods slip through undetected, which meant the current
+# question was treated as having NO explicit date and inherited context got
+# incorrectly prepended (a spelled-number multi-period question was silently
+# invisible to this detector).
+_NUMBER_WORD = r"(?:\d+|bir|iki|uc|dort|bes|alti|yedi|sekiz|dokuz|on)"
 
 # Temporal expressions, longest/most-specific first, matched on folded text.
 # Each entry is (regex, canonical) — canonical=None keeps the matched span.
 # Canonical forms are what the downstream NLU date detector recognizes, so
 # suffixed variants ("bugünkü", "bu ayki") are normalized before re-injection.
 _DATE_PATTERNS = [
-    (r"\bson\s+\d+\s+(?:gun|hafta|ay|yil)\w*", None),
+    (rf"\bson\s+{_NUMBER_WORD}\s+(?:gun|hafta|ay|yil)\w*", None),
+    (rf"\bonceki\s+{_NUMBER_WORD}\s+(?:gun|hafta|ay|yil)\w*", None),
     (r"\bgecen\s+hafta\b", "gecen hafta"),
     (r"\bgecen\s+ay\b", "gecen ay"),
     (r"\bgecen\s+yil\b", "gecen yil"),
@@ -106,6 +113,15 @@ _PRONOUN_PATTERNS = [
     r"\bsunlar\b",
 ]
 
+# Content-token threshold below which a question is treated as too short to be
+# a complete, independent question — a deterministic proxy for "missing subject
+# / clearly depends on the previous turn". Chosen so genuine short follow-ups
+# ("Kaç hasta muayene edildi?", "En yoğun bölüm hangisi?" — both 4 tokens) stay
+# elliptical while a fully-formed independent question that merely happens to
+# contain one analytical word ("Kadın hastaların yaş dağılımını göster" — 5
+# tokens) does not.
+_ELLIPTICAL_MAX_TOKENS = 4
+
 _RANKING_CUES = ("en yogun", "en cok", "en fazla", "en az", "en yuksek", "en dusuk")
 _COMPARISON_CUES = ("karsilastir", "kiyasla", "farki", "gore dagilim")
 _TREND_CUES = ("trend", "degisim", "aylara gore", "gunlere gore", "artis", "azalis")
@@ -161,10 +177,9 @@ class ContextExtractor:
         pronouns = self._detect_pronouns(folded)
         analysis_type = self._detect_analysis_type(folded)
         is_analytical = any(cue in folded for cue in _ANALYTICAL_CUES)
-        asks_department = any(
-            re.search(rf"\b{word}\w*", folded) for word in _DEPARTMENT_WORDS
-        )
+        asks_department = any(re.search(rf"\b{word}\w*", folded) for word in _DEPARTMENT_WORDS)
         is_date_only = self._is_date_only_followup(folded, date_expression)
+        is_elliptical = self._is_elliptical(folded)
 
         return ExtractedSignals(
             date_expression=date_expression,
@@ -175,6 +190,7 @@ class ContextExtractor:
             is_analytical=is_analytical,
             asks_department=asks_department,
             is_date_only_followup=is_date_only,
+            is_elliptical=is_elliptical,
         )
 
     def fold(self, text: str) -> str:
@@ -229,6 +245,12 @@ class ContextExtractor:
         if any(cue in folded for cue in _LIST_CUES):
             return "list"
         return None
+
+    def _is_elliptical(self, folded: str) -> bool:
+        """True when the question has few enough content tokens to plausibly be
+        incomplete without previous-turn context (see `_ELLIPTICAL_MAX_TOKENS`)."""
+        tokens = [token for token in folded.split() if token not in _FILLER_TOKENS]
+        return len(tokens) <= _ELLIPTICAL_MAX_TOKENS
 
     def _is_date_only_followup(self, folded: str, date_expression: str | None) -> bool:
         """True when the question adds only a new temporal filter ('Peki geçen ay?')."""

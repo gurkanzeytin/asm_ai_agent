@@ -26,19 +26,11 @@ from app.database.session import engine  # noqa: E402
 
 def _provider() -> str:
     url = settings.DATABASE_URL or ""
-    if url.startswith("mssql"):
-        return "mssql"
-    if url.startswith("postgresql") or url.startswith("postgres"):
-        return "postgresql"
-    if url.startswith("sqlite"):
-        return "sqlite"
-    return "unknown"
+    return "mssql" if url.startswith("mssql") else "unknown"
 
 
-def _view_test_sql(provider: str, object_name: str) -> str:
-    if provider == "mssql":
-        return f"SELECT TOP (5) * FROM {object_name};"
-    return f"SELECT * FROM {object_name} LIMIT 5;"
+def _view_test_sql(object_name: str) -> str:
+    return f"SELECT TOP (1) Id, BaslangicTarihi FROM {object_name};"
 
 
 async def main() -> int:
@@ -48,6 +40,12 @@ async def main() -> int:
     print(f"SQL dialect        : {settings.SQL_DIALECT}")
     print(f"Configured schema  : {settings.DATABASE_SCHEMA}")
     print(f"Allowed objects    : {', '.join(settings.DATABASE_ALLOWED_OBJECTS) or '(unrestricted)'}")
+    print(f"Windows auth       : {'yes' if settings.DB_TRUSTED_CONNECTION else 'no'}")
+    print("ODBC encryption    : yes")
+    print(
+        "Certificate trust  : "
+        + ("yes (development only)" if settings.ENVIRONMENT == "development" else "managed by production policy")
+    )
 
     try:
         async with engine.connect() as conn:
@@ -62,14 +60,12 @@ async def main() -> int:
             if settings.DATABASE_ALLOWED_OBJECTS:
                 object_name = settings.DATABASE_ALLOWED_OBJECTS[0]
                 try:
-                    view_result = await conn.execute(
-                        text(_view_test_sql(provider, object_name))
-                    )
+                    view_result = await conn.execute(text(_view_test_sql(object_name)))
                     rows = view_result.mappings().all()
                     columns = list(rows[0].keys()) if rows else list(view_result.keys())
                     print(f"View accessibility : OK ({object_name})")
                     print(f"Columns            : {', '.join(columns)}")
-                    print(f"Row count (max 5)  : {len(rows)}")
+                    print(f"Row count (max 1)  : {len(rows)}")
                 except Exception as ve:
                     print(f"View accessibility : FAILED ({object_name})")
                     print(f"View test error    : {type(ve).__name__}: {ve}")

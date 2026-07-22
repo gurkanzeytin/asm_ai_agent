@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import get_reporting_service
 from app.application_models.workflow_result import WorkflowResult
+from app.context.session_store import generate_session_id
 from app.schemas.report import (
     AnalyticsSchema,
     InsightSchema,
@@ -70,6 +71,8 @@ def _map_to_response(result: WorkflowResult) -> ReportResponse:
             validate_sql_ms=m.validate_sql_ms,
             execute_sql_ms=m.execute_sql_ms,
             generate_report_ms=m.generate_report_ms,
+            insight_llm_ms=m.insight_llm_ms,
+            observation_llm_ms=m.observation_llm_ms,
             llm_total_ms=m.llm_total_ms,
             total_ms=m.total_ms,
         )
@@ -116,6 +119,18 @@ def _map_to_response(result: WorkflowResult) -> ReportResponse:
             rules=[rule.value for rule in ins.rules],
             confidence=ins.confidence.value,
             llm_generated=ins.llm_generated,
+            llm_invoked=ins.llm_generated,
+            provider=ins.provider,
+            model=ins.model,
+            llm_inference_ms=ins.llm_latency_ms,
+            prompt_tokens=ins.prompt_tokens,
+            completion_tokens=ins.completion_tokens,
+            finish_reason=ins.finish_reason,
+            routing_mode=ins.routing_mode,
+            routing_reason=ins.routing_reason,
+            fallback_used=ins.fallback_used,
+            fallback_reason=ins.fallback_reason,
+            remote_data_policy=ins.remote_data_policy,
         )
 
     observations_schema = None
@@ -150,6 +165,27 @@ def _map_to_response(result: WorkflowResult) -> ReportResponse:
         observations=observations_schema,
         visualization=visualization_schema,
         outcome=result.outcome,
+        session_id=result.session_id,
+        follow_up_detected=result.follow_up_detected,
+        follow_up_confidence=result.follow_up_confidence,
+        follow_up_signals=result.follow_up_signals,
+        context_applied=result.context_applied,
+        inherited_fields=result.inherited_fields,
+        overridden_fields=result.overridden_fields,
+        memory_updated=result.memory_updated,
+        memory_turn_count=result.memory_turn_count,
+        memory_expired=result.memory_expired,
+        explicit_context_fields=result.explicit_context_fields,
+        inherited_context_fields=result.inherited_context_fields,
+        overridden_context_fields=result.overridden_context_fields,
+        removed_context_fields=result.removed_context_fields,
+        resolved_metrics=result.resolved_metrics,
+        resolved_dimensions=result.resolved_dimensions,
+        resolved_filters=result.resolved_filters,
+        resolved_time_grain=result.resolved_time_grain,
+        resolved_ranking=result.resolved_ranking,
+        resolved_limit=result.resolved_limit,
+        pending_clarification_field=result.pending_clarification_field,
     )
 
 
@@ -174,8 +210,16 @@ async def generate_report(
     request: ReportRequest,
     reporting_service: Annotated[ReportingService, Depends(get_reporting_service)],
 ) -> ReportResponse:
-    """Runs the full AI reporting workflow for the provided natural-language question."""
+    """Runs the full AI reporting workflow for the provided natural-language question.
+
+    session_id contract: an omitted/blank session_id never falls back to a
+    shared "default" session — each such request gets its own fresh, isolated
+    ephemeral session (see app.context.session_store.generate_session_id),
+    so independent UI requests, quick tests, and evaluation cases can never
+    contaminate each other's conversational memory. The resolved session_id
+    is always echoed back in the response metadata.
+    """
     result = await reporting_service.run_workflow(
-        request.question, session_id=request.session_id or "default"
+        request.question, session_id=request.session_id or generate_session_id()
     )
     return _map_to_response(result)

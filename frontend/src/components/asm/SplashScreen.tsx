@@ -4,17 +4,18 @@ import { tr } from "@/locales/tr";
 
 interface Props {
   visible: boolean;
+  onReady: () => void;
   onFinish?: () => void;
 }
 
-export function SplashScreen({ visible, onFinish }: Props) {
+export function SplashScreen({ visible, onReady, onFinish }: Props) {
   return (
     <AnimatePresence onExitComplete={onFinish}>
       {visible && (
         <motion.div
           initial={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          exit={{ opacity: 0, scale: 1.015 }}
+          transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
           className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background"
         >
           <MedAgentLogo size={120} />
@@ -28,9 +29,10 @@ export function SplashScreen({ visible, onFinish }: Props) {
           </motion.p>
           <motion.div
             initial={{ scaleX: 0 }}
-            animate={{ scaleX: 1 }}
-            transition={{ delay: 0.4, duration: 1.2, ease: "easeInOut" }}
-            className="mt-6 h-0.5 w-32 origin-left rounded-full bg-gradient-to-r from-primary to-cyan"
+            animate={{ scaleX: [0, 0.86, 1] }}
+            transition={{ delay: 0.35, duration: 1.45, times: [0, 0.78, 1], ease: "easeInOut" }}
+            onAnimationComplete={onReady}
+            className="mt-6 h-0.5 w-32 origin-left overflow-hidden rounded-full bg-gradient-to-r from-primary to-cyan shadow-[0_0_14px_oklch(0.72_0.14_205/0.28)]"
           />
         </motion.div>
       )}

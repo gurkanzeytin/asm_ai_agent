@@ -44,6 +44,10 @@ class LLMFactory:
                 logger.info("Instantiating new singleton GeminiProvider instance.")
                 from app.llm.gemini import GeminiProvider
                 cls._instances[provider_key] = GeminiProvider()
+            elif provider_key == "nvidia":
+                logger.info("Instantiating new singleton NvidiaProvider instance.")
+                from app.llm.nvidia import NvidiaProvider
+                cls._instances[provider_key] = NvidiaProvider()
             else:
                 logger.error(f"Unsupported LLM provider requested: {provider_type}")
                 raise ValueError(f"Unsupported LLM provider: {provider_type}")

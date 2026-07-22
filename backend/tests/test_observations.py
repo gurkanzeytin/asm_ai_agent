@@ -12,12 +12,26 @@ import pytest
 from app.agent.nodes.generate_observations import GenerateObservationsNode
 from app.agent.state import AgentState
 from app.analytics.models import AnalyticsResult, DataShape
+from app.analytics.trend_analysis import TrendMetrics
 from app.insights.models import InsightConfidence, InsightResult, InsightRule
 from app.intelligence.models import ObservationCategory
 from app.intelligence.observation_engine import ObservationEngine
 from app.intelligence.observation_rules import build_observations
 from app.llm.schemas import LLMResponse
 from app.schemas.report import ObservationsSchema, ReportResponse
+
+_CONSISTENT_UPWARD_TREND_METRICS = TrendMetrics(
+    endpoint_change=63.0,
+    endpoint_percentage_change=18.4,
+    endpoint_direction="upward",
+    slope=10.0,
+    slope_direction="upward",
+    trend_consistency="consistent_upward",
+    volatility=12.0,
+    first_comparable_period="2026-01",
+    last_comparable_period="2026-06",
+    comparable_period_count=6,
+)
 
 
 def _analytics(**overrides) -> AnalyticsResult:
@@ -35,12 +49,17 @@ def _analytics(**overrides) -> AnalyticsResult:
             "largest_change": "2026-05",
         },
         row_count=6,
+        trend_metrics=_CONSISTENT_UPWARD_TREND_METRICS,
     )
     base.update(overrides)
     return AnalyticsResult(**base)
 
 
-def _categorical_analytics(**metric_overrides) -> AnalyticsResult:
+def _categorical_analytics(
+    comparison_sufficient: bool | None = None,
+    comparison_category_count: int | None = None,
+    **metric_overrides,
+) -> AnalyticsResult:
     metrics = {
         "count": 3,
         "total": 360.0,
@@ -57,6 +76,8 @@ def _categorical_analytics(**metric_overrides) -> AnalyticsResult:
         data_shape=DataShape.CATEGORICAL,
         metrics=metrics,
         row_count=3,
+        comparison_sufficient=comparison_sufficient,
+        comparison_category_count=comparison_category_count,
     )
 
 
@@ -82,38 +103,73 @@ class FakeLLMProvider:
 # ── Observation rules ─────────────────────────────────────────────────────────
 
 
-def test_high_growth_observation():
-    observations = build_observations(_analytics(), [InsightRule.HIGH_GROWTH])
+def test_consistent_upward_trend_observation():
+    observations = build_observations(_analytics(), [InsightRule.CONSISTENT_UPWARD_TREND])
 
     texts = [obs.text for obs in observations]
-    assert "Sustained growth detected: values increased by 18.4%." in texts
-    growth = next(obs for obs in observations if obs.rule == "HIGH_GROWTH")
-    assert growth.category == ObservationCategory.GROWTH
-    assert growth.evidence == {"growth_rate": 18.4}
+    assert (
+        "Dönem genelinde ve uç dönemler arasında tutarlı bir yükseliş görülmektedir." in texts
+    )
+    trend = next(obs for obs in observations if obs.rule == "CONSISTENT_UPWARD_TREND")
+    assert trend.category == ObservationCategory.TREND
 
 
-def test_declining_trend_observations():
+def test_mixed_trend_signal_observation():
+    mixed = _CONSISTENT_UPWARD_TREND_METRICS.model_copy(
+        update={
+            "trend_consistency": "mixed",
+            "endpoint_direction": "downward",
+            "slope_direction": "upward",
+        }
+    )
     analytics = _analytics(
         metrics={
             **_analytics().metrics,
-            "growth_rate": -12.0,
-            "trend_direction": "downward",
-        }
+            "slope_direction_tr": "yükselişe",
+            "endpoint_direction_tr": "düşüş",
+        },
+        trend_metrics=mixed,
     )
 
-    observations = build_observations(
-        analytics, [InsightRule.DECLINING, InsightRule.NEGATIVE_TREND]
-    )
+    observations = build_observations(analytics, [InsightRule.MIXED_TREND_SIGNAL])
 
     texts = [obs.text for obs in observations]
-    assert "A downward trend is visible." in texts
-    assert any("-12.0%" in text for text in texts)
+    assert any(
+        "yükselişe işaret ederken" in text and "düşüş görülmektedir" in text for text in texts
+    )
 
 
-def test_stable_trend_observation():
-    observations = build_observations(_analytics(), [InsightRule.STABLE_TREND])
+def test_flat_trend_observation():
+    observations = build_observations(_analytics(), [InsightRule.FLAT_TREND])
 
-    assert any(obs.text == "Values have remained stable over the period." for obs in observations)
+    assert any(
+        obs.text == "Değerler dönem boyunca büyük ölçüde yatay seyretmiştir."
+        for obs in observations
+    )
+
+
+def test_insufficient_complete_periods_observation():
+    observations = build_observations(
+        _analytics(), [InsightRule.INSUFFICIENT_COMPLETE_PERIODS]
+    )
+
+    assert any(
+        "yeterli sayıda tamamlanmış dönem bulunmuyor" in obs.text for obs in observations
+    )
+
+
+def test_partial_period_excluded_observation():
+    observations = build_observations(_analytics(), [InsightRule.PARTIAL_PERIOD_EXCLUDED])
+
+    assert any("henüz tamamlanmadığı için" in obs.text for obs in observations)
+
+
+def test_single_category_comparison_observation():
+    observations = build_observations(_analytics(), [InsightRule.SINGLE_CATEGORY_COMPARISON])
+
+    assert any(
+        "yalnızca bir kategori bulunduğu için" in obs.text for obs in observations
+    )
 
 
 def test_dominant_category_observation():
@@ -124,19 +180,38 @@ def test_dominant_category_observation():
     observations = build_observations(analytics, [InsightRule.DOMINANT_CATEGORY])
 
     texts = [obs.text for obs in observations]
-    assert "One category clearly dominates: 'Psikiyatri' holds the largest share." in texts
-    assert "'Psikiyatri' has the highest volume in this result." in texts
+    assert (
+        "Bir kategori belirgin biçimde öne çıkıyor: 'Psikiyatri' en büyük payı oluşturuyor."
+        in texts
+    )
+    assert "'Psikiyatri' bu sonuçtaki en yüksek hacme sahip." in texts
+
+
+def test_dominant_category_wording_suppressed_when_single_category():
+    analytics = _categorical_analytics(
+        distribution={"Psikiyatri": 100.0},
+        comparison_sufficient=False,
+        comparison_category_count=1,
+    )
+
+    observations = build_observations(
+        analytics, [InsightRule.DOMINANT_CATEGORY, InsightRule.SINGLE_CATEGORY_COMPARISON]
+    )
+
+    texts = [obs.text for obs in observations]
+    assert not any("en yüksek hacme sahip" in text for text in texts)
+    assert any("yalnızca bir kategori bulunduğu için" in text for text in texts)
 
 
 def test_balanced_distribution_observation():
-    observations = build_observations(
-        _categorical_analytics(), [InsightRule.BALANCED_DISTRIBUTION]
-    )
+    observations = build_observations(_categorical_analytics(), [InsightRule.BALANCED_DISTRIBUTION])
 
     assert any(
-        obs.text == "No significant imbalance detected across categories."
+        obs.text == "Kategoriler arasında belirgin bir dengesizlik tespit edilmedi."
         for obs in observations
     )
+    # "önemli ölçüde" must never appear unqualified — see Phase 4 forbidden patterns.
+    assert not any("önemli ölçüde" in obs.text.lower() for obs in observations)
 
 
 def test_single_metric_observation():
@@ -157,13 +232,12 @@ def test_significant_spread_observation():
 
     assert any(obs.rule == "SIGNIFICANT_SPREAD" for obs in observations)
     spread = next(obs for obs in observations if obs.rule == "SIGNIFICANT_SPREAD")
-    assert "may deserve attention" in spread.text
+    assert "dikkat çekebilir" in spread.text
+    assert "önemli ölçüde" not in spread.text.lower()
 
 
 def test_empty_analytics_yields_single_data_quality_observation():
-    observations = build_observations(
-        _empty_analytics(), [InsightRule.INSUFFICIENT_EVIDENCE]
-    )
+    observations = build_observations(_empty_analytics(), [InsightRule.INSUFFICIENT_EVIDENCE])
 
     assert len(observations) == 1
     assert observations[0].category == ObservationCategory.DATA_QUALITY
@@ -174,7 +248,7 @@ def test_no_directive_language_in_any_template_observation():
     for analytics in (_analytics(), _categorical_analytics()):
         for obs in build_observations(analytics, all_rules):
             lowered = obs.text.lower()
-            for forbidden in ("must", "should", "needs to", "recommend"):
+            for forbidden in ("zorunlu", "gerekli", "tavsiye ederiz", "önermek"):
                 assert forbidden not in lowered, obs.text
 
 
@@ -186,7 +260,7 @@ async def test_engine_reuses_insight_rules_and_confidence():
     insights = InsightResult(
         title="T",
         summary="S",
-        rules=[InsightRule.HIGH_GROWTH, InsightRule.POSITIVE_TREND],
+        rules=[InsightRule.CONSISTENT_UPWARD_TREND],
         confidence=InsightConfidence.HIGH,
     )
     engine = ObservationEngine()
@@ -194,9 +268,9 @@ async def test_engine_reuses_insight_rules_and_confidence():
     result = await engine.generate(_analytics(), insights)
 
     assert result.confidence == InsightConfidence.HIGH
-    assert result.rule_count == 2
+    assert result.rule_count == 1
     assert result.llm_worded is False
-    assert any(obs.rule == "HIGH_GROWTH" for obs in result.observations)
+    assert any(obs.rule == "CONSISTENT_UPWARD_TREND" for obs in result.observations)
 
 
 @pytest.mark.asyncio
@@ -249,9 +323,7 @@ async def test_llm_rewording_applies_when_valid():
     assert [obs.text for obs in result.observations] == reworded_texts
     assert result.llm_latency_ms == 9.0
     # Rules and evidence are untouched by rewording.
-    assert [obs.rule for obs in result.observations] == [
-        obs.rule for obs in baseline.observations
-    ]
+    assert [obs.rule for obs in result.observations] == [obs.rule for obs in baseline.observations]
 
 
 @pytest.mark.asyncio
@@ -264,14 +336,14 @@ async def test_llm_rewording_rejected_on_changed_numbers():
     result = await engine.generate(_analytics(), None)
 
     assert result.llm_worded is False  # falls back to deterministic templates
-    assert any("18.4%" in obs.text for obs in result.observations)
+    assert any("tutarlı bir yükseliş" in obs.text for obs in result.observations)
 
 
 @pytest.mark.asyncio
 async def test_llm_rewording_rejected_on_directive_language():
     engine_no_llm = ObservationEngine()
     baseline = await engine_no_llm.generate(_analytics(), None)
-    texts = [obs.text + " You should act now." for obs in baseline.observations]
+    texts = [obs.text + " Bunu hemen yapmalısınız." for obs in baseline.observations]
     provider = FakeLLMProvider(json.dumps({"observations": texts}))
     engine = ObservationEngine(llm_provider=provider, use_llm_wording=True)
 

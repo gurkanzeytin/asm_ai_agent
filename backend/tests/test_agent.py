@@ -76,7 +76,7 @@ async def test_successful_workflow_execution():
         execution_time_ms=5.0,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite"
+        database_provider="mssql"
     )
     workflow_service.execute_query.return_value = mock_query
 

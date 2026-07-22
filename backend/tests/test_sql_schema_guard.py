@@ -60,8 +60,8 @@ async def test_bug_003a_literal_preserves_normalized_vocabulary():
 
     assert "'Cocuk Sagligi'" in generated.sql
     assert "Çocuk Sağlığı" not in generated.sql
-    # Stored values may differ in case from the normalized vocabulary
-    assert "COLLATE NOCASE" in generated.sql.upper()
+    # Case differences are handled by the SQL Server CI collation; no COLLATE is added
+    assert "COLLATE NOCASE" not in generated.sql.upper()
     assert generated.validation_result.valid is True
     # No repair needed: canonicalization is deterministic post-processing
     assert llm_provider.generate.await_count == 1
@@ -82,7 +82,9 @@ async def test_bug_003a_lowercase_vocabulary_literal_matches_title_case_storage(
         database_context=_context(),
     )
 
-    assert "'cocuk sagligi' COLLATE NOCASE" in generated.sql
+    # The literal is copied verbatim; the SQL Server CI collation matches title-case storage
+    assert "'cocuk sagligi'" in generated.sql
+    assert "COLLATE" not in generated.sql.upper()
 
 
 @pytest.mark.asyncio
@@ -194,3 +196,43 @@ def test_validator_schema_identifiers_flags_unknown_identifiers():
 
     assert "unknown table 'hemsireler'" in issues
     assert "unknown column 'b.adi'" in issues
+
+
+# ═══════════ 24-column view contract: removed columns are unknown ═══════════
+
+VIEW_COLUMNS_24 = [
+    "Id", "BaslangicTarihi", "BitisTarihi", "RandevuSuresi", "RandevuDurumu",
+    "HastaId", "RandevuTipiAdi", "RandevuyuVeren", "HastaAdi", "HastaSoyadi",
+    "DogumTarihi", "CinsiyetId", "HastaId2", "Uyruk", "BolumId", "DoktorId",
+    "HizmetAdi", "ProtokolIslemState", "KategoriAdi", "GenelRandevuKaynakAdi",
+    "GenelRandevuBolumAdi", "ProtokolAcilisTarihi", "SubeAdi", "CreatedDate",
+]
+
+
+def _view_context() -> DatabaseContext:
+    from app.database_intelligence.models import ViewMetadata
+
+    view = ViewMetadata(
+        name="dbo.vw_RandevuRaporu",
+        columns=[_column(name) for name in VIEW_COLUMNS_24],
+    )
+    return DatabaseContext(tables=[], views=[view])
+
+
+@pytest.mark.parametrize("removed", ["TCKimlikNo", "PasaportNo", "HastaGSM"])
+def test_removed_view_columns_are_rejected_as_unknown(removed):
+    """The three columns were dropped from the view: SQL selecting them must fail
+    schema validation as unknown columns, not pass as 'existing but forbidden'."""
+    issues = SQLValidator().validate_schema_identifiers(
+        f"SELECT {removed} FROM dbo.vw_RandevuRaporu;", _view_context()
+    )
+    assert issues, removed
+    assert any("unknown column" in issue for issue in issues), issues
+
+
+def test_remaining_view_columns_pass_schema_validation():
+    issues = SQLValidator().validate_schema_identifiers(
+        "SELECT SubeAdi, COUNT(*) FROM dbo.vw_RandevuRaporu GROUP BY SubeAdi;",
+        _view_context(),
+    )
+    assert issues == []

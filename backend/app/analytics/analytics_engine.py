@@ -9,19 +9,40 @@ visualization recommendation. No LLM calls anywhere in this module.
 import logging
 import re
 import time
-from typing import Any
+from dataclasses import dataclass
+from datetime import date
+from typing import TYPE_CHECKING, Any
 
 from app.analytics import calculators
 from app.analytics.intent_detector import AnalyticsIntentDetector
-from app.analytics.models import AnalyticsIntent, AnalyticsResult, DataShape
+from app.analytics.models import AnalyticsIntent, AnalyticsResult, DataShape, MetricSummary
+from app.analytics.trend_analysis import TrendMetrics, compute_trend_metrics
 from app.analytics.visualization_selector import VisualizationSelector
 from app.application_models.workflow_models import QueryResult
 
+if TYPE_CHECKING:
+    from app.planning.models import QueryPlan
+
 logger = logging.getLogger(__name__)
 
+
+@dataclass
+class _ComputedMetrics:
+    """Internal carrier so `_compute_metrics` can return both the flattened
+    scalar dict (unchanged external shape) and the typed trend verdict."""
+
+    scalar: dict[str, Any]
+    trend_metrics: TrendMetrics | None
+
 # Column-name fragments that indicate a temporal axis (Turkish + English).
+# "ay"/"week"/"month" require a trailing word boundary — without it, bucketed
+# metric aliases like "monthly_appointment_count"/"weekly_appointment_count"
+# (the actual metric column, not the date bucket) false-match on the bare
+# "month"/"week" substring, get misclassified as a second temporal column, and
+# collapse a valid multi-row trend result to DataShape.TABULAR instead of
+# TIME_SERIES.
 _TEMPORAL_NAME_PATTERN = re.compile(
-    r"tarih|date|zaman|time|saat|hour|gun|day|hafta|week|ay\b|month|yil|year|donem|period",
+    r"tarih|date|zaman|time|saat|hour|gun|day|hafta|week\b|ay\b|month\b|yil|year|donem|period",
     re.IGNORECASE,
 )
 # Values like 2026-07-13, 2026-07, 2026/07/13, 13.07.2026
@@ -32,6 +53,11 @@ _ID_NAME_PATTERN = re.compile(r"(^|_)id$|^id($|_)", re.IGNORECASE)
 
 _TOP_N_SIZE = 5
 _MAX_DISTRIBUTION_CATEGORIES = 12
+# Turkish direction wording in two grammatical forms, for the two distinct
+# sentence slots MIXED_TREND_SIGNAL fills ("eğim {X} işaret ederken" needs the
+# dative case; "arasında {Y} görülmektedir" needs the plain noun).
+_SLOPE_DIRECTION_TR = {"upward": "yükselişe", "downward": "düşüşe", "flat": "yatay seyre"}
+_ENDPOINT_DIRECTION_TR = {"upward": "yükseliş", "downward": "düşüş", "flat": "yatay seyir"}
 
 
 class AnalyticsEngine:
@@ -45,20 +71,25 @@ class AnalyticsEngine:
         self.intent_detector = intent_detector or AnalyticsIntentDetector()
         self.visualization_selector = visualization_selector or VisualizationSelector()
 
-    def analyze(self, question: str, query_result: QueryResult) -> AnalyticsResult:
+    def analyze(
+        self,
+        question: str,
+        query_result: QueryResult,
+        plan: "QueryPlan | None" = None,
+        metric_aliases: dict[str, str] | None = None,
+    ) -> AnalyticsResult:
         start_time = time.perf_counter()
 
         intents = self.intent_detector.detect(question)
-        metric_column, label_column, temporal_column = self._profile_columns(
-            query_result, question
-        )
-        data_shape = self._classify_shape(query_result, metric_column, temporal_column)
+        metric_column, label_column, temporal_column = self._profile_columns(query_result, question)
+        data_shape = self._classify_shape(query_result, metric_column, temporal_column, plan)
 
         values = self._numeric_values(query_result, metric_column)
         labels = self._labels(query_result, label_column or temporal_column)
 
-        metrics = self._compute_metrics(data_shape, values, labels)
-        insights = self._prepare_insights(data_shape, metrics, labels, values)
+        grain = plan.grouping_granularity if plan else None
+        metrics = self._compute_metrics(data_shape, values, labels, grain)
+        insights = self._prepare_insights(data_shape, metrics.scalar, labels, values)
         analytics_type = self._analytics_type(intents, data_shape)
 
         category_count = len(set(labels)) if labels else 0
@@ -67,23 +98,81 @@ class AnalyticsEngine:
             intents=intents,
             row_count=query_result.row_count,
             category_count=category_count,
+            metric_count=len(plan.metrics) if plan else 1,
         )
+
+        metric_summaries = self._compute_metric_summaries(
+            plan, query_result, metric_aliases, labels
+        )
+
+        comparison_category_count = None
+        comparison_sufficient = None
+        comparison_limitation_reason = None
+        if data_shape == DataShape.CATEGORICAL:
+            comparison_category_count = category_count
+            comparison_sufficient = category_count >= 2
+            if category_count == 1:
+                comparison_limitation_reason = (
+                    "Seçilen kapsamda yalnızca bir kategori bulunduğu için "
+                    "kategoriler arası karşılaştırma yapılamadı."
+                )
 
         duration_ms = (time.perf_counter() - start_time) * 1000
         result = AnalyticsResult(
             analytics_type=analytics_type,
             intents=intents,
             data_shape=data_shape,
-            metrics=metrics,
+            metrics=metrics.scalar,
             insights=insights,
             visualization=visualization,
             metric_column=metric_column,
             label_column=label_column or temporal_column,
             row_count=query_result.row_count,
             duration_ms=duration_ms,
+            metric_summaries=metric_summaries,
+            trend_metrics=metrics.trend_metrics,
+            comparison_category_count=comparison_category_count,
+            comparison_sufficient=comparison_sufficient,
+            comparison_limitation_reason=comparison_limitation_reason,
         )
         self._log_result(question, result)
         return result
+
+    # ── Multi-metric summaries (additive; never replaces metric_column) ───────
+
+    def _compute_metric_summaries(
+        self,
+        plan: "QueryPlan | None",
+        query_result: QueryResult,
+        metric_aliases: dict[str, str] | None,
+        labels: list[str],
+    ) -> dict[str, MetricSummary]:
+        if not plan or not plan.metrics:
+            return {}
+        aliases = metric_aliases or {}
+        summaries: dict[str, MetricSummary] = {}
+        for metric_id in plan.metrics:
+            column = aliases.get(metric_id, metric_id)
+            if column not in query_result.columns:
+                continue
+            values = self._numeric_values(query_result, column)
+            if not values:
+                continue
+            labeled = list(zip(labels, values, strict=True)) if len(labels) == len(values) else []
+            top_dimension = bottom_dimension = None
+            if labeled:
+                ranked = calculators.rank(labeled)
+                top_dimension, bottom_dimension = ranked[0][0], ranked[-1][0]
+            summaries[metric_id] = MetricSummary(
+                metric_id=metric_id,
+                total=calculators.total(values),
+                average=calculators.average(values),
+                minimum=calculators.minimum(values),
+                maximum=calculators.maximum(values),
+                top_dimension=top_dimension,
+                bottom_dimension=bottom_dimension,
+            )
+        return summaries
 
     # ── Result profiling ───────────────────────────────────────────────────────
 
@@ -125,9 +214,7 @@ class AnalyticsEngine:
         temporal_column = temporal_columns[0] if temporal_columns else None
         return metric_column, label_column, temporal_column
 
-    def _question_preferred_column(
-        self, question: str, candidates: list[str]
-    ) -> str | None:
+    def _question_preferred_column(self, question: str, candidates: list[str]) -> str | None:
         """Picks the candidate column whose name shares a word stem with the question."""
         if not question or len(candidates) < 2:
             return None
@@ -141,8 +228,7 @@ class AnalyticsEngine:
                 token for token in re.findall(r"[^\W_]+", folded_column) if len(token) >= 4
             }
             if any(
-                question_token.startswith(column_token)
-                or column_token.startswith(question_token)
+                question_token.startswith(column_token) or column_token.startswith(question_token)
                 for column_token in column_tokens
                 for question_token in question_tokens
             ):
@@ -164,22 +250,36 @@ class AnalyticsEngine:
         query_result: QueryResult,
         metric_column: str | None,
         temporal_column: str | None,
+        plan: "QueryPlan | None" = None,
     ) -> DataShape:
         if query_result.row_count == 0:
             return DataShape.EMPTY
-        if query_result.row_count == 1:
+        # A plan that explicitly requested a grouping dimension defines a
+        # GROUPED result contract regardless of how many rows the live data
+        # happened to produce — a single branch matching the date range is
+        # still a legitimate one-row slice of a grouped comparison, never a
+        # bare scalar/single-record summary. Row-count-only classification
+        # would otherwise misclassify it as SINGLE_ROW and silently flatten a
+        # multi-metric grouped answer into one arbitrary scalar value.
+        planned_dimension_present = bool(
+            plan
+            and plan.dimensions
+            and any(
+                dimension.lower() in {c.lower() for c in query_result.columns}
+                for dimension in plan.dimensions
+            )
+        )
+        if query_result.row_count == 1 and not planned_dimension_present:
             if len(query_result.columns) == 1 and metric_column:
                 return DataShape.SINGLE_VALUE
             return DataShape.SINGLE_ROW
         if temporal_column and metric_column:
             return DataShape.TIME_SERIES
-        if metric_column and len(query_result.columns) >= 2:
+        if planned_dimension_present or (metric_column and len(query_result.columns) >= 2):
             return DataShape.CATEGORICAL
         return DataShape.TABULAR
 
-    def _numeric_values(
-        self, query_result: QueryResult, metric_column: str | None
-    ) -> list[float]:
+    def _numeric_values(self, query_result: QueryResult, metric_column: str | None) -> list[float]:
         if not metric_column:
             return []
         return [
@@ -201,9 +301,10 @@ class AnalyticsEngine:
         data_shape: DataShape,
         values: list[float],
         labels: list[str],
-    ) -> dict[str, Any]:
+        grain: str | None = None,
+    ) -> "_ComputedMetrics":
         if not values:
-            return {"count": 0}
+            return _ComputedMetrics(scalar={"count": 0}, trend_metrics=None)
 
         metrics: dict[str, Any] = {
             "count": calculators.count(values),
@@ -217,17 +318,51 @@ class AnalyticsEngine:
         }
 
         labeled = list(zip(labels, values, strict=True)) if len(labels) == len(values) else []
+        trend_metrics = None
 
         if data_shape == DataShape.TIME_SERIES:
-            metrics["difference"] = calculators.difference(values)
-            metrics["percentage_change"] = calculators.percentage_difference(values)
-            metrics["growth_rate"] = calculators.growth_rate(values)
-            metrics["trend_direction"] = calculators.trend_direction(values)
+            # highest_period/lowest_period/largest_change stay over the FULL
+            # series — presentational facts about the returned chart, which
+            # must keep a partial trailing bucket. Only the endpoint/slope/
+            # consistency verdict below excludes it.
             if labeled:
                 ranked = calculators.rank(labeled)
                 metrics["highest_period"] = ranked[0][0]
                 metrics["lowest_period"] = ranked[-1][0]
                 metrics["largest_change"] = calculators.largest_change(labels, values)
+
+            trend_metrics = compute_trend_metrics(labels, values, grain, date.today())
+            # difference/percentage_change/growth_rate/trend_direction are kept
+            # as backward-compatible aliases of the endpoint verdict — computed
+            # over comparable (complete) periods only, which is what actually
+            # reconciles them with each other (they used to be independently
+            # computed over the full series, including any partial trailing
+            # bucket, which could contradict one another).
+            metrics["difference"] = trend_metrics.endpoint_change
+            metrics["percentage_change"] = trend_metrics.endpoint_percentage_change
+            metrics["growth_rate"] = trend_metrics.endpoint_percentage_change
+            metrics["trend_direction"] = trend_metrics.endpoint_direction
+            metrics["endpoint_change"] = trend_metrics.endpoint_change
+            metrics["endpoint_percentage_change"] = trend_metrics.endpoint_percentage_change
+            metrics["endpoint_direction"] = trend_metrics.endpoint_direction
+            metrics["slope"] = trend_metrics.slope
+            metrics["slope_direction"] = trend_metrics.slope_direction
+            metrics["trend_consistency"] = trend_metrics.trend_consistency
+            metrics["volatility"] = trend_metrics.volatility
+            metrics["comparable_period_count"] = trend_metrics.comparable_period_count
+            metrics["first_comparable_period"] = trend_metrics.first_comparable_period
+            metrics["last_comparable_period"] = trend_metrics.last_comparable_period
+            metrics["comparison_excluded_partial_period"] = (
+                trend_metrics.comparison_excluded_partial_period
+            )
+            # Turkish direction words for template engines that fill
+            # {placeholder} slots directly from metrics (app.intelligence
+            # RULE_WORDINGS) — never invented, just a fixed translation of the
+            # already-computed direction verdict.
+            metrics["slope_direction_tr"] = _SLOPE_DIRECTION_TR.get(trend_metrics.slope_direction)
+            metrics["endpoint_direction_tr"] = _ENDPOINT_DIRECTION_TR.get(
+                trend_metrics.endpoint_direction
+            )
 
         if data_shape == DataShape.CATEGORICAL and labeled:
             ranked = calculators.rank(labeled)
@@ -248,7 +383,7 @@ class AnalyticsEngine:
                     label: round(value / grand_total * 100, 2) for label, value in ranked
                 }
 
-        return metrics
+        return _ComputedMetrics(scalar=metrics, trend_metrics=trend_metrics)
 
     # ── Insight preparation (Part 5 — consumed by a future LLM) ───────────────
 
@@ -277,9 +412,7 @@ class AnalyticsEngine:
             insights["value"] = values[0]
         return insights
 
-    def _analytics_type(
-        self, intents: list[AnalyticsIntent], data_shape: DataShape
-    ) -> str:
+    def _analytics_type(self, intents: list[AnalyticsIntent], data_shape: DataShape) -> str:
         primary = self.intent_detector.primary_intent(intents)
         if primary is not AnalyticsIntent.GENERAL:
             return primary.value
@@ -328,5 +461,18 @@ class AnalyticsEngine:
                 ),
                 "row_count": result.row_count,
                 "duration_ms": result.duration_ms,
+                "metric_summary_count": len(result.metric_summaries),
+                "metric_summary_ids": sorted(result.metric_summaries),
+                "comparison_category_count": result.comparison_category_count,
+                "comparison_sufficient": result.comparison_sufficient,
+                "partial_periods": (
+                    result.trend_metrics.partial_periods if result.trend_metrics else []
+                ),
+                "excluded_periods": (
+                    result.trend_metrics.excluded_periods if result.trend_metrics else []
+                ),
+                "comparable_period_count": (
+                    result.trend_metrics.comparable_period_count if result.trend_metrics else None
+                ),
             },
         )

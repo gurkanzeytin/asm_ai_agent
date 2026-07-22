@@ -1,58 +1,21 @@
 import { useMemo } from "react";
 import { tr } from "@/locales/tr";
-type Row = Record<string, string | number | null>;
+import { computeStats, type SqlStatsRow } from "./sql-summary-stats-data";
+
 interface Props {
   columns: string[];
-  rows: Row[];
-}
-interface ColStat {
-  column: string;
-  type: "numeric" | "text" | "mixed" | "empty";
-  nulls: number;
-  unique: number;
-  min?: number;
-  max?: number;
-  avg?: number;
-  sum?: number;
-}
-function computeStats(columns: string[], rows: Row[]): ColStat[] {
-  return columns.map((c) => {
-    const values = rows.map((r) => r[c]);
-    const nonNull = values.filter((v) => v != null);
-    const nulls = values.length - nonNull.length;
-    const unique = new Set(nonNull.map((v) => String(v))).size;
-    const nums = nonNull.filter((v) => typeof v === "number") as number[];
-    const allNumeric = nonNull.length > 0 && nums.length === nonNull.length;
-    if (nonNull.length === 0) {
-      return { column: c, type: "empty", nulls, unique };
-    }
-    if (allNumeric) {
-      const sum = nums.reduce((a, b) => a + b, 0);
-      return {
-        column: c,
-        type: "numeric",
-        nulls,
-        unique,
-        min: Math.min(...nums),
-        max: Math.max(...nums),
-        avg: sum / nums.length,
-        sum,
-      };
-    }
-    if (nums.length > 0) return { column: c, type: "mixed", nulls, unique };
-    return { column: c, type: "text", nulls, unique };
-  });
+  rows: SqlStatsRow[];
 }
 const fmt = (n: number) => {
   if (!Number.isFinite(n)) return "—";
   if (Math.abs(n) >= 1000 || Number.isInteger(n))
-    return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
-  return n.toFixed(3);
+    return n.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+  return n.toLocaleString("tr-TR", { maximumFractionDigits: 3 });
 };
 export function SqlSummaryStats({ columns, rows }: Props) {
   const stats = useMemo(() => computeStats(columns, rows), [columns, rows]);
   return (
-    <div className="border-b border-border/60 bg-background/40 px-3 py-3">
+    <section className="border-b border-border/60 bg-background/30 px-4 py-4">
       <div className="mb-2 flex items-center justify-between">
         <h4 className="text-xs font-semibold text-foreground">{tr.sqlStats.title}</h4>
         <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -117,6 +80,6 @@ export function SqlSummaryStats({ columns, rows }: Props) {
           </tbody>
         </table>
       </div>
-    </div>
+    </section>
   );
 }

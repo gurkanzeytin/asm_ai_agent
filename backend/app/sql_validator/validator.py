@@ -42,7 +42,7 @@ class SQLValidator(ISQLValidator):
         allowed_objects: list[str] | None = None,
         default_schema: str | None = None,
     ):
-        self.dialect = dialect or getattr(settings, "SQL_DIALECT", "sqlite")
+        self.dialect = dialect or getattr(settings, "SQL_DIALECT", "tsql")
         self._allowed_objects = allowed_objects
         self._default_schema = default_schema
 
@@ -160,8 +160,29 @@ class SQLValidator(ISQLValidator):
                         reason=f"Unsafe function '{func_name}' detected inside the query.",
                     )
 
+        # Reject SQL comments outright: generated queries must never contain them,
+        # and comments are a known vector for smuggling extra statements.
+        literal_free_sql = strip_string_literals(cleaned_sql)
+        if "--" in literal_free_sql or "/*" in literal_free_sql:
+            logger.error("SQL comment detected in query text.")
+            return SQLValidationResult(
+                valid=False,
+                statement_type=statement_type,
+                reason="SQL comments are not permitted in queries.",
+            )
+
+        # Reject system catalogs and temporary tables regardless of whitelist configuration
+        system_violation = self._check_system_objects(expression)
+        if system_violation:
+            logger.error(f"System object violation: {system_violation}")
+            return SQLValidationResult(
+                valid=False,
+                statement_type=statement_type,
+                reason=system_violation,
+            )
+
         # Defense-in-depth keyword scan (AST validation above is the primary control)
-        keyword_match = FORBIDDEN_KEYWORD_PATTERN.search(strip_string_literals(cleaned_sql))
+        keyword_match = FORBIDDEN_KEYWORD_PATTERN.search(literal_free_sql)
         if keyword_match:
             logger.error(f"Forbidden keyword detected in SQL text: {keyword_match.group(0)}.")
             return SQLValidationResult(
@@ -202,6 +223,17 @@ class SQLValidator(ISQLValidator):
             normalized_sql=normalized_sql,
             statement_type=statement_type,
         )
+
+    def _check_system_objects(self, expression: exp.Expression) -> str | None:
+        """Rejects system catalog access and temporary tables independent of the whitelist."""
+        for table in expression.find_all(exp.Table):
+            schema_part = (table.db or "").lower()
+            if schema_part in {"sys", "information_schema"}:
+                return f"Access to system object '{table.db}.{table.name}' is not permitted."
+            # sqlglot strips the '#' prefix from the parsed name; check the rendered form
+            if table.name.startswith("#") or table.sql(dialect=self.dialect).startswith("#"):
+                return f"Temporary tables ('{table.name}') are not permitted."
+        return None
 
     def _check_allowed_objects(self, expression: exp.Expression) -> str | None:
         """Verifies that every referenced table/view is inside the configured whitelist.

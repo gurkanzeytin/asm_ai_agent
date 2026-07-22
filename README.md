@@ -96,19 +96,49 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Environment Configuration
+### 2. Database (Microsoft SQL Server)
+
+The runtime database is **Microsoft SQL Server** — there is no local/dummy database:
+
+- **Server**: `ASMPSHISBCK2` (default instance)
+- **Database**: `PusulaComed`
+- **Allowed object**: `dbo.vw_RandevuRaporu` (VIEW — the only queryable object)
+- **Authentication**: Windows Authentication (the Windows identity of the process
+  running the backend; no username/password is ever configured)
+
+Requirements:
+
+- **Microsoft ODBC Driver 18 for SQL Server** must be installed on the host.
+- The Windows account running the backend needs SELECT permission on the view.
+
+The application is strictly **read-only**: the SQL validation layer only accepts a
+single SELECT (or CTE ending in SELECT) referencing `dbo.vw_RandevuRaporu`, and
+rejects DML/DDL, EXEC, multiple statements, SQL comments, system catalogs, temporary
+tables, and any other object.
+
+Verify connectivity safely (prints no row data):
+
+```bash
+cd backend
+python scripts/verify_mssql_connection.py
+```
+
+### 3. Environment Configuration
 Create a `.env` file mapping configurations:
 
 ```bash
 cp .env.example .env
 ```
 
+Key database variables (see `.env.example` for the full list): `DB_SERVER`,
+`DB_DATABASE`, `DB_DRIVER`, `DATABASE_SCHEMA`, `DATABASE_ALLOWED_OBJECTS`.
+
 Ensure your Ollama local service is running (configured with Qwen3 8B model):
 ```bash
 ollama run qwen3:8b
 ```
 
-### 3. Startup dev server
+### 4. Startup dev server
 Change directories to `backend/` and run uvicorn:
 
 ```bash
@@ -118,7 +148,7 @@ uvicorn app.main:app --reload
 - **Interactive docs UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
 - **Status diagnostics**: [http://localhost:8000/api/v1/health](http://localhost:8000/api/v1/health)
 
-### 4. Tests
+### 5. Tests
 Execute tests from the `backend/` directory:
 
 ```bash

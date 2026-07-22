@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -65,4 +65,89 @@ class WorkflowResult(BaseModel):
     outcome: Optional[str] = Field(
         default=None,
         description="Controlled AgentOutcome value describing how the run resolved (AG-022).",
+    )
+
+    # Conversational context / chat-memory diagnostics (optional, backward compatible).
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Resolved session key actually used for this run — always present even "
+        "when the client omitted session_id (an ephemeral one is generated per-request).",
+    )
+    follow_up_detected: bool = Field(
+        default=False,
+        description="Whether a deterministic follow-up signal fired for this question.",
+    )
+    follow_up_confidence: float = Field(
+        default=1.0, description="Deterministic confidence of the follow-up resolution."
+    )
+    follow_up_signals: List[str] = Field(
+        default_factory=list, description="Names of the follow-up signals that fired."
+    )
+    context_applied: bool = Field(
+        default=False, description="Whether context enrichment was applied to the question."
+    )
+    inherited_fields: List[str] = Field(
+        default_factory=list, description="Field names inherited from session context."
+    )
+    overridden_fields: List[str] = Field(
+        default_factory=list,
+        description="Field names the current turn stated explicitly, replacing memory.",
+    )
+    memory_updated: bool = Field(
+        default=False,
+        description="Whether session context was written after this run (write policy: only "
+        "on a successful, data-bearing workflow outcome).",
+    )
+    memory_turn_count: Optional[int] = Field(
+        default=None, description="Retained turn count for the session after this run."
+    )
+    memory_expired: bool = Field(
+        default=False,
+        description="Whether the session had no live (non-expired) context at the START of "
+        "this turn — i.e. this turn began a fresh conversation window.",
+    )
+
+    # Typed analytical follow-up signals (dimensions/metrics/filters/ranking/
+    # limit/time_grain/comparison_targets — see app.context.analytical_signals).
+    explicit_context_fields: List[str] = Field(
+        default_factory=list,
+        description="Analytical field names the current turn stated explicitly.",
+    )
+    inherited_context_fields: List[str] = Field(
+        default_factory=list, description="Field names inherited from session context."
+    )
+    overridden_context_fields: List[str] = Field(
+        default_factory=list,
+        description="Field names the current turn stated explicitly, replacing memory.",
+    )
+    removed_context_fields: List[str] = Field(
+        default_factory=list,
+        description="Field names that held a value in context but were cleared/replaced "
+        "this turn (e.g. 'dimensions' when branch was replaced by doctor).",
+    )
+    resolved_metrics: List[str] = Field(
+        default_factory=list, description="This turn's resolved metric catalog ids."
+    )
+    resolved_dimensions: List[str] = Field(
+        default_factory=list, description="This turn's resolved grouping dimensions."
+    )
+    resolved_filters: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="This turn's resolved filter values by family (status_filters, "
+        "department_filters, branch_filters, doctor_filters, service_filters, "
+        "category_filters, source_filters).",
+    )
+    resolved_time_grain: Optional[str] = Field(
+        default=None, description="This turn's resolved time grain: day|week|month|quarter|year."
+    )
+    resolved_ranking: Optional[str] = Field(
+        default=None, description="This turn's resolved ranking direction: top|bottom."
+    )
+    resolved_limit: Optional[int] = Field(
+        default=None, description="This turn's resolved explicit row/group limit."
+    )
+    pending_clarification_field: Optional[str] = Field(
+        default=None,
+        description="Name of a field still awaiting clarification after this turn "
+        "(e.g. 'ranking_metric'), or None when nothing is pending.",
     )

@@ -14,43 +14,34 @@ from app.database_intelligence.models import DatabaseContext
 from app.database_intelligence.synonyms import SYNONYM_MAP
 from app.prompts.loader import PromptLoader
 from app.prompts.renderer import IPromptRenderer
+from app.semantics import view_mapping
 from app.services.exceptions import PromptServiceException
 from app.services.interfaces import IPromptService
 
 logger = logging.getLogger(__name__)
 
 # Dialect-specific SQL generation guidance rendered into sql_generation.md.
+# SQL Server (T-SQL) is the only runtime dialect.
 _DIALECT_RULES: dict[str, str] = {
-    "sqlite": (
-        "SQLite dialect rules:\n"
-        "- Limit result size with LIMIT (e.g. LIMIT 100).\n"
-        "- Use strftime('%Y-%m', <date_col>) AS ay ... GROUP BY ay ORDER BY ay for\n"
-        "  monthly aggregation, and date('now') for the current date."
-    ),
     "tsql": (
         "SQL Server (T-SQL) dialect rules:\n"
-        "- Limit result size with SELECT TOP (100) ... — NEVER use LIMIT or OFFSET-less\n"
-        "  SQLite syntax.\n"
+        "- Limit result size with SELECT TOP (100) ... — NEVER use LIMIT.\n"
         "- Use GETDATE() for the current date, never date('now') or strftime.\n"
         "- Use DATEADD, DATEDIFF, CAST, and CONVERT for date and type operations.\n"
         "- Use FORMAT(<date_col>, 'yyyy-MM') AS ay ... GROUP BY FORMAT(<date_col>, 'yyyy-MM')\n"
         "  ORDER BY ay for monthly aggregation.\n"
         "- Query ONLY the allowed view listed in Schema (e.g. dbo.vw_RandevuRaporu);\n"
         "  never reference any other table, view, procedure, or database.\n"
-        "- Always schema-qualify the view name (dbo.vw_RandevuRaporu)."
-    ),
-    "postgres": (
-        "PostgreSQL dialect rules:\n"
-        "- Limit result size with LIMIT (e.g. LIMIT 100).\n"
-        "- Use to_char(<date_col>, 'YYYY-MM') AS ay ... GROUP BY ay ORDER BY ay for\n"
-        "  monthly aggregation, and CURRENT_DATE for the current date."
+        "- Always schema-qualify the view name (dbo.vw_RandevuRaporu).\n"
+        "- Use square brackets around identifiers only when genuinely necessary.\n"
+        "- Filter Turkish text values exactly as stored in the database."
     ),
 }
 
 
 def get_dialect_rules(dialect: str) -> str:
     """Returns the prompt guidance block for the configured SQL dialect."""
-    return _DIALECT_RULES.get(dialect, _DIALECT_RULES["sqlite"])
+    return _DIALECT_RULES.get(dialect, _DIALECT_RULES["tsql"])
 
 
 class PromptService(IPromptService):
@@ -165,7 +156,7 @@ class PromptService(IPromptService):
             t0 = time.perf_counter()
             system_prompt = await self.render_prompt("system_prompt.md", question, {})
 
-            dialect = getattr(settings, "SQL_DIALECT", "sqlite")
+            dialect = getattr(settings, "SQL_DIALECT", "tsql")
             variables = {
                 "dialect": dialect,
                 "dialect_rules": get_dialect_rules(dialect),
@@ -204,7 +195,7 @@ class PromptService(IPromptService):
                     execution_time_ms=0.0,
                     success=True,
                     executed_at=datetime.now(UTC),
-                    database_provider="sqlite",
+                    database_provider="mssql",
                 )
 
             # Truncate rows if necessary to protect against large datasets
@@ -267,6 +258,27 @@ class PromptService(IPromptService):
                     for fk in table.foreign_keys
                 ]
                 lines.append(f"  Foreign Keys: {', '.join(fks)}")
+            lines.append("")
+        for view in context.views:
+            lines.append(f"View: {view.name}")
+            if view.comment:
+                lines.append(f"  Description: {view.comment}")
+            if view.columns:
+                # Trim COLLATE suffixes from type names to keep the prompt compact
+                cols = [
+                    f"{col.name} ({col.type_name.split(' COLLATE')[0]})" for col in view.columns
+                ]
+                lines.append(f"  Columns: {', '.join(cols)}")
+                notes = [
+                    f"    - {col.name}: {col.comment}" for col in view.columns if col.comment
+                ]
+                if notes:
+                    lines.append("  Column notes:")
+                    lines.extend(notes)
+            mapping_lines = view_mapping.concept_mapping_lines(view.name)
+            if mapping_lines:
+                lines.append("  User-language mapping (kavram -> sutun):")
+                lines.extend(mapping_lines)
             lines.append("")
         return "\n".join(lines).strip()
 

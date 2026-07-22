@@ -1,0 +1,156 @@
+{
+  "dbo.vw_RandevuRaporu": {
+    "comment": "Randevu raporlama görünümü: her satır bir randevu kaydıdır. Salt-okunur analitik sorguların tek veri kaynağıdır.",
+    "columns": {
+      "Id": "Randevu kaydının benzersiz kimliği.",
+      "BaslangicTarihi": "Randevu başlangıç tarihi ve saati (datetime).",
+      "BitisTarihi": "Randevu bitiş tarihi ve saati (datetime).",
+      "RandevuSuresi": "Randevu süresi (dakika).",
+      "RandevuDurumu": "Randevu durumu; okunabilir metin. Doğrulanmış değerler: 'Beklemede', 'Gelmedi', 'Gerçekleşti', 'Giriş Yapılmış', 'İşlem Sürmekte'. 'İptal' değeri veride bulunmaz. Değerleri tam olarak saklandığı gibi filtrele.",
+      "HastaId": "Hastanın kimlik numarası (iç sistem ID).",
+      "RandevuTipiAdi": "Randevu tipi; okunabilir metin. Bilinen değerler: 'Poliklinik', 'Ameliyat', 'Radyoloji', 'Kemoterapi' (başka değerler de olabilir).",
+      "RandevuyuVeren": "Randevuyu oluşturan/atayan kişi veya sistem. DOKTOR DEĞİLDİR.",
+      "HastaAdi": "Hastanın adı. Doktor/kaynak alanlarıyla karıştırma.",
+      "HastaSoyadi": "Hastanın soyadı.",
+      "DogumTarihi": "Hastanın doğum tarihi (date).",
+      "CinsiyetId": "Hastanın cinsiyet kodu: 'E' (erkek), 'K' (kadın), 'D' (diğer/bilinmiyor).",
+      "HastaId2": "İkincil hasta tanımlayıcısı (hasta no).",
+      "Uyruk": "Hastanın uyruğu / ülke adı.",
+      "BolumId": "Bölüm kimlik numarası (ID).",
+      "DoktorId": "Doktor kimlik numarası (ID).",
+      "HizmetAdi": "Verilen hizmetin adı.",
+      "ProtokolIslemState": "Muayene/protokol işlem durumu (sayısal kod).",
+      "KategoriAdi": "Randevu kategorisi adı.",
+      "GenelRandevuKaynakAdi": "Randevu kaynağı: çoğunlukla doktor adı olabilir ancak başka kaynaklar da (cihaz, oda, birim) içerebilir. Sadece doktor varsaymayın.",
+      "GenelRandevuBolumAdi": "Raporlamada kullanılan pratik bölüm adı. Bölüm bazlı analizlerde bu alanı kullan.",
+      "ProtokolAcilisTarihi": "Protokol açılış / kabul tarihi (smalldatetime).",
+      "SubeAdi": "Şube (hastane birimi) adı.",
+      "CreatedDate": "Randevu kaydının oluşturulma (kayıt) tarihi."
+    },
+    "concepts": {
+      "Doctor": {
+        "terms": [
+          "doktor",
+          "hekim",
+          "uzman"
+        ],
+        "column": "GenelRandevuKaynakAdi",
+        "note": "Randevu kaynağı; kullanıcı 'doktor/hekim' dediğinde bu sütun kullanılır. RandevuyuVeren veya HastaAdi ile karıştırılmaz."
+      },
+      "Creator": {
+        "terms": [
+          "randevuyu veren",
+          "randevu veren",
+          "olusturan",
+          "kaydeden",
+          "randevuyu acan"
+        ],
+        "column": "RandevuyuVeren",
+        "note": "Randevuyu oluşturan/atayan kişi veya sistem; doktor değildir."
+      },
+      "Department": {
+        "terms": [
+          "bolum",
+          "brans",
+          "klinik",
+          "poliklinik",
+          "servis"
+        ],
+        "column": "GenelRandevuBolumAdi",
+        "note": "Raporlamada kullanılan pratik bölüm adı; KategoriAdi değildir."
+      },
+      "Branch": {
+        "terms": [
+          "sube",
+          "hastane",
+          "lokasyon"
+        ],
+        "column": "SubeAdi",
+        "note": "Şube / hastane lokasyonu; bölüm (GenelRandevuBolumAdi) değildir."
+      },
+      "Patient": {
+        "terms": [
+          "hasta"
+        ],
+        "column": "HastaId",
+        "columns": [
+          "HastaId",
+          "HastaAdi",
+          "HastaSoyadi"
+        ],
+        "note": "Hasta sayımı HastaId üzerinden yapılır; kimlik/iletişim alanları varsayılan olarak seçilmez."
+      },
+      "AppointmentStatus": {
+        "terms": [
+          "randevu durumu",
+          "durum"
+        ],
+        "column": "RandevuDurumu"
+      },
+      "AppointmentType": {
+        "terms": [
+          "randevu tipi",
+          "randevu turu",
+          "tip",
+          "tur"
+        ],
+        "column": "RandevuTipiAdi"
+      }
+    },
+    "date_semantics": {
+      "default_column": "BaslangicTarihi",
+      "rules": [
+        {
+          "column": "ProtokolAcilisTarihi",
+          "terms": [
+            "protokol"
+          ],
+          "note": "'Protokolü bugün açılanlar' protokol açılış tarihini kullanır."
+        },
+        {
+          "column": "CreatedDate",
+          "terms": [
+            "olusturulan",
+            "olusturuldu",
+            "kaydedilen",
+            "kaydedildi",
+            "eklenen"
+          ],
+          "note": "'Bugün oluşturulan randevular' kayıt tarihini (CreatedDate) kullanır."
+        }
+      ]
+    },
+    "measures": {
+      "distinct_patients": {
+        "terms": [
+          "farkli hasta",
+          "tekil hasta",
+          "kac hasta",
+          "hasta sayisi"
+        ],
+        "expression": "COUNT(DISTINCT HastaId)",
+        "note": "Farklı hasta sayısı; randevu sayısı (COUNT(*)) ile karıştırılmaz."
+      },
+      "appointment_count": {
+        "terms": [
+          "randevu sayisi",
+          "randevu sayilari",
+          "randevularin sayisi",
+          "kac randevu"
+        ],
+        "expression": "COUNT(*)",
+        "note": "Randevu adedi; hasta sayısı ile karıştırılmaz."
+      }
+    },
+    "status_filters": {
+      "gerceklesen": "Gerçekleşti",
+      "gerceklesti": "Gerçekleşti",
+      "gelmeyen": "Gelmedi",
+      "gelmedi": "Gelmedi",
+      "bekleyen": "Beklemede",
+      "beklemede": "Beklemede",
+      "giris yapilmis": "Giriş Yapılmış",
+      "islem surmekte": "İşlem Sürmekte"
+    }
+  }
+}

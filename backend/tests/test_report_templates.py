@@ -25,7 +25,7 @@ def _query_result(
         execution_time_ms=1.0,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
 
 
@@ -109,7 +109,7 @@ def test_template_renderer_empty():
 
     assert rendered is not None
     assert rendered.template_name == "empty"
-    assert "uygun kayit bulunamadi" in rendered.markdown
+    assert "uygun kayıt bulunamadı" in rendered.markdown
 
 
 @pytest.mark.asyncio
@@ -148,7 +148,7 @@ async def test_report_service_routes_analytical_result_to_llm():
     llm_provider.get_metadata.return_value = {"provider": "mock-provider"}
     generator = AsyncMock(spec=IReportGenerator)
     generator.generate.return_value = LLMResponse(
-        content="# Analytical Report\n\nTrend summary",
+        content="# Analitik Rapor\n\nEğilim özeti",
         model="mock-model",
         latency_ms=25.0,
         prompt_tokens=10,
@@ -174,7 +174,7 @@ async def test_report_service_routes_analytical_result_to_llm():
 
     assert report.provider == "mock-provider"
     assert report.model == "mock-model"
-    assert report.title == "Analytical Report"
+    assert report.title == "Analitik Rapor"
     prompt_service.render_report_prompt.assert_called_once()
     generator.generate.assert_called_once_with("Rendered analytical prompt", llm_provider)
 
@@ -212,7 +212,7 @@ async def test_report_service_bypasses_llm_for_large_list_queries(question, sql,
 
     assert report.provider == "template"
     assert report.model == "table"
-    assert "Toplam 45 kayit listelenmistir." in report.markdown
+    assert "Toplam 45 kayıt listelenmiştir." in report.markdown
     prompt_service.render_report_prompt.assert_not_called()
     generator.generate.assert_not_called()
 

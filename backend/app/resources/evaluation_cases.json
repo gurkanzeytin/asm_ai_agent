@@ -1,0 +1,1813 @@
+{
+  "version": 1,
+  "view": "dbo.vw_RandevuRaporu",
+  "cases": [
+    {
+      "id": "E2E-RW-001",
+      "question": "Bu aralar hangi subede iptaller patlamis?",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "suite": "acceptance",
+      "blind": true,
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": true,
+        "answerable": false
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "SubeAdi",
+          "RandevuDurumu",
+          "BaslangicTarihi"
+        ],
+        "must_include_features": [
+          "conditional_aggregation",
+          "current_period",
+          "baseline_period",
+          "null_safe_division"
+        ],
+        "must_not_include_features": [
+          "raw_detail_projection",
+          "default_having_minimum_sample"
+        ]
+      },
+      "answer_requirements": {
+        "must_mention_assumptions": true,
+        "must_summarize_findings": true,
+        "must_not_return_generic_error": true,
+        "must_not_return_raw_row_dump": true
+      }
+    },
+    {
+      "id": "E2E-RW-002",
+      "question": "Gecen seneye kiyasla isler nasil gidiyor?",
+      "category": "multi_metric_performance",
+      "difficulty": "hard",
+      "suite": "acceptance",
+      "blind": true,
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": "multi_metric_performance",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate",
+          "unique_patient_count"
+        ],
+        "dimensions": [],
+        "sql_source": null,
+        "result_contract": null,
+        "raw_detail_allowed": false,
+        "clarification_required": false,
+        "answerable": true,
+        "baseline_period": "same_period_previous_year"
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "BaslangicTarihi",
+          "RandevuDurumu",
+          "HastaId"
+        ],
+        "must_include_features": [
+          "baseline_period"
+        ],
+        "must_not_include_features": [
+          "raw_detail_projection"
+        ]
+      },
+      "answer_requirements": {
+        "must_mention_assumptions": true,
+        "must_summarize_findings": true,
+        "must_not_return_generic_error": true,
+        "must_not_return_raw_row_dump": true
+      }
+    },
+    {
+      "id": "E2E-RW-003",
+      "question": "Kontrole gelenler en cok hangi tarafta?",
+      "category": "clarification",
+      "difficulty": "hard",
+      "suite": "acceptance",
+      "blind": true,
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "sql_source": null,
+        "result_contract": null,
+        "raw_detail_allowed": false,
+        "clarification_required": true,
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [],
+        "must_include_features": [],
+        "must_not_include_features": [
+          "guessed_dimension"
+        ]
+      },
+      "answer_requirements": {
+        "must_mention_assumptions": false,
+        "must_summarize_findings": false,
+        "must_not_return_generic_error": true,
+        "must_not_return_raw_row_dump": true
+      }
+    },
+    {
+      "id": "E2E-RW-004",
+      "question": "Randevusunu son dakika alanlarin gelme durumu nasil?",
+      "category": "cohort_analysis",
+      "difficulty": "hard",
+      "suite": "acceptance",
+      "blind": true,
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": "cohort_analysis",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CohortResult",
+        "raw_detail_allowed": false,
+        "clarification_required": false,
+        "answerable": true,
+        "cohort": "lead_time_under_24h"
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "CreatedDate",
+          "BaslangicTarihi",
+          "RandevuDurumu"
+        ],
+        "must_include_features": [
+          "conditional_aggregation",
+          "cohort_filter",
+          "null_safe_division"
+        ],
+        "must_not_include_features": [
+          "raw_detail_projection"
+        ]
+      },
+      "answer_requirements": {
+        "must_mention_assumptions": true,
+        "must_summarize_findings": true,
+        "must_not_return_generic_error": true,
+        "must_not_return_raw_row_dump": true
+      }
+    },
+    {
+      "id": "E2E-RW-005",
+      "question": "Doktorlar arasinda cok fark var mi?",
+      "category": "variance_analysis",
+      "difficulty": "hard",
+      "suite": "acceptance",
+      "blind": true,
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": "variance_analysis",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuKaynakAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "VarianceResult",
+        "raw_detail_allowed": false,
+        "clarification_required": false,
+        "answerable": true,
+        "minimum_sample_size": 20
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "GenelRandevuKaynakAdi"
+        ],
+        "must_include_features": [
+          "group_by"
+        ],
+        "must_not_include_features": [
+          "raw_detail_projection"
+        ]
+      },
+      "answer_requirements": {
+        "must_mention_assumptions": true,
+        "must_summarize_findings": true,
+        "must_not_return_generic_error": true,
+        "must_not_return_raw_row_dump": true
+      }
+    },
+    {
+      "id": "E2E-RW-006",
+      "question": "Bu ay ile gecen ayin randevu sayilarini karsilastir.",
+      "category": "period_comparison",
+      "difficulty": "medium",
+      "suite": "acceptance",
+      "blind": true,
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": "period_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "raw_detail_allowed": false,
+        "clarification_required": false,
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "BaslangicTarihi"
+        ],
+        "must_include_features": [
+          "conditional_aggregation",
+          "current_period",
+          "baseline_period",
+          "null_safe_division"
+        ],
+        "must_not_include_features": [
+          "raw_detail_projection"
+        ]
+      },
+      "answer_requirements": {
+        "must_mention_assumptions": false,
+        "must_summarize_findings": true,
+        "must_not_return_generic_error": true,
+        "must_not_return_raw_row_dump": true
+      }
+    },
+    {
+      "id": "E2E-RW-007",
+      "question": "Subelere gore gelmeme oranlari nedir?",
+      "category": "ratio",
+      "difficulty": "medium",
+      "suite": "acceptance",
+      "blind": true,
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": "ratio",
+        "metrics": [
+          "no_show_rate"
+        ],
+        "dimensions": [
+          "SubeAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "RatioResult",
+        "clarification_required": false,
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "SubeAdi",
+          "RandevuDurumu"
+        ],
+        "must_include_features": [
+          "group_by",
+          "conditional_aggregation",
+          "null_safe_division"
+        ],
+        "must_not_include_features": [
+          "raw_detail_projection",
+          "status_where_breaks_denominator"
+        ]
+      },
+      "answer_requirements": {
+        "must_mention_assumptions": false,
+        "must_summarize_findings": true,
+        "must_not_return_generic_error": true,
+        "must_not_return_raw_row_dump": true
+      }
+    },
+    {
+      "id": "E2E-RW-008",
+      "question": "2022 Aralik ile 2023 Mart ayi randevu sayilarini karsilastir.",
+      "category": "period_comparison",
+      "difficulty": "hard",
+      "suite": "acceptance",
+      "blind": true,
+      "requires_live_db": true,
+      "expected": {
+        "analysis_type": "period_comparison",
+        "metrics": ["appointment_count"],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "clarification_required": false,
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": ["BaslangicTarihi"],
+        "must_include_features": ["conditional_aggregation", "current_period", "baseline_period", "null_safe_division"],
+        "must_not_include_features": ["raw_detail_projection"]
+      }
+    },
+    {
+      "id": "E2E-RW-009",
+      "question": "2024 Subat ile 2024 Mart ayi randevu sayilarini karsilastir.",
+      "category": "period_comparison",
+      "difficulty": "hard",
+      "suite": "acceptance",
+      "blind": true,
+      "requires_live_db": true,
+      "expected": {
+        "analysis_type": "period_comparison",
+        "metrics": ["appointment_count"],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "clarification_required": false,
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": ["BaslangicTarihi"],
+        "must_include_features": ["conditional_aggregation", "current_period", "baseline_period", "null_safe_division"],
+        "must_not_include_features": ["raw_detail_projection"]
+      }
+    },
+    {
+      "id": "E2E-RW-010",
+      "question": "2023 Ocak ile 2023 Haziran ayi randevu sayilarini karsilastir.",
+      "category": "period_comparison",
+      "difficulty": "hard",
+      "suite": "acceptance",
+      "blind": true,
+      "requires_live_db": true,
+      "expected": {
+        "analysis_type": "period_comparison",
+        "metrics": ["appointment_count"],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "clarification_required": false,
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": ["BaslangicTarihi"],
+        "must_include_features": ["conditional_aggregation", "current_period", "baseline_period", "null_safe_division"],
+        "must_not_include_features": ["raw_detail_projection"]
+      }
+    },
+    {
+      "id": "E2E-RW-011",
+      "question": "2022 ile 2023 randevu sayilarini karsilastir.",
+      "category": "period_comparison",
+      "difficulty": "hard",
+      "suite": "acceptance",
+      "blind": true,
+      "requires_live_db": true,
+      "expected": {
+        "analysis_type": "period_comparison",
+        "metrics": ["appointment_count"],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "clarification_required": false,
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": ["BaslangicTarihi"],
+        "must_include_features": ["conditional_aggregation", "current_period", "baseline_period", "null_safe_division"],
+        "must_not_include_features": ["raw_detail_projection"]
+      }
+    },
+    {
+      "id": "BLIND-CAS-001",
+      "question": "Hastanede bugun trafik nasil, randevu var mi yogunluk?",
+      "category": "casual",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "count",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CountResult",
+        "clarification_required": false,
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "Id"
+        ],
+        "must_include_features": [],
+        "must_not_include_features": [
+          "raw_detail_projection"
+        ]
+      }
+    },
+    {
+      "id": "BLIND-CAS-002",
+      "question": "Bugun ortalik sakin mi, kac randevu donmus sisteme?",
+      "category": "casual",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "count",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CountResult",
+        "clarification_required": false,
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "Id"
+        ],
+        "must_include_features": [],
+        "must_not_include_features": [
+          "raw_detail_projection"
+        ]
+      }
+    },
+    {
+      "id": "BLIND-CAS-003",
+      "question": "Randevu tarafinda genel sayi ne alemde?",
+      "category": "casual",
+      "difficulty": "easy",
+      "blind": true,
+      "expected": {
+        "analysis_type": "count",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CountResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-CAS-004",
+      "question": "Subelerde is yogunlugu nasil dagiliyor?",
+      "category": "casual",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "distribution",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "SubeAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "DistributionResult",
+        "clarification_required": false,
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "SubeAdi"
+        ],
+        "must_include_features": [
+          "group_by"
+        ],
+        "must_not_include_features": [
+          "raw_detail_projection"
+        ]
+      }
+    },
+    {
+      "id": "BLIND-CAS-005",
+      "question": "Bolumlerde kalabalik nerede birikmis?",
+      "category": "casual",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "distribution",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "DistributionResult",
+        "clarification_required": false,
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "GenelRandevuBolumAdi"
+        ],
+        "must_include_features": [
+          "group_by"
+        ],
+        "must_not_include_features": [
+          "raw_detail_projection"
+        ]
+      }
+    },
+    {
+      "id": "BLIND-CAS-006",
+      "question": "Kanal kanal randevu akisi nasil?",
+      "category": "casual",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "distribution",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuKaynakAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "DistributionResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-CAS-007",
+      "question": "Randevu durumlari soyle bir ozetlensin.",
+      "category": "casual",
+      "difficulty": "easy",
+      "blind": true,
+      "expected": {
+        "analysis_type": "distribution",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "RandevuDurumu"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "DistributionResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-CAS-008",
+      "question": "Hasta tarafinda tekil sayi kac gorunuyor?",
+      "category": "casual",
+      "difficulty": "easy",
+      "blind": true,
+      "expected": {
+        "analysis_type": "distinct_count",
+        "metrics": [
+          "unique_patient_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CountResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-CAS-009",
+      "question": "Online mi telefon mu, kaynaklarin payi nasil?",
+      "category": "casual",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "distribution",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuKaynakAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "DistributionResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-CAS-010",
+      "question": "Hangi hizmetlerde randevu yigilmis?",
+      "category": "casual",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "distribution",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "HizmetAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "DistributionResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-RATE-001",
+      "question": "Iptaller toplam is icinde ne kadar yer kapliyor?",
+      "category": "unanswerable",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": false,
+        "answerable": false
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "RandevuDurumu"
+        ],
+        "must_include_features": [
+          "null_safe_division"
+        ],
+        "must_not_include_features": [
+          "status_where_breaks_denominator"
+        ]
+      }
+    },
+    {
+      "id": "BLIND-RATE-002",
+      "question": "Gelmeyenlerin payi ne durumda?",
+      "category": "implicit_ratio",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "ratio",
+        "metrics": [
+          "no_show_rate"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "RatioResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-RATE-003",
+      "question": "Gerceklesenlerin yuzdesi kac civari?",
+      "category": "implicit_ratio",
+      "difficulty": "easy",
+      "blind": true,
+      "expected": {
+        "analysis_type": "ratio",
+        "metrics": [
+          "completed_appointment_rate"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "RatioResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-RATE-004",
+      "question": "Sube sube gelmeme orani nasil?",
+      "category": "implicit_ratio",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "ratio",
+        "metrics": [
+          "no_show_rate"
+        ],
+        "dimensions": [
+          "SubeAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "RatioResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-RATE-005",
+      "question": "Bolumlerin iptal paylarini yan yana ver.",
+      "category": "unanswerable",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": false,
+        "answerable": false
+      }
+    },
+    {
+      "id": "BLIND-RATE-006",
+      "question": "Kaynaklara gore gelmeyen hasta orani nedir?",
+      "category": "implicit_ratio",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "ratio",
+        "metrics": [
+          "no_show_rate"
+        ],
+        "dimensions": [
+          "GenelRandevuKaynakAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "RatioResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-RATE-007",
+      "question": "Ayni gun alinan randevularin payi nedir?",
+      "category": "implicit_ratio",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "ratio",
+        "metrics": [
+          "same_day_booking_rate"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "RatioResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-RATE-008",
+      "question": "Protokole donusenlerin orani nasil?",
+      "category": "implicit_ratio",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "conversion",
+        "metrics": [
+          "protocol_conversion_rate"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "RatioResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-RATE-009",
+      "question": "Telefon doluluk orani kac?",
+      "category": "unanswerable",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": false,
+        "answerable": false
+      }
+    },
+    {
+      "id": "BLIND-RATE-010",
+      "question": "Subelerde gerceklesme yuzdesi nasil ayrisiyor?",
+      "category": "implicit_ratio",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "ratio",
+        "metrics": [
+          "completed_appointment_rate"
+        ],
+        "dimensions": [
+          "SubeAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "RatioResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-PER-001",
+      "question": "Bu ay gecen aya gore arttik mi?",
+      "category": "period_comparison",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "period_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "clarification_required": false,
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "BaslangicTarihi"
+        ],
+        "must_include_features": [
+          "current_period",
+          "baseline_period"
+        ],
+        "must_not_include_features": [
+          "raw_detail_projection"
+        ]
+      }
+    },
+    {
+      "id": "BLIND-PER-002",
+      "question": "Son donem ile onceki donem randevu farki ne?",
+      "category": "period_comparison",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "adaptive_time_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-PER-003",
+      "question": "Iptal orani gecen aya gore degisti mi?",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": false,
+        "answerable": false
+      }
+    },
+    {
+      "id": "BLIND-PER-004",
+      "question": "Sube bazinda bu donem onceki doneme gore ne durumda?",
+      "category": "period_comparison",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "period_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "SubeAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-PER-005",
+      "question": "Gecen haftadan bu haftaya randevu sayisi ne oldu?",
+      "category": "period_comparison",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "period_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-PER-006",
+      "question": "Bu yil gecen yila gore randevu hacmi nasil?",
+      "category": "period_comparison",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "baseline_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "clarification_required": false,
+        "answerable": true,
+        "baseline_period": "same_period_previous_year"
+      }
+    },
+    {
+      "id": "BLIND-PER-007",
+      "question": "Ay ay randevu trendini goster.",
+      "category": "period_comparison",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "time_trend",
+        "metrics": [
+          "monthly_appointment_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "TrendResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-PER-008",
+      "question": "Gunlere gore son haftanin randevu akisina bak.",
+      "category": "period_comparison",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "time_trend",
+        "metrics": [
+          "daily_appointment_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "TrendResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-PER-009",
+      "question": "Bolumlerde bu ay gecen aya gore fark var mi?",
+      "category": "period_comparison",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "period_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-PER-010",
+      "question": "Bu aralar randevular nasil seyrediyor?",
+      "category": "period_comparison",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "adaptive_time_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-COH-001",
+      "question": "Son anda randevu alanlar geliyor mu?",
+      "category": "cohort",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "cohort_analysis",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CohortResult",
+        "clarification_required": false,
+        "answerable": true,
+        "cohort": "lead_time_under_24h"
+      }
+    },
+    {
+      "id": "BLIND-COH-002",
+      "question": "Gunu gunune alan randevularda iptal nasil?",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": false,
+        "answerable": false
+      }
+    },
+    {
+      "id": "BLIND-COH-003",
+      "question": "Son dakika randevularin gelmeme oranina bak.",
+      "category": "cohort",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "cohort_analysis",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CohortResult",
+        "clarification_required": false,
+        "answerable": true,
+        "cohort": "lead_time_under_24h"
+      }
+    },
+    {
+      "id": "BLIND-COH-004",
+      "question": "Randevuyu gec alan hastalar gercekten geliyor mu?",
+      "category": "cohort",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "cohort_analysis",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CohortResult",
+        "clarification_required": false,
+        "answerable": true,
+        "cohort": "lead_time_under_24h"
+      }
+    },
+    {
+      "id": "BLIND-COH-005",
+      "question": "24 saat kala alinan randevularin durumu nedir?",
+      "category": "cohort",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "cohort_analysis",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CohortResult",
+        "clarification_required": false,
+        "answerable": true,
+        "cohort": "lead_time_under_24h"
+      }
+    },
+    {
+      "id": "BLIND-COH-006",
+      "question": "Acele randevu alanlarda no show var mi?",
+      "category": "cohort",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "cohort_analysis",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CohortResult",
+        "clarification_required": false,
+        "answerable": true,
+        "cohort": "lead_time_under_24h"
+      }
+    },
+    {
+      "id": "BLIND-COH-007",
+      "question": "Son dakika alanlar subelere gore farkli mi?",
+      "category": "cohort",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "cohort_analysis",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate"
+        ],
+        "dimensions": [
+          "SubeAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "CohortResult",
+        "clarification_required": false,
+        "answerable": true,
+        "cohort": "lead_time_under_24h"
+      }
+    },
+    {
+      "id": "BLIND-COH-008",
+      "question": "Gec alinan randevular bolumlerde nasil sonuc vermis?",
+      "category": "cohort",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "cohort_analysis",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "CohortResult",
+        "clarification_required": false,
+        "answerable": true,
+        "cohort": "lead_time_under_24h"
+      }
+    },
+    {
+      "id": "BLIND-COH-009",
+      "question": "Son dakika randevu davranisini ozetle.",
+      "category": "cohort",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "cohort_analysis",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CohortResult",
+        "clarification_required": false,
+        "answerable": true,
+        "cohort": "lead_time_under_24h"
+      }
+    },
+    {
+      "id": "BLIND-COH-010",
+      "question": "Randevusunu son anda alan hasta kitlesi nasil?",
+      "category": "cohort",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "cohort_analysis",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CohortResult",
+        "clarification_required": false,
+        "answerable": true,
+        "cohort": "lead_time_under_24h"
+      }
+    },
+    {
+      "id": "BLIND-PERF-001",
+      "question": "Isler nasil gidiyor, tablo iyi mi?",
+      "category": "vague_performance",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "multi_metric_performance",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate",
+          "unique_patient_count"
+        ],
+        "dimensions": [],
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-PERF-002",
+      "question": "Son zamanlarda durumumuz nasil?",
+      "category": "vague_performance",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "adaptive_time_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-PERF-003",
+      "question": "Genel gidisat iyiye mi gidiyor?",
+      "category": "vague_performance",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "multi_metric_performance",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate",
+          "unique_patient_count"
+        ],
+        "dimensions": [],
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-PERF-004",
+      "question": "Subelerde performans ozeti cikar.",
+      "category": "vague_performance",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": true,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-PERF-005",
+      "question": "Bu aralar randevu tarafinda gariplik var mi?",
+      "category": "vague_performance",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "adaptive_time_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-PERF-006",
+      "question": "Hangi sube son donemde parlamis?",
+      "category": "vague_performance",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "adaptive_time_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "SubeAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-PERF-007",
+      "question": "Iptallerde son donem alarm var mi?",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": false,
+        "answerable": false
+      }
+    },
+    {
+      "id": "BLIND-PERF-008",
+      "question": "Bolumler arasinda dengesiz yuk var mi?",
+      "category": "vague_performance",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "variance_analysis",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "VarianceResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-PERF-009",
+      "question": "Kaynaklar arasinda cok fark var mi?",
+      "category": "vague_performance",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "variance_analysis",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuKaynakAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "VarianceResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-PERF-010",
+      "question": "Randevu iptalleri firlamis olabilir mi?",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": false,
+        "answerable": false
+      }
+    },
+    {
+      "id": "BLIND-DQ-001",
+      "question": "Doktoru eksik randevu var mi?",
+      "category": "data_quality",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "data_quality",
+        "metrics": [
+          "missing_doctor_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CountResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-DQ-002",
+      "question": "Bolum bilgisi bos kalan kayit sayisi nedir?",
+      "category": "data_quality",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "data_quality",
+        "metrics": [
+          "missing_department_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CountResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-DQ-003",
+      "question": "Tarih araligi bozuk kayitlari say.",
+      "category": "data_quality",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "data_quality",
+        "metrics": [
+          "invalid_date_range_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CountResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-DQ-004",
+      "question": "Suresi sifir veya negatif randevu var mi?",
+      "category": "data_quality",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "data_quality",
+        "metrics": [
+          "zero_or_negative_duration_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CountResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-DQ-005",
+      "question": "Telefonu olmayan hasta randevularini say.",
+      "category": "unanswerable",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": false,
+        "answerable": false
+      }
+    },
+    {
+      "id": "BLIND-DQ-006",
+      "question": "Kimlik bilgisi eksik olan kayit kac tane?",
+      "category": "unanswerable",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": false,
+        "answerable": false
+      }
+    },
+    {
+      "id": "BLIND-DQ-007",
+      "question": "Randevu suresi tarih farkiyla tutmuyor mu?",
+      "category": "data_quality",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "data_quality",
+        "metrics": [
+          "duration_mismatch_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CountResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-DQ-008",
+      "question": "Sube bazinda eksik doktor kaydi dagilimi nedir?",
+      "category": "data_quality",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": "data_quality",
+        "metrics": [
+          "missing_doctor_count"
+        ],
+        "dimensions": [
+          "SubeAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "DistributionResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-DQ-009",
+      "question": "Bolumlere gore telefon eksigi nerede fazla?",
+      "category": "unanswerable",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": false,
+        "answerable": false
+      }
+    },
+    {
+      "id": "BLIND-DQ-010",
+      "question": "Veri kalitesi sorunlu kayitlari ozetle.",
+      "category": "data_quality",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "data_quality",
+        "metrics": [
+          "invalid_date_range_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CountResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-UNANS-001",
+      "question": "Iptal nedenlerini sube sube goster.",
+      "category": "unanswerable",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": false,
+        "answerable": false
+      }
+    },
+    {
+      "id": "BLIND-UNANS-002",
+      "question": "Hastalarin odeme tutari toplam kac TL?",
+      "category": "unanswerable",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": false,
+        "answerable": false
+      }
+    },
+    {
+      "id": "BLIND-UNANS-003",
+      "question": "Doktor maaslarini bolume gore sirala.",
+      "category": "unanswerable",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": false,
+        "answerable": false
+      }
+    },
+    {
+      "id": "BLIND-UNANS-004",
+      "question": "Recetelerde en cok yazilan ilac hangisi?",
+      "category": "unanswerable",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": false,
+        "answerable": false
+      }
+    },
+    {
+      "id": "BLIND-UNANS-005",
+      "question": "Hastalarin adres ilcesine gore dagilimi nedir?",
+      "category": "unanswerable",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": false,
+        "answerable": false
+      }
+    },
+    {
+      "id": "BLIND-CLAR-001",
+      "question": "En iyi sube hangisi?",
+      "category": "clarification",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": true,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-CLAR-002",
+      "question": "En basarili doktor kim?",
+      "category": "clarification",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": true,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-CLAR-003",
+      "question": "Hangi bolum daha iyi gidiyor?",
+      "category": "clarification",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": true,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-CLAR-004",
+      "question": "En verimli kaynak hangisi?",
+      "category": "clarification",
+      "difficulty": "medium",
+      "blind": true,
+      "expected": {
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": true,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-CLAR-005",
+      "question": "Performansi en yuksek taraf neresi?",
+      "category": "clarification",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": true,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-CROSS-001",
+      "question": "Sube ve bolum kiriliminda randevu sayilari nasil?",
+      "category": "cross_analysis",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "cross_analysis",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "SubeAdi",
+          "GenelRandevuBolumAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "DistributionResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-CROSS-002",
+      "question": "Sube ile kaynak birlikte randevuyu nasil dagitiyor?",
+      "category": "cross_analysis",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "cross_analysis",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "SubeAdi",
+          "GenelRandevuKaynakAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "DistributionResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-CROSS-003",
+      "question": "Bolum ve durum bazinda randevu tablosu nasil?",
+      "category": "cross_analysis",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "cross_analysis",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi",
+          "RandevuDurumu"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "DistributionResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-CROSS-004",
+      "question": "Sube ve randevu tipi birlikte dagilimi ver.",
+      "category": "cross_analysis",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "cross_analysis",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "SubeAdi",
+          "RandevuTipiAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "DistributionResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    },
+    {
+      "id": "BLIND-CROSS-005",
+      "question": "Kaynak ve durum kiriliminda randevular nasil?",
+      "category": "cross_analysis",
+      "difficulty": "hard",
+      "blind": true,
+      "expected": {
+        "analysis_type": "cross_analysis",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuKaynakAdi",
+          "RandevuDurumu"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "DistributionResult",
+        "clarification_required": false,
+        "answerable": true
+      }
+    }
+  ]
+}

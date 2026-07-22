@@ -1,0 +1,678 @@
+{
+  "run_id": "20260720T130931Z-d36fac7e",
+  "generated_at": "2026-07-20T13:09:31.775434+00:00",
+  "suite": "acceptance",
+  "mode": "planner-only",
+  "environment": {
+    "sql_dialect": "tsql",
+    "database_provider": "mssql",
+    "live_db_available": true
+  },
+  "summary": {
+    "total_cases": 11,
+    "passed": 11,
+    "failed": 0,
+    "skipped": 0,
+    "layer_accuracy": {
+      "routing": 100.0,
+      "query_plan": 100.0
+    },
+    "failure_counts": {},
+    "p50_ms": 14.579200000298442,
+    "p95_ms": 18.04469999842695,
+    "max_ms": 18.04469999842695,
+    "deterministic_sql_avg_ms": 0.0,
+    "llm_sql_avg_ms": 0.0,
+    "live_execution_avg_ms": 0.0,
+    "timeout_rate": 0.0
+  },
+  "results": [
+    {
+      "case_id": "E2E-RW-001",
+      "question": "Bu aralar hangi subede iptaller patlamis?",
+      "category": "unanswerable",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 0.9298000004491769,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0012000018614344299,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0002999986463692039,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": null,
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "E2E-RW-002",
+      "question": "Gecen seneye kiyasla isler nasil gidiyor?",
+      "category": "multi_metric_performance",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 14.579200000298442,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0007999988156370819,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.004599998646881431,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "multi_metric_performance",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate",
+          "unique_patient_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": "current_year_to_date",
+        "baseline_period": "same_period_previous_year",
+        "cohort": null,
+        "minimum_sample_size": 20,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "E2E-RW-003",
+      "question": "Kontrole gelenler en cok hangi tarafta?",
+      "category": "clarification",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 0.9317999974882696,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0013999997463542968,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0004999965312890708,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": null,
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "E2E-RW-004",
+      "question": "Randevusunu son dakika alanlarin gelme durumu nasil?",
+      "category": "cohort_analysis",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 14.319499998237006,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0010000003385357559,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0031000017770566046,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "cohort_analysis",
+        "metrics": [
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": "lead_time_under_24h (DATEDIFF(hour, CreatedDate, BaslangicTarihi) < 24)",
+        "minimum_sample_size": 20,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "E2E-RW-005",
+      "question": "Doktorlar arasinda cok fark var mi?",
+      "category": "variance_analysis",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 17.275899997912347,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.000700001692166552,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.006500002200482413,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "variance_analysis",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuKaynakAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": 20,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "E2E-RW-006",
+      "question": "Bu ay ile gecen ayin randevu sayilarini karsilastir.",
+      "category": "period_comparison",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 18.04469999842695,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0024000000848900527,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0034000004234258085,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "period_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": [
+          {
+            "label": "bu ay",
+            "start_inclusive": "2026-07-01",
+            "end_exclusive": "2026-08-01",
+            "column": "BaslangicTarihi"
+          },
+          {
+            "label": "gecen ay",
+            "start_inclusive": "2026-06-01",
+            "end_exclusive": "2026-07-01",
+            "column": "BaslangicTarihi"
+          }
+        ]
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "E2E-RW-007",
+      "question": "Subelere gore gelmeme oranlari nedir?",
+      "category": "ratio",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 13.732100000197534,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0010999974620062858,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0041000021155923605,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "ratio",
+        "metrics": [
+          "no_show_rate"
+        ],
+        "dimensions": [
+          "SubeAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "E2E-RW-008",
+      "question": "2022 Aralik ile 2023 Mart ayi randevu sayilarini karsilastir.",
+      "category": "period_comparison",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 17.609400001674658,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0016000012692529708,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0031000017770566046,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "period_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": [
+          {
+            "label": "Aralık 2022",
+            "start_inclusive": "2022-12-01",
+            "end_exclusive": "2023-01-01",
+            "column": "BaslangicTarihi"
+          },
+          {
+            "label": "Mart 2023",
+            "start_inclusive": "2023-03-01",
+            "end_exclusive": "2023-04-01",
+            "column": "BaslangicTarihi"
+          }
+        ]
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "E2E-RW-009",
+      "question": "2024 Subat ile 2024 Mart ayi randevu sayilarini karsilastir.",
+      "category": "period_comparison",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 17.697700001008343,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0013999997463542968,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0030000010156072676,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "period_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": [
+          {
+            "label": "Şubat 2024",
+            "start_inclusive": "2024-02-01",
+            "end_exclusive": "2024-03-01",
+            "column": "BaslangicTarihi"
+          },
+          {
+            "label": "Mart 2024",
+            "start_inclusive": "2024-03-01",
+            "end_exclusive": "2024-04-01",
+            "column": "BaslangicTarihi"
+          }
+        ]
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "E2E-RW-010",
+      "question": "2023 Ocak ile 2023 Haziran ayi randevu sayilarini karsilastir.",
+      "category": "period_comparison",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 17.820900000515394,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0013000026228837669,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0035000011848751456,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "period_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": [
+          {
+            "label": "Ocak 2023",
+            "start_inclusive": "2023-01-01",
+            "end_exclusive": "2023-02-01",
+            "column": "BaslangicTarihi"
+          },
+          {
+            "label": "Haziran 2023",
+            "start_inclusive": "2023-06-01",
+            "end_exclusive": "2023-07-01",
+            "column": "BaslangicTarihi"
+          }
+        ]
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "E2E-RW-011",
+      "question": "2022 ile 2023 randevu sayilarini karsilastir.",
+      "category": "period_comparison",
+      "mode": "planner-only",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 13.641300000017509,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0011999982234556228,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0034999975468963385,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": {
+        "analysis_type": "period_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": [
+          {
+            "label": "2022",
+            "start_inclusive": "2022-01-01",
+            "end_exclusive": "2023-01-01",
+            "column": "BaslangicTarihi"
+          },
+          {
+            "label": "2023",
+            "start_inclusive": "2023-01-01",
+            "end_exclusive": "2024-01-01",
+            "column": "BaslangicTarihi"
+          }
+        ]
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    }
+  ],
+  "previous_comparison": {
+    "status": "no_previous_run"
+  }
+}

@@ -1,45 +1,74 @@
-"""Deterministic observation wordings.
+"""Deterministic observation wordings — Türkçe.
 
-Neutral, evidence-based phrasing only. Never operational recommendations:
-wordings use "may deserve attention" / "is noteworthy" style language and never
-"must" / "should" / "needs". These templates are the source of truth for facts;
-the LLM may only reword them.
+Nötr, kanıt temelli ifadeler. Asla operasyonel öneri içermez: "dikkat çekebilir"
+/ "not edilmelidir" tarzı dil kullanılır, asla "zorunlu" / "gerekli" değil. Bu
+şablonlar gerçeklerin tek kaynağıdır; LLM yalnızca yeniden ifade edebilir.
 """
 
 # Rule-based wordings keyed by insight rule name. {placeholders} are filled
 # from analytics metrics.
 RULE_WORDINGS: dict[str, str] = {
-    "HIGH_GROWTH": "Sustained growth detected: values increased by {growth_rate}%.",
-    "MODERATE_GROWTH": "Growth has remained positive over the period ({growth_rate}%).",
-    "DECLINING": "A downward change of {growth_rate}% is visible over the period.",
-    "POSITIVE_TREND": "The overall trend is upward.",
-    "NEGATIVE_TREND": "A downward trend is visible.",
-    "STABLE_TREND": "Values have remained stable over the period.",
     "DOMINANT_CATEGORY": (
-        "One category clearly dominates: '{top_category}' holds the largest share."
+        "Bir kategori belirgin biçimde öne çıkıyor: '{top_category}' en büyük payı oluşturuyor."
     ),
-    "BALANCED_DISTRIBUTION": "No significant imbalance detected across categories.",
+    "BALANCED_DISTRIBUTION": "Kategoriler arasında belirgin bir dengesizlik tespit edilmedi.",
     "OUTLIER_DETECTED": (
-        "'{top_category}' is significantly above the average and is noteworthy."
+        "'{top_category}' bu sonuçtaki diğer kategorilerden belirgin biçimde yüksek, "
+        "bu kontrol için kullanılan baskınlık eşiğinin üzerinde."
     ),
-    "SINGLE_METRIC": "The result is a single metric value of {total}.",
-    "INSUFFICIENT_EVIDENCE": "The result set does not contain enough data for observations.",
+    "SINGLE_METRIC": "Sonuç, {total} değerine sahip tek bir metrik.",
+    "INSUFFICIENT_EVIDENCE": "Sonuç kümesi, yorum üretmek için yeterli veri içermiyor.",
+    "CONSISTENT_UPWARD_TREND": (
+        "Dönem genelinde ve uç dönemler arasında tutarlı bir yükseliş görülmektedir."
+    ),
+    "CONSISTENT_DOWNWARD_TREND": (
+        "Dönem genelinde ve uç dönemler arasında tutarlı bir düşüş görülmektedir."
+    ),
+    "MIXED_TREND_SIGNAL": (
+        "Dönem genelindeki eğim {slope_direction_tr} işaret ederken, ilk ve son "
+        "karşılaştırılabilir dönem arasında {endpoint_direction_tr} görülmektedir."
+    ),
+    "FLAT_TREND": "Değerler dönem boyunca büyük ölçüde yatay seyretmiştir.",
+    "INSUFFICIENT_COMPLETE_PERIODS": (
+        "Eğilim hesaplamak için yeterli sayıda tamamlanmış dönem bulunmuyor."
+    ),
+    "PARTIAL_PERIOD_EXCLUDED": (
+        "Son dönem henüz tamamlanmadığı için eğilim hesabında tam dönemlerle "
+        "birlikte değerlendirilmemiştir."
+    ),
+    "SINGLE_CATEGORY_COMPARISON": (
+        "Seçilen kapsamda yalnızca bir kategori bulunduğu için kategoriler arası "
+        "karşılaştırma yapılamadı; mevcut kategori özetlenmiştir."
+    ),
 }
 
 # Metric-derived wordings (fire independently of rules when evidence exists).
-TOP_CATEGORY_WORDING = "'{top_category}' has the highest volume in this result."
-LARGEST_CHANGE_WORDING = "The largest change occurred in {largest_change}."
+TOP_CATEGORY_WORDING = "'{top_category}' bu sonuçtaki en yüksek hacme sahip."
+LARGEST_CHANGE_WORDING = "En büyük değişim {largest_change} döneminde gerçekleşti."
 SIGNIFICANT_SPREAD_WORDING = (
-    "The difference between the highest ({highest_value}) and lowest ({lowest_value}) "
-    "values is significant and may deserve attention."
+    "En yüksek ({highest_value}) ve en düşük ({lowest_value}) değerler arasındaki "
+    "fark, bu sonucun ölçeğine göre büyük ve dikkat çekebilir."
 )
 
-# Modal/imperative words that must never appear in observation wording.
+# Modal/imperative words that must never appear in observation wording. Also
+# guards against the optional LLM reword step (OBSERVATION_LLM_WORDING)
+# injecting a "önemli ölçüde"/"anomali" claim that no deterministic threshold
+# backs — only the templates above may use such wording, and only when a rule
+# explicitly required a threshold to fire.
 FORBIDDEN_WORDING_PATTERNS = (
-    "must",
-    "should",
-    "needs to",
-    "have to",
-    "recommend",
-    "advise",
+    "zorunlu",
+    "gerekli",
+    "gerekiyor",
+    "yapmalı",
+    "yapılmalı",
+    "önermek",
+    "öneririz",
+    "tavsiye ederiz",
+    "önemli ölçüde",
+    "anomali",
+    "anormallik",
+    "kesinlikle",
+    "kesin nedeni",
+    "kanıtlanmıştır",
+    "şüphesiz",
 )

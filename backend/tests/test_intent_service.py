@@ -166,7 +166,7 @@ async def test_workflow_routing_database_query(temp_keywords_file):
 
     mock_query = QueryResult(
         columns=["id"], rows=[], row_count=0, execution_time_ms=1.0,
-        success=True, executed_at=datetime.now(), database_provider="sqlite"
+        success=True, executed_at=datetime.now(), database_provider="mssql"
     )
     workflow_service.execute_query.return_value = mock_query
 
@@ -300,7 +300,7 @@ async def test_workflow_routing_unknown_low_confidence(temp_keywords_file):
 
     mock_query = QueryResult(
         columns=["id"], rows=[], row_count=0, execution_time_ms=1.0,
-        success=True, executed_at=datetime.now(), database_provider="sqlite"
+        success=True, executed_at=datetime.now(), database_provider="mssql"
     )
     workflow_service.execute_query.return_value = mock_query
 

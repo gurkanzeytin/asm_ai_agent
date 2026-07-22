@@ -9,6 +9,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.analytics.trend_analysis import TrendMetrics
+
 
 class AnalyticsIntent(StrEnum):
     """Analytical intent detected from the natural-language question."""
@@ -48,6 +50,8 @@ class VisualizationType(StrEnum):
     BAR_CHART = "BAR_CHART"
     LINE_CHART = "LINE_CHART"
     PIE_CHART = "PIE_CHART"
+    GROUPED_BAR_CHART = "GROUPED_BAR_CHART"
+    MULTI_SERIES_BAR_CHART = "MULTI_SERIES_BAR_CHART"
 
 
 class VisualizationRecommendation(BaseModel):
@@ -57,6 +61,24 @@ class VisualizationRecommendation(BaseModel):
 
     type: VisualizationType
     reason: str
+
+
+class MetricSummary(BaseModel):
+    """Per-metric aggregate summary, keyed by metric catalog id in
+    `AnalyticsResult.metric_summaries`. Additive/independent of `metric_column`
+    — computed only when a QueryPlan with >=1 planned metric and a matching
+    metric-alias map are available; never replaces the single-metric-column
+    heuristic `_profile_columns` already uses."""
+
+    model_config = ConfigDict(frozen=True)
+
+    metric_id: str
+    total: float | None = None
+    average: float | None = None
+    minimum: float | None = None
+    maximum: float | None = None
+    top_dimension: str | None = None
+    bottom_dimension: str | None = None
 
 
 class AnalyticsResult(BaseModel):
@@ -79,3 +101,13 @@ class AnalyticsResult(BaseModel):
     label_column: str | None = None
     row_count: int = 0
     duration_ms: float = 0.0
+    metric_summaries: dict[str, MetricSummary] = Field(default_factory=dict)
+
+    # Reconciled endpoint/slope trend verdict — TIME_SERIES only, None otherwise.
+    trend_metrics: TrendMetrics | None = None
+
+    # Comparison-sufficiency metadata — CATEGORICAL only, None otherwise. Applies
+    # generically to any grouping dimension (branch, doctor, department, ...).
+    comparison_category_count: int | None = None
+    comparison_sufficient: bool | None = None
+    comparison_limitation_reason: str | None = None

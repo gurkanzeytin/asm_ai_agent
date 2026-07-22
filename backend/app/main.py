@@ -4,8 +4,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1.api import api_router
 from app.api.exception_handlers import EXCEPTION_HANDLERS
+from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.schemas.health import HealthCheckResponse
@@ -22,15 +22,36 @@ async def lifespan(app: FastAPI):
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Version: {settings.APP_VERSION}")
 
-    # Log environment settings safely
-    gemini_key_present = "PRESENT" if settings.GEMINI_API_KEY else "MISSING"
+    # Log environment settings safely — provider-specific lines only appear when
+    # that provider is actually active/configured. Never logs a secret value,
+    # only "configured: yes/no".
+    active_provider = settings.LLM_PROVIDER.strip().lower()
+    diagnostic_lines = [
+        f"LLM_PROVIDER : {settings.LLM_PROVIDER}",
+        f"OLLAMA_MODEL : {settings.OLLAMA_MODEL}",
+    ]
+    if active_provider == "gemini":
+        gemini_key_present = "PRESENT" if settings.GEMINI_API_KEY else "MISSING"
+        diagnostic_lines += [
+            f"GEMINI_MODEL : {settings.GEMINI_MODEL}",
+            f"GEMINI API KEY : {gemini_key_present}",
+        ]
+    # NVIDIA diagnostics always shown: the remote insight-routing leg (see
+    # app.insights.routing) can invoke NVIDIA independently of LLM_PROVIDER.
+    nvidia_key_configured = bool(settings.NVIDIA_API_KEY.get_secret_value())
+    diagnostic_lines += [
+        f"NVIDIA_MODEL : {settings.NVIDIA_MODEL}",
+        f"NVIDIA base URL : {settings.NVIDIA_BASE_URL}",
+        f"NVIDIA API key configured : {'yes' if nvidia_key_configured else 'no'}",
+    ]
+    diagnostic_lines += [
+        f"Insight remote routing enabled : {settings.INSIGHT_ROUTING_ENABLED}",
+        f"Insight remote complexity threshold : {settings.INSIGHT_REMOTE_COMPLEXITY_THRESHOLD}",
+    ]
     logger.info(
         "\n================ Environment Diagnostics ================\n"
-        f"LLM_PROVIDER : {settings.LLM_PROVIDER}\n"
-        f"GEMINI_MODEL : {settings.GEMINI_MODEL}\n"
-        f"API KEY      : {gemini_key_present}\n"
-        f"OLLAMA_MODEL : {settings.OLLAMA_MODEL}\n"
-        "========================================================="
+        + "\n".join(diagnostic_lines)
+        + "\n========================================================="
     )
 
     yield

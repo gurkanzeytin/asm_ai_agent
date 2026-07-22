@@ -1,6 +1,7 @@
 import { motion } from "motion/react";
 import { Activity, Building2, Stethoscope, FileBarChart } from "lucide-react";
 import { MedAgentLogo } from "./MedAgentLogo";
+import { TextShimmer } from "./TextShimmer";
 import { tr } from "@/locales/tr";
 
 const suggestions = [
@@ -37,22 +38,19 @@ export function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
       >
         <MedAgentLogo size={80} noIntro />
       </motion.div>
-      <motion.h1
+      <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="text-center text-3xl font-semibold tracking-tight sm:text-4xl"
       >
-        {tr.welcome.titleBefore} <span className="gradient-text">{tr.welcome.titleHighlight}</span>?
-      </motion.h1>
-      <motion.p
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.15 }}
-        className="mt-3 max-w-lg text-center text-sm text-muted-foreground"
-      >
-        {tr.welcome.description}
-      </motion.p>
+        <TextShimmer
+          as="h1"
+          duration={2.5}
+          className="py-1 text-center text-3xl font-semibold leading-[1.3] tracking-tight sm:text-4xl"
+        >
+          {`${tr.welcome.titleBefore} ${tr.welcome.titleHighlight}?`}
+        </TextShimmer>
+      </motion.div>
 
       <div className="mt-10 grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2">
         {suggestions.map((s, i) => (

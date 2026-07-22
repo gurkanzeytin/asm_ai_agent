@@ -2,15 +2,30 @@
   "entities": {
     "Doctor": {
       "canonical": "doktor",
-      "terms": ["doktor", "hekim", "uzman", "doctor"]
+      "terms": [
+        "doktor",
+        "hekim",
+        "uzman",
+        "doctor"
+      ]
     },
     "Patient": {
       "canonical": "hasta",
-      "terms": ["hasta", "kisi", "kişi", "patient"]
+      "terms": [
+        "hasta",
+        "kisi",
+        "kişi",
+        "patient"
+      ]
     },
     "Appointment": {
       "canonical": "randevu",
-      "terms": ["randevu", "muayene", "kontrol", "appointment"]
+      "terms": [
+        "randevu",
+        "muayene",
+        "kontrol",
+        "appointment"
+      ]
     },
     "Department": {
       "canonical": "bolum",
@@ -45,25 +60,75 @@
         "üroloji"
       ]
     },
+    "Branch": {
+      "canonical": "sube",
+      "terms": [
+        "sube",
+        "şube",
+        "lokasyon",
+        "hastane",
+        "branch"
+      ]
+    },
+    "Creator": {
+      "canonical": "randevuyu veren",
+      "terms": [
+        "randevuyu veren",
+        "randevu veren",
+        "randevuyu olusturan",
+        "randevu olusturan",
+        "olusturan",
+        "kaydeden"
+      ]
+    },
     "Prescription": {
       "canonical": "recete",
-      "terms": ["recete", "reçete", "ilac", "ilaç", "prescription"]
+      "terms": [
+        "recete",
+        "reçete",
+        "ilac",
+        "ilaç",
+        "prescription"
+      ]
     },
     "Diagnosis": {
       "canonical": "tani",
-      "terms": ["tani", "tanı", "teshis", "teşhis", "diagnosis"]
+      "terms": [
+        "tani",
+        "tanı",
+        "teshis",
+        "teşhis",
+        "diagnosis"
+      ]
     },
     "Invoice": {
       "canonical": "fatura",
-      "terms": ["fatura", "odeme", "ödeme", "tutar", "invoice"]
+      "terms": [
+        "fatura",
+        "odeme",
+        "ödeme",
+        "tutar",
+        "invoice"
+      ]
     },
     "LaboratoryTest": {
       "canonical": "laboratuvar test",
-      "terms": ["laboratuvar", "lab", "test", "tetkik"]
+      "terms": [
+        "laboratuvar",
+        "lab",
+        "test",
+        "tetkik"
+      ]
     },
     "Hospitalization": {
       "canonical": "yatis",
-      "terms": ["yatis", "yatış", "oda", "servis", "hospitalization"]
+      "terms": [
+        "yatis",
+        "yatış",
+        "oda",
+        "servis",
+        "hospitalization"
+      ]
     }
   },
   "rewrite_groups": {
@@ -123,13 +188,31 @@
       {
         "pattern": "kalp",
         "replacement": "kardiyoloji",
-        "followed_by": ["doktor", "hekim", "uzman", "bolum", "poliklinik", "klinik", "servis", "brans"],
+        "followed_by": [
+          "doktor",
+          "hekim",
+          "uzman",
+          "bolum",
+          "poliklinik",
+          "klinik",
+          "servis",
+          "brans"
+        ],
         "matched_synonym": "kalp -> kardiyoloji"
       },
       {
         "pattern": "cocuk",
         "replacement": "cocuk sagligi",
-        "followed_by": ["doktor", "hekim", "uzman", "bolum", "poliklinik", "klinik", "servis", "brans"],
+        "followed_by": [
+          "doktor",
+          "hekim",
+          "uzman",
+          "bolum",
+          "poliklinik",
+          "klinik",
+          "servis",
+          "brans"
+        ],
         "matched_synonym": "çocuk -> çocuk sağlığı"
       },
       {
@@ -167,13 +250,24 @@
       {
         "pattern": "goz",
         "replacement": "goz hastaliklari",
-        "followed_by": ["doktor", "hekim", "uzman", "bolum", "poliklinik", "klinik", "servis", "brans"],
+        "followed_by": [
+          "doktor",
+          "hekim",
+          "uzman",
+          "bolum",
+          "poliklinik",
+          "klinik",
+          "servis",
+          "brans"
+        ],
         "matched_synonym": "göz -> göz hastalıkları"
       },
       {
         "pattern": "ortopedi",
         "replacement": "ortopedi ve travmatoloji",
-        "not_followed_by": ["ve"],
+        "not_followed_by": [
+          "ve"
+        ],
         "matched_synonym": "ortopedi -> ortopedi ve travmatoloji"
       }
     ],
@@ -193,7 +287,9 @@
       {
         "pattern": "kontrol",
         "replacement": "kontrol randevusu",
-        "not_followed_by": ["randevu"],
+        "not_followed_by": [
+          "randevu"
+        ],
         "matched_synonym": "kontrol -> kontrol randevusu"
       },
       {
@@ -217,7 +313,9 @@
       {
         "pattern": "en yogun",
         "replacement": "en fazla randevusu olan",
-        "not_followed_by": ["randevu"],
+        "not_followed_by": [
+          "randevu"
+        ],
         "matched_synonym": "en yoğun -> en fazla randevusu olan"
       },
       {
@@ -228,7 +326,9 @@
       {
         "pattern": "en bos",
         "replacement": "en az randevusu olan",
-        "not_followed_by": ["randevu"],
+        "not_followed_by": [
+          "randevu"
+        ],
         "matched_synonym": "en boş -> en az randevusu olan"
       },
       {
@@ -276,31 +376,106 @@
     ]
   },
   "operations": {
-    "LIST": ["goster", "listele", "getir", "bul", "cikar", "goruntule", "liste", "listesi", "gorebilir miyim"],
-    "COUNT": ["kac", "sayisi", "sayi", "adet"],
-    "SUM": ["toplam"],
-    "AVG": ["ortalama"]
+    "LIST": [
+      "goster",
+      "listele",
+      "getir",
+      "bul",
+      "cikar",
+      "goruntule",
+      "liste",
+      "listesi",
+      "gorebilir miyim"
+    ],
+    "COUNT": [
+      "kac",
+      "sayisi",
+      "sayi",
+      "adet"
+    ],
+    "SUM": [
+      "toplam"
+    ],
+    "AVG": [
+      "ortalama"
+    ]
   },
   "ambiguous": [
     {
       "pattern": "en basarili",
       "question": "Başarı kriteri olarak neyi kullanmamı istersiniz?",
-      "options": ["Randevu sayısı", "Hasta sayısı", "Reçete sayısı", "Başka bir kriter"]
+      "options": [
+        "Toplam randevu hacmi",
+        "Gerçekleşme oranı",
+        "Düşük gelmeme oranı",
+        "Protokole dönüşüm oranı",
+        "Başka bir kriter"
+      ]
     },
     {
       "pattern": "en iyi",
       "question": "\"En iyi\" için hangi kriteri kullanmamı istersiniz?",
-      "options": ["Randevu sayısı", "Hasta sayısı", "Reçete sayısı", "Başka bir kriter"]
+      "options": [
+        "Toplam randevu hacmi",
+        "Gerçekleşme oranı",
+        "Düşük gelmeme oranı",
+        "Protokole dönüşüm oranı",
+        "Başka bir kriter"
+      ]
     },
     {
       "pattern": "en kotu",
       "question": "\"En kötü\" için hangi kriteri kullanmamı istersiniz?",
-      "options": ["Randevu sayısı", "Hasta sayısı", "Reçete sayısı", "Başka bir kriter"]
+      "options": [
+        "Toplam randevu hacmi",
+        "Gerçekleşme oranı",
+        "Düşük gelmeme oranı",
+        "Protokole dönüşüm oranı",
+        "Başka bir kriter"
+      ]
     },
     {
       "pattern": "en verimli",
       "question": "Verimlilik kriteri olarak neyi kullanmamı istersiniz?",
-      "options": ["Randevu sayısı", "Hasta sayısı", "Reçete sayısı", "Başka bir kriter"]
+      "options": [
+        "Toplam randevu hacmi",
+        "Gerçekleşme oranı",
+        "Düşük gelmeme oranı",
+        "Protokole dönüşüm oranı",
+        "Başka bir kriter"
+      ]
+    },
+    {
+      "pattern": "performans",
+      "question": "Performans kriteri olarak neyi kullanmamı istersiniz?",
+      "options": [
+        "Toplam randevu hacmi",
+        "Gerçekleşme oranı",
+        "Düşük gelmeme oranı",
+        "Protokole dönüşüm oranı",
+        "Başka bir kriter"
+      ],
+      "resolvable_by_metrics": true
+    },
+    {
+      "pattern": "hangi tarafta",
+      "question": "Hangi kırılımı kastediyorsunuz?",
+      "options": [
+        "Şube bazında",
+        "Bölüm bazında",
+        "Randevu kaynağı bazında",
+        "Doktor bazında"
+      ]
+    },
+    {
+      "pattern": "hangi tarafa",
+      "question": "Hangi kırılımı kastediyorsunuz?",
+      "options": [
+        "Şube bazında",
+        "Bölüm bazında",
+        "Randevu kaynağı bazında",
+        "Doktor bazında"
+      ]
     }
   ]
 }

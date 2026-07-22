@@ -58,7 +58,18 @@ class WorkflowService(IWorkflowService):
                 plan_section = format_plan_for_prompt(query_plan)
                 if plan_section:
                     prompt = f"{prompt}\n\n{plan_section}"
-            if error_feedback:
+            if error_feedback and error_feedback.startswith("ADAPTIVE_EMPTY_RESULT"):
+                # AI-INTELLIGENCE-008: not an error — the SQL ran but found no rows;
+                # requery once with widened constraints instead of an error fix.
+                prompt = (
+                    f"{prompt}\n\n"
+                    "--- Previous attempt returned no rows ---\n"
+                    f"{error_feedback}\n"
+                    "Regenerate ONE executable SQL statement with these adjustments, using ONLY "
+                    "the objects and columns listed in the Schema section. Do not explain. "
+                    "Return only SQL."
+                )
+            elif error_feedback:
                 prompt = (
                     f"{prompt}\n\n"
                     "--- Previous attempt failed ---\n"

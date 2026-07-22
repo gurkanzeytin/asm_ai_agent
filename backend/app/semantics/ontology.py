@@ -20,6 +20,8 @@ RELATIONSHIPS: list[SemanticRelationship] = [
     SemanticRelationship(subject="LaboratoryTest", predicate="performed_for", object="Patient"),
     SemanticRelationship(subject="Hospitalization", predicate="of", object="Patient"),
     SemanticRelationship(subject="Appointment", predicate="scheduled_in", object="Department"),
+    SemanticRelationship(subject="Appointment", predicate="located_at", object="Branch"),
+    SemanticRelationship(subject="Appointment", predicate="created_by", object="Creator"),
 ]
 
 
@@ -60,6 +62,8 @@ EXISTENCE_MARKERS = ("var mi", "var midir", "mevcut mu", "bulunuyor mu")
 
 # Requested-output rendering per primary subject for list-style goals.
 SUBJECT_OUTPUT_NAMES: dict[str, str] = {
+    "Branch": "branch_names",
+    "Creator": "creator_names",
     "Doctor": "doctor_names",
     "Department": "department_names",
     "Patient": "patient_names",

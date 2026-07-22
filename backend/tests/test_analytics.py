@@ -25,7 +25,7 @@ def _query_result(columns, rows) -> QueryResult:
         execution_time_ms=1.0,
         success=True,
         executed_at=datetime(2026, 7, 13, 12, 0, 0),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
 
 
@@ -406,3 +406,217 @@ async def test_analyze_results_node_failure_is_non_fatal():
     assert result.analytics is None
     assert result.errors == []
     assert "analyze_results" in result.node_timings
+
+
+# ═══════════════════════ Multi-metric analytics (Phase 7/8) ══════════════════
+
+
+from app.planning.models import QueryPlan  # noqa: E402
+
+_MULTI_METRIC_COLUMNS = [
+    "sube_adi",
+    "appointment_count",
+    "completed_appointment_rate",
+    "appointment_duration_average",
+]
+MULTI_METRIC_RESULT = _query_result(
+    _MULTI_METRIC_COLUMNS,
+    [
+        {
+            "sube_adi": "Merkez",
+            "appointment_count": 120,
+            "completed_appointment_rate": 80.0,
+            "appointment_duration_average": 25.0,
+        },
+        {
+            "sube_adi": "Kadikoy",
+            "appointment_count": 90,
+            "completed_appointment_rate": 70.0,
+            "appointment_duration_average": 30.0,
+        },
+    ],
+)
+
+
+def _multi_metric_plan() -> QueryPlan:
+    return QueryPlan(
+        question="Subelere gore randevu sayisi, gerceklesme orani ve ortalama sure",
+        dimensions=["SubeAdi"],
+        metrics=["appointment_count", "completed_appointment_rate", "appointment_duration_average"],
+    )
+
+
+def test_metric_summaries_preserved_independently():
+    engine = AnalyticsEngine()
+    plan = _multi_metric_plan()
+    aliases = {
+        "appointment_count": "appointment_count",
+        "completed_appointment_rate": "completed_appointment_rate",
+        "appointment_duration_average": "appointment_duration_average",
+    }
+    result = engine.analyze(
+        "Subelere gore randevu sayisi, gerceklesme orani ve ortalama sure",
+        MULTI_METRIC_RESULT,
+        plan=plan,
+        metric_aliases=aliases,
+    )
+    assert set(result.metric_summaries) == {
+        "appointment_count",
+        "completed_appointment_rate",
+        "appointment_duration_average",
+    }
+    count_summary = result.metric_summaries["appointment_count"]
+    assert count_summary.total == 210
+    assert count_summary.top_dimension == "Merkez"
+    rate_summary = result.metric_summaries["completed_appointment_rate"]
+    assert rate_summary.top_dimension == "Merkez"
+    duration_summary = result.metric_summaries["appointment_duration_average"]
+    assert duration_summary.top_dimension == "Kadikoy"
+
+
+def test_metric_summaries_do_not_affect_legacy_metric_column_selection():
+    # Regression guard: metric_column/_profile_columns behavior must stay
+    # exactly as before, regardless of metric_summaries being computed.
+    engine = AnalyticsEngine()
+    plan = _multi_metric_plan()
+    result = engine.analyze(
+        "Subelere gore randevu sayisi, gerceklesme orani ve ortalama sure",
+        MULTI_METRIC_RESULT,
+        plan=plan,
+        metric_aliases={},
+    )
+    assert result.metric_column in MULTI_METRIC_RESULT.columns
+
+
+def test_visualization_selects_grouped_bar_for_multi_metric_categorical():
+    selector = VisualizationSelector()
+    recommendation = selector.select(
+        data_shape=DataShape.CATEGORICAL,
+        intents=[AnalyticsIntent.COMPARISON],
+        row_count=2,
+        category_count=2,
+        metric_count=3,
+    )
+    assert recommendation.type == VisualizationType.GROUPED_BAR_CHART
+
+
+def test_visualization_stays_single_series_bar_for_one_metric():
+    selector = VisualizationSelector()
+    recommendation = selector.select(
+        data_shape=DataShape.CATEGORICAL,
+        intents=[AnalyticsIntent.COMPARISON],
+        row_count=2,
+        category_count=2,
+        metric_count=1,
+    )
+    assert recommendation.type == VisualizationType.BAR_CHART
+
+
+# ═══════════ Plan-aware shape classification for single-row grouped results ═══
+
+
+ONE_ROW_MULTI_METRIC_RESULT = _query_result(
+    _MULTI_METRIC_COLUMNS,
+    [
+        {
+            "sube_adi": "Merkez",
+            "appointment_count": 89,
+            "completed_appointment_rate": 76.5,
+            "appointment_duration_average": 22.0,
+        },
+    ],
+)
+
+
+def test_single_grouped_row_classified_as_categorical_not_single_row():
+    engine = AnalyticsEngine()
+    plan = QueryPlan(
+        question="q",
+        dimensions=["sube_adi"],
+        metrics=["appointment_count", "completed_appointment_rate", "appointment_duration_average"],
+    )
+    aliases = {
+        "appointment_count": "appointment_count",
+        "completed_appointment_rate": "completed_appointment_rate",
+        "appointment_duration_average": "appointment_duration_average",
+    }
+    result = engine.analyze(
+        "Şubelere göre randevu sayısı ve gerçekleşme oranı",
+        ONE_ROW_MULTI_METRIC_RESULT,
+        plan=plan,
+        metric_aliases=aliases,
+    )
+    assert result.data_shape == DataShape.CATEGORICAL
+    assert set(result.metric_summaries) == set(plan.metrics)
+    # No flattening to a single scalar total: all three metrics independently summarized.
+    assert result.metric_summaries["appointment_count"].total == 89
+    assert result.metric_summaries["completed_appointment_rate"].average == 76.5
+    assert result.metric_summaries["appointment_duration_average"].average == 22.0
+
+
+def test_single_row_without_planned_dimension_stays_single_row():
+    # No dimension in the plan: a genuine single-value/summary result must
+    # keep its existing (correct) classification — this fix is scoped to
+    # plans that actually requested a grouping dimension.
+    engine = AnalyticsEngine()
+    plan = QueryPlan(question="q", dimensions=[], metrics=["appointment_count"])
+    result = _query_result(["appointment_count"], [{"appointment_count": 42}])
+    analytics = engine.analyze("Kaç randevu var?", result, plan=plan, metric_aliases={})
+    assert analytics.data_shape == DataShape.SINGLE_VALUE
+
+
+def test_single_row_grouped_result_without_plan_stays_single_row():
+    # No plan at all (ad-hoc SQL path) — behavior must be unchanged.
+    engine = AnalyticsEngine()
+    result = _query_result(
+        ["sube_adi", "appointment_count"], [{"sube_adi": "Merkez", "appointment_count": 89}]
+    )
+    analytics = engine.analyze("Şubelere göre randevu sayısı", result)
+    assert analytics.data_shape == DataShape.SINGLE_ROW
+
+
+# ── Comparison sufficiency (single-category vs. multi-category) ────────────
+
+
+def test_single_category_result_is_comparison_insufficient():
+    engine = AnalyticsEngine()
+    plan = QueryPlan(
+        question="q",
+        dimensions=["sube_adi"],
+        metrics=["appointment_count", "completed_appointment_rate", "appointment_duration_average"],
+    )
+    aliases = {
+        "appointment_count": "appointment_count",
+        "completed_appointment_rate": "completed_appointment_rate",
+        "appointment_duration_average": "appointment_duration_average",
+    }
+    result = engine.analyze(
+        "Şubelere göre randevu sayısı, gerçekleşme oranı ve ortalama süreyi karşılaştır",
+        ONE_ROW_MULTI_METRIC_RESULT,
+        plan=plan,
+        metric_aliases=aliases,
+    )
+    assert result.data_shape == DataShape.CATEGORICAL
+    assert result.comparison_category_count == 1
+    assert result.comparison_sufficient is False
+    assert result.comparison_limitation_reason
+    assert "TEST ASM" not in result.comparison_limitation_reason  # never names the category
+    # Metric facts are preserved even though the comparison itself is insufficient.
+    assert set(result.metric_summaries) == set(plan.metrics)
+
+
+def test_two_category_result_is_comparison_sufficient():
+    engine = AnalyticsEngine()
+    result = engine.analyze("Hangi bölüm daha yoğun?", CATEGORICAL_RESULT)
+    assert result.data_shape == DataShape.CATEGORICAL
+    assert result.comparison_category_count == 3
+    assert result.comparison_sufficient is True
+    assert result.comparison_limitation_reason is None
+
+
+def test_comparison_sufficiency_is_none_for_non_categorical_shapes():
+    engine = AnalyticsEngine()
+    result = engine.analyze("Son 6 ayın randevularını analiz et", TIME_SERIES_RESULT)
+    assert result.data_shape == DataShape.TIME_SERIES
+    assert result.comparison_category_count is None
+    assert result.comparison_sufficient is None

@@ -28,7 +28,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent
 BACKEND_DIR = REPO_ROOT / "backend"
 
-# The production app resolves its SQLite path relative to backend/.
+# Run from backend/ so app-relative resources (prompts, resources) resolve correctly.
 os.chdir(BACKEND_DIR)
 sys.path.insert(0, str(BACKEND_DIR))
 

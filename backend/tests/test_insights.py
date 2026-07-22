@@ -16,12 +16,30 @@ from app.analytics.models import (
     VisualizationRecommendation,
     VisualizationType,
 )
+from app.analytics.trend_analysis import TrendMetrics
 from app.insights.insight_engine import InsightEngine
 from app.insights.models import InsightConfidence, InsightRule
 from app.insights.prompt_builder import InsightPromptBuilder
 from app.insights.rules_engine import InsightRulesEngine
-from app.insights.templates import INSUFFICIENT_EVIDENCE_SUMMARY
+from app.insights.templates import (
+    INSUFFICIENT_EVIDENCE_SUMMARY,
+    SINGLE_CATEGORY_LIMITATION,
+    build_deterministic_narrative,
+)
 from app.llm.schemas import LLMResponse
+
+_CONSISTENT_UPWARD_TREND_METRICS = TrendMetrics(
+    endpoint_change=63.0,
+    endpoint_percentage_change=18.4,
+    endpoint_direction="upward",
+    slope=10.0,
+    slope_direction="upward",
+    trend_consistency="consistent_upward",
+    volatility=12.0,
+    first_comparable_period="2026-01",
+    last_comparable_period="2026-06",
+    comparable_period_count=6,
+)
 
 
 def _analytics(**overrides) -> AnalyticsResult:
@@ -47,6 +65,7 @@ def _analytics(**overrides) -> AnalyticsResult:
             type=VisualizationType.LINE_CHART, reason="Time-series data detected"
         ),
         row_count=6,
+        trend_metrics=_CONSISTENT_UPWARD_TREND_METRICS,
     )
     base.update(overrides)
     return AnalyticsResult(**base)
@@ -69,10 +88,10 @@ class FakeLLMProvider:
         self.prompts: list[str] = []
         self.content = content or json.dumps(
             {
-                "title": "Appointment Trend Analysis",
-                "summary": "Appointments increased steadily during the period.",
-                "highlights": ["Growth reached 18.4%"],
-                "observations": ["The largest increase occurred in 2026-05"],
+                "title": "Randevu Eğilim Analizi",
+                "summary": "Randevular dönem boyunca istikrarlı biçimde arttı.",
+                "highlights": ["Büyüme %18,4 oldu"],
+                "observations": ["En büyük artış 2026-05 döneminde gerçekleşti"],
                 "considerations": [],
                 "confidence": "LOW",  # must be ignored — confidence is computed
             }
@@ -95,38 +114,47 @@ class FakeLLMProvider:
 
 
 @pytest.mark.parametrize(
-    ("growth_rate", "expected_rule"),
+    ("trend_consistency", "expected_rule"),
     [
-        (18.4, InsightRule.HIGH_GROWTH),
-        (15.1, InsightRule.HIGH_GROWTH),
-        (15.0, InsightRule.MODERATE_GROWTH),
-        (7.0, InsightRule.MODERATE_GROWTH),
-        (0.0, InsightRule.MODERATE_GROWTH),
-        (-4.2, InsightRule.DECLINING),
+        ("consistent_upward", InsightRule.CONSISTENT_UPWARD_TREND),
+        ("consistent_downward", InsightRule.CONSISTENT_DOWNWARD_TREND),
+        ("mixed", InsightRule.MIXED_TREND_SIGNAL),
+        ("flat", InsightRule.FLAT_TREND),
+        ("insufficient_data", InsightRule.INSUFFICIENT_COMPLETE_PERIODS),
     ],
 )
-def test_growth_rules(growth_rate, expected_rule):
-    analytics = _analytics(
-        metrics={**_analytics().metrics, "growth_rate": growth_rate}
+def test_trend_consistency_rules(trend_consistency, expected_rule):
+    trend_metrics = _CONSISTENT_UPWARD_TREND_METRICS.model_copy(
+        update={"trend_consistency": trend_consistency}
     )
+    analytics = _analytics(trend_metrics=trend_metrics)
 
     rules = InsightRulesEngine().evaluate(analytics)
 
     assert expected_rule in rules
+    # Mutually exclusive: never two trend-consistency rules from one series
+    # (the old growth_rate/trend_direction split could fire e.g. DECLINING +
+    # POSITIVE_TREND together).
+    other_trend_rules = {
+        InsightRule.CONSISTENT_UPWARD_TREND,
+        InsightRule.CONSISTENT_DOWNWARD_TREND,
+        InsightRule.MIXED_TREND_SIGNAL,
+        InsightRule.FLAT_TREND,
+        InsightRule.INSUFFICIENT_COMPLETE_PERIODS,
+    } - {expected_rule}
+    assert not (other_trend_rules & set(rules))
 
 
-@pytest.mark.parametrize(
-    ("trend", "expected_rule"),
-    [
-        ("upward", InsightRule.POSITIVE_TREND),
-        ("downward", InsightRule.NEGATIVE_TREND),
-        ("stable", InsightRule.STABLE_TREND),
-    ],
-)
-def test_trend_rules(trend, expected_rule):
-    analytics = _analytics(metrics={**_analytics().metrics, "trend_direction": trend})
+def test_partial_period_excluded_rule_fires_alongside_consistency_rule():
+    trend_metrics = _CONSISTENT_UPWARD_TREND_METRICS.model_copy(
+        update={"comparison_excluded_partial_period": True, "excluded_periods": ["2026-07"]}
+    )
+    analytics = _analytics(trend_metrics=trend_metrics)
 
-    assert expected_rule in InsightRulesEngine().evaluate(analytics)
+    rules = InsightRulesEngine().evaluate(analytics)
+
+    assert InsightRule.CONSISTENT_UPWARD_TREND in rules
+    assert InsightRule.PARTIAL_PERIOD_EXCLUDED in rules
 
 
 def test_dominant_category_rule():
@@ -266,12 +294,12 @@ async def test_engine_generates_structured_insight_via_llm():
 
     result = await engine.generate(_analytics())
 
-    assert result.title == "Appointment Trend Analysis"
+    assert result.title == "Randevu Eğilim Analizi"
     assert result.summary
-    assert result.highlights == ["Growth reached 18.4%"]
+    assert result.highlights == ["Büyüme %18,4 oldu"]
     assert result.llm_generated is True
     assert result.model == "fake-model"
-    assert set(result.rules) == {InsightRule.HIGH_GROWTH, InsightRule.POSITIVE_TREND}
+    assert set(result.rules) == {InsightRule.CONSISTENT_UPWARD_TREND}
     assert result.confidence == InsightConfidence.HIGH  # computed, not the LLM's "LOW"
     assert result.prompt_tokens == 200
     assert result.completion_tokens == 80
@@ -310,7 +338,7 @@ async def test_engine_falls_back_to_templates_on_llm_failure():
     assert result.llm_generated is False
     assert result.provider == "deterministic"
     assert result.summary  # grounded template narrative
-    assert "18.4" in " ".join(result.highlights)
+    assert "yükseliş" in " ".join(result.highlights)
     assert result.confidence == InsightConfidence.HIGH
 
 
@@ -441,3 +469,59 @@ async def test_generate_insights_node_failure_is_non_fatal():
     assert result.insights is None
     assert result.errors == []
     assert "generate_insights" in result.node_timings
+
+
+# ── Comparison-sufficiency narrative behavior ──────────────────────────────
+
+
+def test_single_category_narrative_has_no_competitive_claim():
+    analytics = AnalyticsResult(
+        analytics_type="comparison",
+        data_shape=DataShape.CATEGORICAL,
+        metrics={
+            "count": 1,
+            "total": 89.0,
+            "average": 89.0,
+            "maximum": 89.0,
+            "top_category": "Merkez",
+            "top_n": [{"label": "Merkez", "value": 89.0}],
+        },
+        row_count=1,
+        comparison_category_count=1,
+        comparison_sufficient=False,
+        comparison_limitation_reason=SINGLE_CATEGORY_LIMITATION,
+    )
+
+    narrative = build_deterministic_narrative(
+        analytics, [InsightRule.SINGLE_CATEGORY_COMPARISON]
+    )
+
+    full_text = narrative.summary + " ".join(
+        narrative.highlights + narrative.observations + narrative.considerations
+    )
+    assert "en yüksek" not in full_text.lower()
+    assert "ilk sırada" not in full_text.lower()
+    assert SINGLE_CATEGORY_LIMITATION in narrative.considerations
+
+
+def test_two_category_narrative_keeps_competitive_claim():
+    analytics = AnalyticsResult(
+        analytics_type="comparison",
+        data_shape=DataShape.CATEGORICAL,
+        metrics={
+            "count": 2,
+            "total": 150.0,
+            "average": 75.0,
+            "maximum": 100.0,
+            "top_category": "Merkez",
+            "top_n": [{"label": "Merkez", "value": 100.0}, {"label": "Kadikoy", "value": 50.0}],
+        },
+        row_count=2,
+        comparison_category_count=2,
+        comparison_sufficient=True,
+    )
+
+    narrative = build_deterministic_narrative(analytics, [])
+
+    full_text = " ".join(narrative.highlights + narrative.observations)
+    assert "en yüksek değer 'merkez'" in full_text.lower()

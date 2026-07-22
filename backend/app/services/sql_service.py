@@ -11,6 +11,7 @@ from app.llm.interfaces import ILLMProvider
 from app.parsers.interfaces import IOutputParser
 from app.planning.compliance import PlanComplianceValidator
 from app.planning.models import QueryPlan
+from app.services.deterministic_sql_builder import DeterministicSQLBuilder, DeterministicSQL, UnsupportedPlan
 from app.services.exceptions import SQLServiceException
 from app.services.interfaces import ISQLService
 from app.sql_validator.interfaces import ISQLValidator
@@ -46,11 +47,13 @@ class SQLService(ISQLService):
         output_parser: IOutputParser,
         sql_validator: ISQLValidator,
         compliance_validator: PlanComplianceValidator | None = None,
+        deterministic_builder: DeterministicSQLBuilder | None = None,
     ):
         self.llm_provider = llm_provider
         self.output_parser = output_parser
         self.sql_validator = sql_validator
         self.compliance_validator = compliance_validator or PlanComplianceValidator()
+        self.deterministic_builder = deterministic_builder or DeterministicSQLBuilder()
 
     async def generate_sql(
         self,
@@ -69,6 +72,12 @@ class SQLService(ISQLService):
         """
         logger.info("SQLService SQL generation and validation sequence started.")
         try:
+            deterministic, repair_reason, missing_metrics_before = self._try_deterministic(
+                query_plan, database_context, prompt
+            )
+            if deterministic is not None:
+                return deterministic
+
             # 1. First Attempt. 400 tokens: monthly-aggregation queries legitimately
             # exceed 200 and truncation yields corrupt identifiers (e.g. 'test_son').
             llm_response = await self.llm_provider.generate(
@@ -284,6 +293,11 @@ class SQLService(ISQLService):
                 },
             )
 
+            missing_metrics_after = (
+                self.compliance_validator.check(cleaned_sql, query_plan).missing_metrics
+                if query_plan is not None
+                else []
+            )
             return GeneratedSQL(
                 sql=cleaned_sql,
                 normalized_sql=validation_result.normalized_sql,
@@ -293,6 +307,11 @@ class SQLService(ISQLService):
                 latency_ms=llm_response.latency_ms,
                 prompt_tokens=llm_response.prompt_tokens,
                 completion_tokens=llm_response.completion_tokens,
+                sql_source="repaired_llm" if repair_attempt_used else "llm",
+                repair_attempted=repair_reason is not None,
+                repair_reason=repair_reason,
+                missing_metrics_before=missing_metrics_before,
+                missing_metrics_after=missing_metrics_after,
             )
 
         except SQLServiceException:
@@ -301,6 +320,92 @@ class SQLService(ISQLService):
         except Exception as e:
             logger.error(f"SQLService failed during SQL generation sequence: {e}")
             raise SQLServiceException(f"Failed during SQL generation sequence: {e}") from e
+
+    def _try_deterministic(
+        self,
+        query_plan: QueryPlan | None,
+        database_context: DatabaseContext | None,
+        prompt: str,
+    ) -> tuple[GeneratedSQL | None, str | None, list[str]]:
+        """Returns (generated_sql_or_none, repair_reason, missing_metrics_before).
+
+        `repair_reason`/`missing_metrics_before` are only ever populated when
+        this method falls through to the LLM path because of a genuine
+        multi-metric coverage gap in the deterministic builder output — the
+        single bounded repair signal this layer produces. No LLM call happens
+        here and no loop is introduced; the caller's existing (already
+        bounded, single-repair) LLM path takes over exactly as it does for
+        any other `UnsupportedPlan`.
+        """
+        if query_plan is None:
+            return None, None, []
+        adaptive_retry = "ADAPTIVE_EMPTY_RESULT" in prompt
+        built = self.deterministic_builder.build(query_plan, adaptive_retry=adaptive_retry)
+        if isinstance(built, UnsupportedPlan):
+            logger.info("Deterministic SQL builder unsupported: %s", built.reason)
+            return None, None, []
+
+        cleaned_sql, is_sql, validation_result, schema_issues = self._parse_and_validate(
+            built.sql, query_plan.question, database_context
+        )
+        if not is_sql or not validation_result or not validation_result.valid:
+            reason = getattr(validation_result, "reason", None) if validation_result else "not SQL"
+            raise SQLServiceException(
+                f"Deterministic SQL builder produced invalid SQL: {reason}"
+            )
+        if schema_issues:
+            raise SQLServiceException(
+                "Deterministic SQL builder produced SQL with unknown schema identifiers "
+                f"({'; '.join(schema_issues)})."
+            )
+
+        compliance = self.compliance_validator.check(
+            cleaned_sql,
+            query_plan,
+            expected_aliases=built.expected_aliases,
+            deterministic=True,
+        )
+        if not compliance.compliant:
+            if compliance.missing_metrics and not compliance.missing:
+                # A genuine deterministic-builder metric-coverage gap (e.g. an
+                # unverified metric mapping). No retry of the same deterministic
+                # path — it would reproduce the same gap — fall through once to
+                # the existing LLM path.
+                reason = (
+                    "deterministic_metric_alias_gap: "
+                    f"{', '.join(compliance.missing_metrics)}"
+                )
+                logger.warning(
+                    "Deterministic SQL missing metric coverage; falling through "
+                    "to LLM path: %s",
+                    compliance.missing_metrics,
+                    extra={"missing_metrics": compliance.missing_metrics},
+                )
+                return None, reason, compliance.missing_metrics
+            raise SQLServiceException(
+                "Deterministic SQL builder failed plan compliance: "
+                f"{'; '.join(compliance.missing)}"
+            )
+
+        meta = self.llm_provider.get_metadata()
+        return (
+            GeneratedSQL(
+                sql=cleaned_sql,
+                normalized_sql=validation_result.normalized_sql,
+                validation_result=validation_result,
+                provider=meta.get("provider", "deterministic"),
+                model="deterministic-query-plan-builder",
+                latency_ms=0.0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                sql_source="deterministic",
+                result_schema=built.result_schema,
+                expected_aliases=built.expected_aliases,
+                metric_aliases=built.metric_aliases,
+            ),
+            None,
+            [],
+        )
 
     def _compliance_missing(
         self,
@@ -383,14 +488,12 @@ class SQLService(ISQLService):
         LLM tends to 'correct' filter values back to proper Turkish spelling
         ('Çocuk Sağlığı' instead of the stored 'Cocuk Sagligi'). Any string literal
         whose diacritic-folded form appears in the folded question is rewritten to
-        that folded form. On SQLite, equality comparisons against such vocabulary
-        literals additionally get COLLATE NOCASE, because the normalized question is
-        lowercase while stored values may be title case ('cocuk sagligi' vs
-        'Cocuk Sagligi') and '=' is case-sensitive.
+        that folded form. Case differences are handled by the SQL Server database
+        collation (case-insensitive by default), so no COLLATE clause is added.
         """
         if not question:
             return sql
-        dialect = getattr(settings, "SQL_DIALECT", "sqlite")
+        dialect = getattr(settings, "SQL_DIALECT", "tsql")
         try:
             expression = sqlglot.parse_one(sql, read=dialect)
         except Exception:
@@ -410,27 +513,15 @@ class SQLService(ISQLService):
             if folded_value != value:
                 literal.set("this", folded_value)
                 changed = True
-            parent = literal.parent
-            if (
-                dialect == "sqlite"
-                and isinstance(parent, exp.EQ)
-                and not isinstance(parent.parent, exp.Collate)
-            ):
-                collated = exp.Collate(
-                    this=exp.Literal(this=literal.this, is_string=True),
-                    expression=exp.Var(this="NOCASE"),
-                )
-                literal.replace(collated)
-                changed = True
         if not changed:
             return sql
 
-        normalized = expression.sql(dialect=getattr(settings, "SQL_DIALECT", "sqlite"), pretty=False)
+        normalized = expression.sql(dialect=getattr(settings, "SQL_DIALECT", "tsql"), pretty=False)
         return normalized if normalized.endswith(";") else f"{normalized};"
 
     def _remove_redundant_identifier_projection(self, sql: str) -> str:
         try:
-            expression = sqlglot.parse_one(sql, read=getattr(settings, "SQL_DIALECT", "sqlite"))
+            expression = sqlglot.parse_one(sql, read=getattr(settings, "SQL_DIALECT", "tsql"))
         except Exception:
             return sql
 
@@ -456,7 +547,7 @@ class SQLService(ISQLService):
             return sql
 
         select.set("expressions", filtered)
-        normalized = expression.sql(dialect=getattr(settings, "SQL_DIALECT", "sqlite"), pretty=False)
+        normalized = expression.sql(dialect=getattr(settings, "SQL_DIALECT", "tsql"), pretty=False)
         return normalized if normalized.endswith(";") else f"{normalized};"
 
 

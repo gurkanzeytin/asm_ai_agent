@@ -1,5 +1,8 @@
 import logging
 import time
+from datetime import date, datetime
+from datetime import time as dt_time
+from decimal import Decimal
 from typing import Any
 
 import sqlglot
@@ -13,18 +16,25 @@ from app.repositories.interfaces import IAnalyticalRepository
 logger = logging.getLogger(__name__)
 
 
-def _database_provider() -> str:
-    """Derives the active database provider family from the configured URL."""
-    url = settings.DATABASE_URL or ""
-    if url.startswith("mssql"):
-        return "mssql"
-    if url.startswith("postgresql") or url.startswith("postgres"):
-        return "postgresql"
-    return "sqlite"
+def serialize_row_value(value: Any) -> Any:
+    """Converts SQL Server driver values into JSON-serializable Python primitives.
+
+    Decimal aggregates become int/float, datetime/date/time become ISO strings,
+    None is preserved, and text (including Turkish characters) passes through.
+    """
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    if isinstance(value, (datetime, date, dt_time)):
+        return value.isoformat()
+    if isinstance(value, (bytes, bytearray)):
+        return value.hex()
+    return value
 
 
-def build_paged_query(query: str, provider: str) -> str:
-    """Builds a dialect-correct paginated SQL statement with bound :skip and :limit params.
+def build_paged_query(query: str) -> str:
+    """Builds a SQL Server paginated statement with bound :skip and :limit params.
 
     SQL Server does not support LIMIT/OFFSET; it requires ORDER BY ... OFFSET ... FETCH.
     When the query has no ORDER BY, the deterministic-neutral 'ORDER BY (SELECT NULL)'
@@ -32,8 +42,6 @@ def build_paged_query(query: str, provider: str) -> str:
     because TOP cannot be combined with OFFSET/FETCH at the same query level.
     """
     query_clean = query.strip().rstrip(";")
-    if provider != "mssql":
-        return f"{query_clean} LIMIT :limit OFFSET :skip;"
 
     has_order_by = False
     has_top = False
@@ -85,10 +93,17 @@ class AnalyticalRepository(IAnalyticalRepository):
         try:
             result = await self.session.execute(text(query), params or {})
             if result.returns_rows:
-                return [dict(row) for row in result.mappings().all()]
+                return [
+                    {key: serialize_row_value(value) for key, value in row.items()}
+                    for row in result.mappings().all()
+                ]
             return []
         except Exception as e:
             logger.error(f"Query execution failed: {e}")
+            if "timeout" in str(e).lower():
+                raise RepositoryError(
+                    "Database query timed out. Narrow the requested date range or filters."
+                ) from e
             raise RepositoryError(f"Database query execution failed: {str(e)}") from e
         finally:
             logger.info(
@@ -121,7 +136,7 @@ class AnalyticalRepository(IAnalyticalRepository):
         if limit < 1 or limit > max_limit:
             raise RepositoryError(f"Pagination 'limit' must be between 1 and {max_limit}.")
 
-        paged_query = build_paged_query(query, _database_provider())
+        paged_query = build_paged_query(query)
         merged_params = {**(params or {}), "skip": skip, "limit": limit}
         return await self.execute_query(paged_query, merged_params)
 

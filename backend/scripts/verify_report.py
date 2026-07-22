@@ -85,14 +85,12 @@ Orijinal veri kümesinde toplam {original_row_count} kayıt bulunmaktadır.
 async def run_with_mock_llm():
     print("\n--- Running Verification with Mock LLM ---")
 
-    # The actual query we want to validate and run on hospital_demo.db
+    # The actual T-SQL query to validate and run on dbo.vw_RandevuRaporu
     target_sql = """
-    SELECT d.ad_soyad, COUNT(r.id) as randevu_sayisi
-    FROM doktorlar d
-    JOIN randevular r ON d.id = r.doktor_id
-    GROUP BY d.ad_soyad
-    ORDER BY randevu_sayisi DESC
-    LIMIT 1;
+    SELECT TOP (1) GenelRandevuBolumAdi, COUNT(Id) AS randevu_sayisi
+    FROM dbo.vw_RandevuRaporu
+    GROUP BY GenelRandevuBolumAdi
+    ORDER BY randevu_sayisi DESC;
     """
 
     # 1. Setup mock SQL generation to return our valid read-only query

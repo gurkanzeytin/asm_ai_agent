@@ -258,7 +258,7 @@ class TestCompliance:
         plan = build(planner, "En yoğun ilk 3 doktoru göster", tables)
         sql = "SELECT d.ad_soyad FROM doktorlar d;"
         result = self.validator.check(sql, plan)
-        assert any("LIMIT 3" in item for item in result.missing)
+        assert any("TOP (3)" in item for item in result.missing)
         assert any("ORDER BY" in item for item in result.missing)
 
     def test_missing_aggregation_detected(self, planner, tables):

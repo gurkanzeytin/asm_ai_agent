@@ -37,14 +37,8 @@ class ExecutionService(IExecutionService):
             raise QueryExecutionException(f"Read-only safety assertion failed: {reason}")
 
         # 2. Extract database engine provider dynamically (never expose the URL itself)
-        provider = "unknown"
         url = settings.DATABASE_URL or ""
-        if url.startswith("sqlite"):
-            provider = "sqlite"
-        elif url.startswith("postgresql") or url.startswith("postgres"):
-            provider = "postgresql"
-        elif url.startswith("mssql"):
-            provider = "mssql"
+        provider = "mssql" if url.startswith("mssql") else "unknown"
 
         # 3. Trigger execution on the repository
         try:

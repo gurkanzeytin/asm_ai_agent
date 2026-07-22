@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from app.application_models.generated_report import GeneratedReport
 from app.application_models.generated_sql import GeneratedSQL
 from app.analytics.models import AnalyticsResult
+from app.analytics.result_validation import ResultShapeVerdict
 from app.application_models.intent import IntentResult
 from app.insights.models import InsightResult
 from app.intelligence.models import ObservationResult
@@ -29,6 +30,16 @@ class AgentState(BaseModel):
     )
     query_result: Optional[QueryResult] = Field(
         default=None, description="Structured SQL query execution result payload."
+    )
+    result_shape_verdict: Optional[ResultShapeVerdict] = Field(
+        default=None,
+        description="Post-execution verdict comparing result columns against the "
+        "deterministic SQL's expected alias contract; gates analytics/Nemotron/report.",
+    )
+    analytics_blocked_reason: Optional[str] = Field(
+        default=None,
+        description="Set when an invalid result shape blocks analytics/insight generation "
+        "for this turn; downstream nodes must produce a safe clarification instead.",
     )
     analytics: Optional[AnalyticsResult] = Field(
         default=None,

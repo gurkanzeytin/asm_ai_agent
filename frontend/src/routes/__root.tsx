@@ -74,13 +74,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "ASM AI Agent · Sağlık Zekâsı" },
+      { title: "Med Agent · Sağlık Zekâsı" },
       {
         name: "description",
         content: "Premium enterprise AI assistant for healthcare organizations.",
       },
       { name: "author", content: "ASM" },
-      { property: "og:title", content: "ASM AI Agent" },
+      { property: "og:title", content: "Med Agent" },
       {
         property: "og:description",
         content: "Premium enterprise AI assistant for healthcare organizations.",
@@ -93,8 +93,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
-      { rel: "alternate icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/med-agent-logo.svg", type: "image/svg+xml" },
     ],
   }),
   shellComponent: RootShell,

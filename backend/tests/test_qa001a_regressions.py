@@ -38,7 +38,7 @@ def _query_result(columns, rows) -> QueryResult:
         execution_time_ms=1.0,
         success=True,
         executed_at=datetime(2026, 7, 14, 12, 0, 0),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
 
 

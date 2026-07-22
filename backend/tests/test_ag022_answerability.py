@@ -33,7 +33,7 @@ def make_query_result(rows: list[dict], columns: list[str]) -> QueryResult:
         execution_time_ms=1.0,
         success=True,
         executed_at=datetime.now(),
-        database_provider="sqlite",
+        database_provider="mssql",
     )
 
 
@@ -132,16 +132,16 @@ class TestRouting:
 
     def test_retry_route_taken_once(self):
         state = AgentState(
-            question="q", last_execution_error="no such column: x", sql_retry_count=1
+            question="q", last_execution_error="Invalid column name 'x'", sql_retry_count=1
         )
         assert route_after_execution(state) == "retry"
 
     def test_no_retry_when_errors_present(self):
         state = AgentState(
             question="q",
-            last_execution_error="no such column: x",
+            last_execution_error="Invalid column name 'x'",
             sql_retry_count=1,
-            errors=["ExecuteSQLNode failed: no such column: x"],
+            errors=["ExecuteSQLNode failed: Invalid column name 'x'"],
         )
         assert route_after_execution(state) == "continue"
 
@@ -183,14 +183,14 @@ class FakeWorkflowService:
 
 class TestExecuteRetry:
     def test_retryable_error_classifier(self):
-        assert _retryable_error("no such column: doktorlar.adi")
-        assert _retryable_error("SYNTAX ERROR near SELECT")
-        assert not _retryable_error("database is locked")
+        assert _retryable_error("Invalid column name 'doktor_adi'")
+        assert _retryable_error("Incorrect syntax near 'SELECT'")
+        assert not _retryable_error("Login failed for user 'svc'")
         assert not _retryable_error("timeout")
 
     @pytest.mark.asyncio
     async def test_first_retryable_failure_schedules_retry(self):
-        node = ExecuteSQLNode(FakeWorkflowService(RuntimeError("no such column: x")))
+        node = ExecuteSQLNode(FakeWorkflowService(RuntimeError("Invalid column name 'x'")))
         state = AgentState(question="q", generated_sql=make_generated_sql())
         result = await node.execute(state)
         assert result.sql_retry_count == 1
@@ -199,7 +199,7 @@ class TestExecuteRetry:
 
     @pytest.mark.asyncio
     async def test_second_failure_records_error(self):
-        node = ExecuteSQLNode(FakeWorkflowService(RuntimeError("no such column: x")))
+        node = ExecuteSQLNode(FakeWorkflowService(RuntimeError("Invalid column name 'x'")))
         state = AgentState(
             question="q", generated_sql=make_generated_sql(), sql_retry_count=1
         )
@@ -208,7 +208,7 @@ class TestExecuteRetry:
 
     @pytest.mark.asyncio
     async def test_non_retryable_failure_records_error_immediately(self):
-        node = ExecuteSQLNode(FakeWorkflowService(RuntimeError("database is locked")))
+        node = ExecuteSQLNode(FakeWorkflowService(RuntimeError("Login failed for user 'svc'")))
         state = AgentState(question="q", generated_sql=make_generated_sql())
         result = await node.execute(state)
         assert result.errors
@@ -238,7 +238,7 @@ class TestNoResultGuidance:
         )
         assert result is not None
         assert "Deneyebilecekleriniz" in result.markdown
-        assert "Tarih araligini genisletin" in result.markdown
+        assert "Tarih aralığını genişletin" in result.markdown
 
 
 # ─────────────────────────────────────────────

@@ -15,6 +15,7 @@ from app.context.models import (
     ExtractedSignals,
     ResolutionResult,
 )
+from app.context.session_store import DEFAULT_SESSION_ID, generate_session_id
 
 __all__ = [
     "ContextManager",
@@ -22,4 +23,6 @@ __all__ = [
     "ConversationTurn",
     "ExtractedSignals",
     "ResolutionResult",
+    "DEFAULT_SESSION_ID",
+    "generate_session_id",
 ]

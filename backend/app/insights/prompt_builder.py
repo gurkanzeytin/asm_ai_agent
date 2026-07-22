@@ -70,4 +70,22 @@ class InsightPromptBuilder:
         distribution = analytics.metrics.get("distribution")
         if isinstance(distribution, dict) and distribution:
             payload["distribution_percentages"] = distribution
+        if analytics.metric_summaries:
+            # Per-metric summaries only (total/average/min/max/top/bottom
+            # dimension label) — never raw rows, never patient-level fields.
+            payload["metric_summaries"] = {
+                metric_id: summary.model_dump(exclude={"metric_id"})
+                for metric_id, summary in analytics.metric_summaries.items()
+            }
+        if analytics.trend_metrics is not None:
+            # Reconciled endpoint/slope trend verdict + partial-period
+            # metadata — safe (counts/labels/directions only, no PII) and
+            # required so the LLM can state the partial-period limitation
+            # explicitly instead of comparing an in-progress bucket silently.
+            payload["trend_metrics"] = analytics.trend_metrics.model_dump()
+        if analytics.comparison_category_count is not None:
+            payload["comparison_category_count"] = analytics.comparison_category_count
+            payload["comparison_sufficient"] = analytics.comparison_sufficient
+            if analytics.comparison_limitation_reason:
+                payload["comparison_limitation_reason"] = analytics.comparison_limitation_reason
         return payload

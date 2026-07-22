@@ -139,7 +139,38 @@ class AgentGraphBuilder:
         analyze_results_node = AnalyzeResultsNode()
         from app.insights.insight_engine import InsightEngine
         from app.intelligence.observation_engine import ObservationEngine
-        insights_node = GenerateInsightsNode(InsightEngine(llm_provider=self.llm_provider))
+        from app.llm.provider import LLMFactory
+
+        # Complexity-based insight routing (deterministic / local-Ollama /
+        # remote-NVIDIA): resolve both routing legs once at graph-build time,
+        # sharing the same LLMFactory singletons used elsewhere. Either leg is
+        # allowed to be unavailable — the router and InsightEngine's bounded
+        # fallback both degrade gracefully when a leg is missing.
+        local_insight_provider = None
+        try:
+            local_insight_provider = LLMFactory.get_provider(settings.INSIGHT_LOCAL_PROVIDER)
+        except Exception as e:
+            logger.warning(
+                f"Insight routing: local provider '{settings.INSIGHT_LOCAL_PROVIDER}' "
+                f"unavailable, deterministic-only fallback will apply: {e}"
+            )
+        remote_insight_provider = None
+        if settings.NVIDIA_API_KEY.get_secret_value():
+            try:
+                remote_insight_provider = LLMFactory.get_provider(settings.INSIGHT_REMOTE_PROVIDER)
+            except Exception as e:
+                logger.warning(
+                    f"Insight routing: remote provider '{settings.INSIGHT_REMOTE_PROVIDER}' "
+                    f"unavailable, routing will stay local-only: {e}"
+                )
+
+        insights_node = GenerateInsightsNode(
+            InsightEngine(
+                llm_provider=self.llm_provider,
+                local_llm_provider=local_insight_provider,
+                remote_llm_provider=remote_insight_provider,
+            )
+        )
         observations_node = GenerateObservationsNode(
             ObservationEngine(
                 llm_provider=self.llm_provider,
