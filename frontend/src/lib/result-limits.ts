@@ -1,0 +1,5 @@
+export const DEFAULT_TABLE_PAGE_SIZE = 100;
+export const MAX_UI_ROWS_PER_PAGE = 100;
+export const MAX_API_ROWS = 500;
+export const MAX_DATABASE_FETCH_ROWS = 1000;
+export const DEFAULT_GROUPED_RESULT_LIMIT = 100;
