@@ -40,11 +40,17 @@ GRACEFUL_CATEGORIES = {"ambiguous", "graceful_failure"}
 ANALYTICAL_CATEGORIES = {"trend", "analytics", "comparison"}
 
 # Question noun (folded, prefix-matched) -> acceptable table name fragments.
+# The runtime database exposes a single view (dbo.vw_RandevuRaporu), so every
+# answerable entity resolves to that view. Entities absent from the view
+# (prescriptions, rooms, insurance, billing) keep their legacy table names:
+# they can never match, so any SQL generated for such a question is correctly
+# flagged as wrong_entity — those questions must degrade to out-of-scope
+# guidance instead of producing SQL.
 ENTITY_TABLE_HINTS: dict[str, tuple[str, ...]] = {
-    "randevu": ("randevular",),
-    "doktor": ("doktorlar",),
-    "hasta": ("hastalar", "randevular"),
-    "bolum": ("bolumler", "randevular", "doktorlar"),
+    "randevu": ("vw_randevuraporu",),
+    "doktor": ("vw_randevuraporu",),
+    "hasta": ("vw_randevuraporu",),
+    "bolum": ("vw_randevuraporu",),
     "recete": ("receteler",),
     "oda": ("odalar",),
     "sigorta": ("sigorta_sirketleri",),
