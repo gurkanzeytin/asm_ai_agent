@@ -103,6 +103,13 @@ class Settings(BaseSettings):
     DB_TRUST_SERVER_CERTIFICATE: bool = Field(
         default=True, description="Trust the SQL Server TLS certificate (internal network)."
     )
+    DB_ENCRYPT: bool = Field(
+        default=True,
+        description=(
+            "Enable SQL Server ODBC transport encryption. Keep enabled by default; set false "
+            "only for development hosts whose SQL Server/ODBC stack cannot negotiate TLS."
+        ),
+    )
     DATABASE_URL: str = Field(
         default="",
         description="Optional explicit SQLAlchemy async URL override (mssql+aioodbc only). "
@@ -146,7 +153,10 @@ class Settings(BaseSettings):
     )
     OLLAMA_MODEL: str = Field(
         default="qwen3:8b",
-        description="Ollama model name. Use a smaller model (e.g. qwen2.5:3b) for faster development inference; qwen3:8b for production quality.",
+        description=(
+            "Ollama model name. Use a smaller model (e.g. qwen2.5:3b) for faster "
+            "development inference; qwen3:8b for production quality."
+        ),
     )
     OLLAMA_EMBEDDING_MODEL: str = Field(
         default="nomic-embed-text",
@@ -269,11 +279,17 @@ class Settings(BaseSettings):
     )
     SCHEMA_MAX_TABLES: int = Field(
         default=5,
-        description="Maximum number of tables included in LLM context during schema fallback. Reduce to shrink prompt size.",
+        description=(
+            "Maximum number of tables included in LLM context during schema fallback. "
+            "Reduce to shrink prompt size."
+        ),
     )
     SCHEMA_MAX_COLUMNS: int = Field(
         default=15,
-        description="Maximum columns per table included in LLM context during schema fallback. PK and FK columns are always preserved.",
+        description=(
+            "Maximum columns per table included in LLM context during schema fallback. "
+            "PK and FK columns are always preserved."
+        ),
     )
     SCHEMA_TOKEN_BUDGET: int = Field(
         default=1500,
@@ -298,7 +314,10 @@ class Settings(BaseSettings):
     )
     REPORT_ANALYTICAL_ROW_THRESHOLD: int = Field(
         default=20,
-        description="Row count threshold above which report generation uses LLM analytical summarization.",
+        description=(
+            "Row count threshold above which report generation uses LLM analytical "
+            "summarization."
+        ),
     )
 
     # Logging configurations
@@ -316,10 +335,14 @@ class Settings(BaseSettings):
         )
         if self.DB_TRUSTED_CONNECTION:
             odbc += "Trusted_Connection=yes;"
-        # ODBC Driver 18 defaults to encryption, but make it explicit so the
-        # effective transport policy is visible and testable at the ODBC layer.
-        odbc += "Encrypt=yes;"
-        if self.ENVIRONMENT == "development" and self.DB_TRUST_SERVER_CERTIFICATE:
+        # ODBC Driver 18 defaults to encryption, but make the effective
+        # transport policy explicit and testable at the ODBC layer.
+        odbc += f"Encrypt={'yes' if self.DB_ENCRYPT else 'no'};"
+        if (
+            self.DB_ENCRYPT
+            and self.ENVIRONMENT == "development"
+            and self.DB_TRUST_SERVER_CERTIFICATE
+        ):
             odbc += "TrustServerCertificate=yes;"
         return odbc
 
@@ -347,7 +370,9 @@ class Settings(BaseSettings):
                 and not {"uid", "user", "pwd", "password"} & entry_keys
             ):
                 entries.append(("Trusted_Connection", "yes"))
-            entries.extend([("Encrypt", "yes"), ("TrustServerCertificate", "yes")])
+            entries.append(("Encrypt", "yes" if self.DB_ENCRYPT else "no"))
+            if self.DB_ENCRYPT and self.DB_TRUST_SERVER_CERTIFICATE:
+                entries.append(("TrustServerCertificate", "yes"))
             query[odbc_index] = (
                 query[odbc_index][0],
                 ";".join(f"{key}={value}" for key, value in entries) + ";",
@@ -366,7 +391,9 @@ class Settings(BaseSettings):
                 and "trusted_connection" not in query_keys
             ):
                 query.append(("Trusted_Connection", "yes"))
-            query.extend([("Encrypt", "yes"), ("TrustServerCertificate", "yes")])
+            query.append(("Encrypt", "yes" if self.DB_ENCRYPT else "no"))
+            if self.DB_ENCRYPT and self.DB_TRUST_SERVER_CERTIFICATE:
+                query.append(("TrustServerCertificate", "yes"))
         encoded_query = urlencode(query)
         # ``urlunsplit`` collapses the empty netloc in ``mssql+aioodbc:///``
         # to two slashes, which SQLAlchemy rejects for an odbc_connect URL.

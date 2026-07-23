@@ -47,9 +47,9 @@ export function MedAgentLogo({ size = 180, className, noIntro = false }: MedAgen
                 rotate: [0, -0.7, 0, 0.7, 0],
                 scale: [0.96, 1, 0.96],
                 filter: [
-                  "drop-shadow(0 0 0 rgba(6,182,212,0))",
-                  "drop-shadow(0 0 4px rgba(6,182,212,0.28))",
-                  "drop-shadow(0 0 0 rgba(6,182,212,0))",
+                  "drop-shadow(0 0 0 color-mix(in oklch, var(--cyan) 0%, transparent))",
+                  "drop-shadow(0 0 4px color-mix(in oklch, var(--cyan) 28%, transparent))",
+                  "drop-shadow(0 0 0 color-mix(in oklch, var(--cyan) 0%, transparent))",
                 ],
               }
         }

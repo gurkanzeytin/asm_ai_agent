@@ -10,10 +10,16 @@ from datetime import datetime
 
 import pytest
 
-from app.agent.graph import route_after_execution, route_by_intent
+from app.agent.graph import (
+    route_after_analysis,
+    route_after_execution,
+    route_after_validation,
+    route_by_intent,
+)
 from app.agent.nodes.execute_sql import ExecuteSQLNode, _retryable_error
 from app.agent.nodes.generate_out_of_scope import GenerateOutOfScopeNode
 from app.agent.state import AgentState
+from app.analytics.models import AnalyticsResult
 from app.application_models.generated_report import GeneratedReport
 from app.application_models.generated_sql import GeneratedSQL
 from app.application_models.intent import IntentResult, IntentType
@@ -22,7 +28,9 @@ from app.application_models.workflow_models import QueryResult
 from app.reporting.report_classifier import ReportType
 from app.reporting.template_renderer import TemplateReportRenderer
 from app.services.answerability import AnswerabilityGuard
+from app.services.query_analyzer import QueryAnalyzer
 from app.services.reporting_service import ReportingService
+from app.sql_validator import SQLValidationResult
 
 
 def make_query_result(rows: list[dict], columns: list[str]) -> QueryResult:
@@ -81,6 +89,28 @@ class TestAnswerabilityGuard:
     def test_non_domain_questions_are_not_answerable(self, question):
         assert not self.guard.assess(question).answerable
 
+    def test_destructive_sql_request_is_not_answerable(self):
+        result = self.guard.assess("Randevu tablosunu silmek için SQL yaz")
+        assert not result.answerable
+        assert result.reason == "unsafe_write_intent"
+        assert any(signal.startswith("unsafe_write_intent:") for signal in result.signals)
+
+    def test_generic_sql_table_request_is_not_answerable_without_subject(self):
+        result = self.guard.assess(
+            "SQL sorgusunu yaz ve \u00e7al\u0131\u015ft\u0131r\u0131p tabloyu getir"
+        )
+        assert not result.answerable
+        assert result.reason == "no_domain_signal"
+
+    def test_generic_sql_table_request_asks_for_missing_subject(self):
+        ambiguity = QueryAnalyzer().detect_ambiguity(
+            "SQL sorgusunu yaz ve \u00e7al\u0131\u015ft\u0131r\u0131p tabloyu getir"
+        )
+
+        assert ambiguity is not None
+        assert ambiguity.matched_phrase == "format_only_database_request"
+        assert "Hangi verinin" in ambiguity.question
+
     def test_guard_fails_open_on_internal_error(self, monkeypatch):
         def boom(*args, **kwargs):
             raise RuntimeError("boom")
@@ -101,6 +131,15 @@ class TestRouting:
             question="Bitcoin fiyatı?",
             intent=intent(IntentType.DATABASE_QUERY),
             answerable=False,
+        )
+        assert route_by_intent(state) == "out_of_scope"
+
+    def test_destructive_sql_request_routes_out_of_scope(self):
+        state = AgentState(
+            question="Randevu tablosunu silmek için SQL yaz",
+            intent=intent(IntentType.DATABASE_QUERY),
+            answerable=False,
+            answerability_signals=["entity:Appointment", "unsafe_write_intent:delete"],
         )
         assert route_by_intent(state) == "out_of_scope"
 
@@ -148,6 +187,52 @@ class TestRouting:
     def test_clean_execution_continues(self):
         assert route_after_execution(AgentState(question="q")) == "continue"
 
+    def test_data_only_after_execution_skips_analytics_and_report(self):
+        state = AgentState(
+            question="q",
+            response_mode="data",
+            query_result=make_query_result([{"c": 1}], ["c"]),
+        )
+        assert route_after_execution(state) == "data_only"
+
+    def test_visualization_after_analysis_skips_llm_report_stages(self):
+        state = AgentState(
+            question="q",
+            response_mode="visualization",
+            query_result=make_query_result([{"c": 1}], ["c"]),
+            analytics=AnalyticsResult(analytics_type="distribution", row_count=1),
+        )
+        assert route_after_analysis(state) == "visualization_only"
+
+    def test_sql_only_after_validation_skips_execution(self):
+        state = AgentState(
+            question="q",
+            response_mode="sql",
+            generated_sql=GeneratedSQL(
+                sql="SELECT 1;",
+                validation_result=SQLValidationResult(valid=True),
+                provider="test",
+                model="test",
+                latency_ms=0.0,
+            ),
+        )
+        assert route_after_validation(state) == "sql_only"
+
+    def test_validation_errors_do_not_skip_execution_fallback_path(self):
+        state = AgentState(
+            question="q",
+            response_mode="sql",
+            generated_sql=GeneratedSQL(
+                sql="DELETE FROM dbo.vw_RandevuRaporu;",
+                validation_result=SQLValidationResult(valid=False, reason="unsafe"),
+                provider="test",
+                model="test",
+                latency_ms=0.0,
+            ),
+            errors=["SQL Safety validation failed: unsafe"],
+        )
+        assert route_after_validation(state) == "execute"
+
 
 # ─────────────────────────────────────────────
 # Out-of-scope node
@@ -170,6 +255,22 @@ class TestOutOfScopeNode:
         for unsupported in ("reçete", "fatura", "laboratuvar", "yatış"):
             assert unsupported not in markdown.lower()
         assert not state.errors
+
+    @pytest.mark.asyncio
+    async def test_destructive_sql_request_returns_read_only_guidance(self):
+        node = GenerateOutOfScopeNode()
+        state = await node.execute(
+            AgentState(
+                question="Randevu tablosunu silmek için SQL yaz",
+                answerability_signals=["entity:Appointment", "unsafe_write_intent:delete"],
+            )
+        )
+        assert state.outcome == AgentOutcome.OUT_OF_SCOPE.value
+        assert state.generated_report is not None
+        markdown = state.generated_report.markdown
+        assert "salt-okunur" in markdown
+        assert "üretemem" in markdown
+        assert "COUNT(*)" not in markdown
 
 
 # ─────────────────────────────────────────────

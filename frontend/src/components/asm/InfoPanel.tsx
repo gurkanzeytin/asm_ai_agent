@@ -86,11 +86,11 @@ export function InfoPanel({ open, responseMs, isThinking, sql }: Props) {
               }
             >
               {sql ? (
-                <pre className="max-h-72 overflow-auto whitespace-pre rounded-lg bg-background/60 p-3 text-[11px] leading-relaxed text-cyan">
+                <pre className="max-h-72 overflow-auto whitespace-pre rounded-lg border border-border/60 bg-muted p-3 text-[11px] leading-relaxed text-foreground">
                   {sql}
                 </pre>
               ) : (
-                <p className="rounded-lg bg-background/60 p-3 text-[11px] leading-relaxed text-muted-foreground">
+                <p className="rounded-lg border border-border/60 bg-muted p-3 text-[11px] leading-relaxed text-muted-foreground">
                   {tr.details.noSqlGenerated}
                 </p>
               )}

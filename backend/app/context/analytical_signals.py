@@ -354,6 +354,8 @@ _DIMENSION_ADD_MARKERS = (
     "ayrica",
 )
 _FILTER_ONLY_MARKERS = ("sadece", "sinirla", "sinirlandir", "filtrele")
+_SAME_ANALYSIS_MARKERS = ("aynisi", "aynisini")
+_DIMENSION_DEFAULT_METRICS = {"appointment_count", "appointments_per_type"}
 
 
 def _union(left: list, right: list) -> list:
@@ -492,6 +494,7 @@ def merge_query_plans(
     if not follow_up_detected or retained is None:
         return current
 
+    from app.semantics import catalog
     from app.semantics.view_mapping import fold
 
     folded = fold(raw_question)
@@ -542,12 +545,60 @@ def merge_query_plans(
     # Planner defaults on a terse ranking/dimension follow-up are not an
     # explicit metric override.  Only raw-text metric evidence may replace the
     # retained calculation (e.g. retain AVG duration for "top 10 departments").
-    explicit_current_metrics = from_raw_text(raw_question).metrics
-    if current.metrics and explicit_current_metrics:
+    #
+    # A conditional metric (waiting_count, realized_rate, ...) whose formula is
+    # anchored to the SAME RandevuDurumu value this turn is already filtering
+    # to ("beklemede olanları göster" resolves both the status filter AND,
+    # via the overlapping catalog synonym "beklemede olan", the waiting_count
+    # metric) is a restatement of the filter, not a deliberate request to
+    # change what is being computed — exactly the ambiguity that made turn 2's
+    # "Sadece gerçekleşenleri göster." correctly leave metrics untouched, only
+    # here the metric catalog's synonym happens to also match. Excluding such
+    # metrics keeps the retained calculation (e.g. appointment_count) intact.
+    #
+    # Status-value overlap alone is not enough, though: "Bekleyen randevu
+    # sayısı nedir?" also matches "bekleyen" -> RandevuDurumu='Beklemede' AND
+    # waiting_count's synonym, but is an unambiguous explicit measure request,
+    # not a filter restatement. A generic Turkish measure-noun marker
+    # ("sayısı", "kaç ...", "oranı", ...) is the deciding signal — mirrors the
+    # file's own _FILTER_ONLY_MARKERS/_DIMENSION_ADD_MARKERS pattern above,
+    # not tied to any specific metric id or status value.
+    turn_status_values = {
+        value for predicate in current.extra_filters if (value := _extract_status_value(predicate))
+    }
+
+    def _is_status_filter_echo(metric_id: str) -> bool:
+        from app.semantics import catalog
+
+        status_value = catalog.metric_status_value(metric_id)
+        if status_value is None or status_value not in turn_status_values:
+            return False
+        # Single canonical measure-request definition (app.semantics.catalog),
+        # shared with the planner's own fallback metric selection — a verb/
+        # inflection form the planner newly learns to recognize (PLANNER-
+        # METRIC-CONSISTENCY-002) is honored here too, instead of this layer
+        # silently reverting it for want of an outdated local marker list.
+        return catalog.detect_measure_request(folded) is None
+
+    current_metrics = [m for m in current.metrics if not _is_status_filter_echo(m)]
+    explicit_current_metrics = [
+        m for m in from_raw_text(raw_question).metrics if not _is_status_filter_echo(m)
+    ]
+    ratio_metric_replaced = False
+    if (
+        any(marker in folded for marker in _SAME_ANALYSIS_MARKERS)
+        and retained.metrics
+        and current_metrics
+        and set(current_metrics).issubset(_DIMENSION_DEFAULT_METRICS)
+        and not catalog.detect_measure_request(folded)
+    ):
+        current_metrics = []
+        explicit_current_metrics = []
+    if current_metrics and explicit_current_metrics:
         from app.context.merge_policy import merge_metrics
 
         metrics, _ = merge_metrics(
-            current_metrics=current.metrics,
+            current_metrics=current_metrics,
             inherited_metrics=retained.metrics,
             follow_up_detected=True,
             folded_question=folded,
@@ -571,6 +622,7 @@ def merge_query_plans(
             value = getattr(current, field_name)
             if value is not None:
                 updates[field_name] = value
+        ratio_metric_replaced = current.analysis_type == "ratio"
 
     if current.ranking is not None:
         updates["ranking"] = current.ranking
@@ -603,6 +655,13 @@ def merge_query_plans(
             if _filter_family(value) not in current_families
         ]
         updates["extra_filters"] = _union(inherited_filters, current.extra_filters)
+    if ratio_metric_replaced:
+        source_filters = updates.get("extra_filters", retained.extra_filters)
+        updates["extra_filters"] = [
+            value
+            for value in source_filters
+            if _filter_family(value) != "randevudurumu"
+        ]
 
     updates["resolved_filters"] = {
         **retained.resolved_filters,

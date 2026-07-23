@@ -32,7 +32,9 @@
         "terms": [
           "doktor",
           "hekim",
-          "uzman"
+          "uzman",
+          "doktorlara gore",
+          "hekimlere gore"
         ],
         "column": "GenelRandevuKaynakAdi",
         "note": "Randevu kaynağı; kullanıcı 'doktor/hekim' dediğinde bu sütun kullanılır. RandevuyuVeren veya HastaAdi ile karıştırılmaz."
@@ -43,7 +45,9 @@
           "randevu veren",
           "olusturan",
           "kaydeden",
-          "randevuyu acan"
+          "randevuyu acan",
+          "randevuyu verenlere gore",
+          "olusturanlara gore"
         ],
         "column": "RandevuyuVeren",
         "note": "Randevuyu oluşturan/atayan kişi veya sistem; doktor değildir."
@@ -54,7 +58,9 @@
           "brans",
           "klinik",
           "poliklinik",
-          "servis"
+          "servis",
+          "branslara gore",
+          "kliniklere gore"
         ],
         "column": "GenelRandevuBolumAdi",
         "note": "Raporlamada kullanılan pratik bölüm adı; KategoriAdi değildir."
@@ -63,7 +69,9 @@
         "terms": [
           "sube",
           "hastane",
-          "lokasyon"
+          "lokasyon",
+          "subelere gore",
+          "lokasyonlara gore"
         ],
         "column": "SubeAdi",
         "note": "Şube / hastane lokasyonu; bölüm (GenelRandevuBolumAdi) değildir."
@@ -136,6 +144,8 @@
           "randevu sayisi",
           "randevu sayilari",
           "randevularin sayisi",
+          "randevu adedi",
+          "randevularin adedi",
           "kac randevu"
         ],
         "expression": "COUNT(*)",

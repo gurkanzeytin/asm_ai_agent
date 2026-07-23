@@ -1,7 +1,8 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Moon, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MedAgentLogo } from "./MedAgentLogo";
 import { tr } from "@/locales/tr";
+import { useTheme } from "@/hooks/use-theme";
 
 interface Props {
   title: string;
@@ -10,6 +11,8 @@ interface Props {
 }
 
 export function ChatHeader({ title, onToggleInfo, infoOpen }: Props) {
+  const { theme, toggleTheme } = useTheme();
+
   return (
     <header className="flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background/60 px-4 backdrop-blur">
       <div className="shrink-0">
@@ -26,6 +29,9 @@ export function ChatHeader({ title, onToggleInfo, infoOpen }: Props) {
           </div>
         </div>
       </div>
+      <IconBtn onClick={toggleTheme} title={tr.header.toggleTheme}>
+        {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      </IconBtn>
       <IconBtn onClick={onToggleInfo} title={tr.header.detailsPanel} active={infoOpen}>
         {infoOpen ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
       </IconBtn>

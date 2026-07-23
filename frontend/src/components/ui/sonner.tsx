@@ -9,7 +9,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast:
-            "group toast group-[.toaster]:rounded-xl group-[.toaster]:border-border/70 group-[.toaster]:bg-background/95 group-[.toaster]:text-foreground group-[.toaster]:shadow-[0_14px_36px_-24px_rgb(0_0_0/0.7)] group-[.toaster]:backdrop-blur-xl",
+            "group toast group-[.toaster]:rounded-xl group-[.toaster]:border-border/70 group-[.toaster]:bg-background/95 group-[.toaster]:text-foreground group-[.toaster]:shadow-[0_14px_36px_-24px_rgb(15_23_42/0.18)] group-[.toaster]:backdrop-blur-xl",
           success: "group-[.toaster]:border-cyan/20 group-[.toaster]:bg-background/95",
           icon: "group-[.toast]:text-cyan group-[.toast]:opacity-90",
           title: "group-[.toast]:text-[13px] group-[.toast]:font-semibold",

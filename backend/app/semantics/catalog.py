@@ -384,14 +384,27 @@ def _spans_overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
     return a[0] < b[1] and b[0] < a[1]
 
 
+# Explicit multi-metric wording: the ONLY signal that overrides metric
+# specificity (a matched conditional metric otherwise always wins over the
+# generic base metric it specializes) — reuses the same conjunction/
+# comparison vocabulary already established elsewhere in this codebase
+# (app.context.merge_policy._METRIC_ADD_CONJUNCTION, ontology.GOAL_MARKERS
+# COMPARE) for "the user explicitly wants more than one metric together".
+_MULTI_METRIC_MARKERS = (" ve ", "karsilastir", "kiyasla")
+
+
 def match_metrics(folded_question: str) -> list[str]:
     """Returns metric ids whose synonyms appear in the question, most specific first.
 
-    Conditional (status-based) counts suppress the generic appointment_count when
-    both match the SAME mention (e.g. 'gerçekleşen randevuların sayısı' resolves to
-    the status metric), but not when the question independently asks for both the
-    plain count and a rate as two separate, non-overlapping mentions (e.g. 'randevu
-    sayısı ve gerçekleşme oranı') — in that case both must survive.
+    Conditional (status-based) counts suppress the generic appointment_count
+    whenever any conditional metric matched at all — a specific conditional
+    metric (waiting_count, no_show_count, ...) is always the more precise
+    reading of "the count" unless the question explicitly asks for multiple
+    metrics together (a _MULTI_METRIC_MARKERS conjunction/comparison word),
+    regardless of whether their matched synonym spans happen to overlap
+    token-wise (e.g. 'gelmeyen randevu adedini ver' — 'gelmeyen' and 'randevu
+    adedi' are two separate, non-overlapping mentions of the SAME single
+    request, not two independently requested metrics).
     """
     catalog = load_metric_catalog()
     scored: list[tuple[int, str]] = []
@@ -413,17 +426,29 @@ def match_metrics(folded_question: str) -> list[str]:
     matched = [metric_id for _, metric_id in scored]
 
     by_id = catalog.by_id()
-    conditional_spans = [
-        spans[mid]
+    conditional_ids = [
+        mid
         for mid in matched
         if by_id[mid].formula_type in ("conditional_count", "conditional_rate")
     ]
     if (
         "appointment_count" in matched
-        and "appointment_count" in spans
-        and any(_spans_overlap(spans["appointment_count"], span) for span in conditional_spans)
+        and conditional_ids
+        and not any(marker in folded_question for marker in _MULTI_METRIC_MARKERS)
     ):
         matched.remove("appointment_count")
+    if conditional_ids and not any(marker in folded_question for marker in _MULTI_METRIC_MARKERS):
+        matched = [
+            mid
+            for mid in matched
+            if not (
+                by_id[mid].formula_type == "count_rows_grouped"
+                and by_id[mid].formula == "COUNT(*)"
+            )
+        ]
+    data_quality_ids = [mid for mid in matched if by_id[mid].analysis_type == "data_quality"]
+    if data_quality_ids and not any(marker in folded_question for marker in _MULTI_METRIC_MARKERS):
+        matched = data_quality_ids
     # A matched rate implies its count sibling only when they share the same mention.
     rate_bases: set[str] = set()
     for mid in matched:
@@ -431,6 +456,8 @@ def match_metrics(folded_question: str) -> list[str]:
             continue
         base = by_id[mid].numerator
         if base in matched and base in spans and _spans_overlap(spans[base], spans[mid]):
+            rate_bases.add(base)
+        if detect_measure_request(folded_question) == "rate" and base in matched:
             rate_bases.add(base)
     matched = [mid for mid in matched if mid not in rate_bases]
 
@@ -454,6 +481,74 @@ def match_metrics(folded_question: str) -> list[str]:
             )
         ]
     return matched
+
+
+def metric_status_value(metric_id: str) -> str | None:
+    """Returns the RandevuDurumu value a conditional metric's formula is
+    anchored to (MetricSpec.status_value — e.g. 'waiting_count' -> 'Beklemede'),
+    or None for metrics with no such anchor. Used by
+    app.context.analytical_signals.merge_query_plans to recognize when a
+    catalog metric match is really a restatement of a status filter mentioned
+    in the same turn (their synonyms overlap, e.g. 'beklemede olan') rather
+    than a deliberate metric switch."""
+    spec = load_metric_catalog().by_id().get(metric_id)
+    return spec.status_value if spec else None
+
+
+def metrics_for_status_value(status_value: str, *, rate: bool = False) -> list[str]:
+    """Reverse lookup of metric_status_value: catalog metric ids anchored to
+    a given RandevuDurumu value, filtered to conditional_count (rate=False)
+    or conditional_rate (rate=True) metrics. Catalog-authoritative — returns
+    an empty list (never a guess) when no such metric is defined, so a caller
+    can only ever select a metric the catalog actually declares."""
+    wanted_type = "conditional_rate" if rate else "conditional_count"
+    return [
+        metric.id
+        for metric in load_metric_catalog().metrics
+        if metric.formula_type == wanted_type and metric.status_value == status_value
+    ]
+
+
+# Generic Turkish measure-request vocabulary: verbs/nouns that ask for a
+# count, total, or ratio — independent of which status/entity they apply to
+# and independent of the metric synonym phrase list (covers imperative/
+# inflected forms like "say", "sayınız", "toplamını", "adedini" that no
+# single metric's synonym list enumerates). Deliberately generic: adding a
+# new status/metric to the catalog never requires touching this list.
+_BARE_MEASURE_VERB_PATTERN = re.compile(r"\b(say|sayin|sayiniz)\b")
+_COUNT_REQUEST_MARKERS = (
+    "sayisi",
+    "sayisini",
+    "sayilari",
+    "adedi",
+    "adedini",
+    "miktari",
+    "miktarini",
+    "toplami",
+    "toplamini",
+    "kac tane",
+    "kac ",
+)
+_RATE_REQUEST_MARKERS = ("orani", "oranini", "yuzdesi", "yuzde")
+
+
+def detect_measure_request(folded_question: str) -> str | None:
+    """Returns 'count', 'rate', or None: whether the utterance carries a
+    generic count/total ('rate'=False) or ratio/percentage ('rate'=True)
+    MEASURE request — independent of any specific status/entity wording or
+    catalog metric synonym phrase. Used to select a conditional metric for
+    utterances the phrase-based catalog synonyms don't cover (planner
+    fallback metric selection) and, identically, by the conversational
+    memory merge layer (app.context.analytical_signals) to distinguish an
+    explicit metric switch from a same-turn status-filter restatement — one
+    canonical definition reused by both layers."""
+    if any(marker in folded_question for marker in _RATE_REQUEST_MARKERS):
+        return "rate"
+    if any(
+        marker in folded_question for marker in _COUNT_REQUEST_MARKERS
+    ) or _BARE_MEASURE_VERB_PATTERN.search(folded_question):
+        return "count"
+    return None
 
 
 def match_dimensions(folded_question: str) -> list[str]:

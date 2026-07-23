@@ -77,6 +77,76 @@ describe("SqlResultsTable — sütun etiketleri (AI-INTELLIGENCE-013)", () => {
     expect(screen.getByText("SQL Sonucu - Geniş Görünüm")).toBeTruthy();
     expect(within(dialog).getByRole("table")).toBeTruthy();
   });
+  it("chart-only modda tablo kabugunu ve tablo kontrollerini gizler", () => {
+    render(
+      <SqlResultsTable data={{ ...baseData, visualization: "BAR_CHART" }} displayMode="chart" />,
+    );
+
+    expect(screen.getByText("Grafik")).toBeTruthy();
+    expect(screen.queryByText("SQL Sonucu")).toBeNull();
+    expect(screen.queryByPlaceholderText("Satırlarda ara")).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+});
+
+describe("SqlResultsTable chart-only scalar metric", () => {
+  it("tek sayisal sonucu tablo yerine metrik kart olarak gosterir", () => {
+    render(
+      <SqlResultsTable
+        data={{
+          columns: ["appointment_count"],
+          rows: [{ appointment_count: 42 }],
+          visualization: "BAR_CHART",
+        }}
+        displayMode="chart"
+      />,
+    );
+
+    expect(screen.getByText("Grafik")).toBeTruthy();
+    expect(screen.getByText("Tek değerli sonuç")).toBeTruthy();
+    expect(screen.getByText("42 randevu")).toBeTruthy();
+    expect(screen.getByText("Toplam Randevu")).toBeTruthy();
+    expect(screen.queryByPlaceholderText("Satırlarda ara")).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+});
+
+describe("SqlResultsTable — DOCTOR-DISPLAY-NAME-ENRICHMENT-001 hidden columns", () => {
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn().mockReturnValue("blob:mock");
+    URL.revokeObjectURL = vi.fn();
+  });
+
+  const doctorData: SqlResult = {
+    columns: ["DoktorAdi", "DoktorId", "appointment_count"],
+    rows: [
+      { DoktorAdi: "ÇAĞATAY ÖKTENLİ", DoktorId: 7773, appointment_count: 43232 },
+      { DoktorAdi: "NAMIK KEMAL AKPINAR", DoktorId: 2549, appointment_count: 120 },
+    ],
+    columnMetadata: [
+      { key: "DoktorAdi", label: "Doktor", format: "text", unit: null },
+      { key: "DoktorId", label: "Doktor", format: "text", unit: null, hidden: true },
+      { key: "appointment_count", label: "Randevu Sayısı", format: "integer", unit: null },
+    ],
+  };
+
+  it("hides a column flagged hidden by backend column_metadata by default", () => {
+    render(<SqlResultsTable data={doctorData} />);
+    expect(screen.getByRole("columnheader", { name: /Doktor/ })).toBeTruthy();
+    expect(screen.queryByText("7773")).toBeNull();
+    expect(screen.getByText("ÇAĞATAY ÖKTENLİ")).toBeTruthy();
+  });
+
+  it("does not hide DoktorId when column_metadata does not flag it", () => {
+    const visibleIdData: SqlResult = {
+      ...doctorData,
+      columnMetadata: doctorData.columnMetadata?.map((m) =>
+        m.key === "DoktorId" ? { ...m, hidden: false } : m,
+      ),
+    };
+    render(<SqlResultsTable data={visibleIdData} />);
+    expect(screen.getByText("7773")).toBeTruthy();
+  });
 });
 
 describe("SqlResultsTable — result-size safety", () => {

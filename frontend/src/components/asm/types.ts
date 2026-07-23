@@ -1,6 +1,7 @@
 import type { SqlResult } from "./SqlResultsTable";
 import type { MetricCard } from "@/lib/presentation";
 import type { WorkflowStage } from "@/lib/api";
+import type { ResponseMode } from "@/lib/output-intent";
 
 export type Role = "user" | "assistant";
 export type MessageStatus = "success" | "error" | "stopped";
@@ -20,8 +21,11 @@ export interface Message {
   rowCount?: number;
   prompt?: string;
   sqlResult?: SqlResult;
+  responseMode?: ResponseMode;
+  visibleSections?: string[];
   /** SQL gerçekten çalıştıysa ham sonuç tablosu gösterilir (AI-011 §8). */
   showSqlTable?: boolean;
+  showResultInline?: boolean;
   /** Tek satırlık typed özetlerden türetilen Türkçe metrik kartları. */
   metricCards?: MetricCard[];
   /** Backend'den dönen gerçek yanıt metadata'sı (model, süre, token). */

@@ -7,6 +7,10 @@ from app.analytics.analytics_engine import AnalyticsEngine
 from app.analytics.result_contracts import TypedResultNormalizer
 from app.analytics.result_reasoning import ResultReasoner
 from app.analytics.result_validation import ResultValidator
+from app.services.doctor_label_resolver import (
+    DoctorLabelResolver,
+    enrich_query_result_with_doctor_labels,
+)
 from app.services.result_safety import enrich_result_counts, is_unsafe_analytical_detail
 from app.shared.result_limits import OVERSIZED_ANALYTICAL_RESULT_MESSAGE
 
@@ -20,8 +24,13 @@ class AnalyzeResultsNode(IAgentNode):
     the report pipeline always continues. No LLM calls are made in this node.
     """
 
-    def __init__(self, analytics_engine: AnalyticsEngine | None = None):
+    def __init__(
+        self,
+        analytics_engine: AnalyticsEngine | None = None,
+        doctor_label_resolver: DoctorLabelResolver | None = None,
+    ):
         self.analytics_engine = analytics_engine or AnalyticsEngine()
+        self.doctor_label_resolver = doctor_label_resolver
 
     async def execute(self, state: AgentState) -> AgentState:
         logger.info("AnalyzeResultsNode execution started.")
@@ -88,14 +97,34 @@ class AnalyzeResultsNode(IAgentNode):
             if state.database_context and state.database_context.normalized_query:
                 question = state.database_context.normalized_query
 
+            # Doctor display-name enrichment (DOCTOR-DISPLAY-NAME-ENRICHMENT-001):
+            # purely additive — DoktorId stays the grouping key everywhere;
+            # this only attaches a DoktorAdi label column before normalization
+            # so it flows through analytics/insights/report/visualization like
+            # any other result column. Degrades to the original query_result
+            # on any failure (never blocks the analytical answer).
+            query_result = state.query_result
+            if self.doctor_label_resolver is not None:
+                try:
+                    query_result = await enrich_query_result_with_doctor_labels(
+                        query_result,
+                        state.query_plan,
+                        self.doctor_label_resolver,
+                        raw_question=state.raw_question or state.question,
+                    )
+                except Exception as error:
+                    logger.warning(
+                        "Doctor label enrichment degraded (non-fatal): %s", error
+                    )
+
             normalizer = TypedResultNormalizer()
             normalized = normalizer.normalize(
-                state.query_result,
+                query_result,
                 plan=state.query_plan,
                 schema_name=state.generated_sql.result_schema if state.generated_sql else None,
                 expected_aliases=state.generated_sql.expected_aliases if state.generated_sql else None,
             )
-            query_result = normalizer.as_query_result(state.query_result, normalized)
+            query_result = normalizer.as_query_result(query_result, normalized)
 
             metric_aliases = state.generated_sql.metric_aliases if state.generated_sql else None
             analytics_result = self.analytics_engine.analyze(

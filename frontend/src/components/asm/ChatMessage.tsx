@@ -50,6 +50,12 @@ export function ChatMessage({
     return context && cards.every((card) => card.context === context) ? context : undefined;
   })();
   const returnsLoadingPlaceholder = !isUser && Boolean(message.streaming) && !message.content;
+  const resultDisplayMode =
+    message.visibleSections?.includes("chart") && !message.visibleSections.includes("table")
+      ? "chart"
+      : message.visibleSections?.includes("chart") && message.visibleSections.includes("table")
+        ? "both"
+        : "table";
   traceChatRuntime("chat-message-render", {
     messageId: message.id,
     role: message.role,
@@ -121,6 +127,8 @@ export function ChatMessage({
             <ResponseError kind={message.errorKind ?? "server"} />
           ) : message.streaming ? (
             <AssistantText content={message.content} streaming animate={animateResponse} />
+          ) : message.responseMode === "sql" ? (
+            <AssistantSqlText sql={message.content} />
           ) : (
             <AssistantText content={message.content} animate={animateResponse} />
           )}
@@ -174,52 +182,70 @@ export function ChatMessage({
             </div>
           </div>
         )}
-        {!isUser && message.showSqlTable && message.sqlResult && !message.streaming && (
-          <div className="w-full">
-            <button
-              type="button"
-              onClick={() => setDetailsOpen((open) => !open)}
-              aria-expanded={detailsOpen}
-              className="flex items-center gap-1.5 rounded-md px-1 py-1 text-[11px] font-medium text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-            >
-              <ChevronRight
-                className={cn("h-3.5 w-3.5 transition-transform", detailsOpen && "rotate-90")}
-                aria-hidden="true"
-              />
-              {tr.chat.technicalDetails}
-            </button>
-            <AnimatePresence initial={false}>
-              {detailsOpen && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0, y: -4 }}
-                  animate={{ height: "auto", opacity: 1, y: 0 }}
-                  exit={{ height: 0, opacity: 0, y: -4 }}
-                  transition={panelTransition}
-                  className="overflow-hidden"
-                >
-                  <div className="mt-2 w-full">
-                    {(message.sqlResult.technicalRowCount != null ||
-                      message.sqlResult.resultShape) && (
-                      <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
-                        {message.sqlResult.technicalRowCount != null && (
-                          <span>SQL sonuç satırı: {message.sqlResult.technicalRowCount}</span>
-                        )}
-                        {message.sqlResult.resultShape && (
-                          <span>Sonuç şekli: {message.sqlResult.resultShape}</span>
-                        )}
-                      </div>
-                    )}
-                    <Suspense
-                      fallback={<div className="h-24 animate-pulse rounded-lg bg-muted/40" />}
-                    >
-                      <LazySqlResultsTable data={message.sqlResult} />
-                    </Suspense>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
+        {!isUser &&
+          message.showSqlTable &&
+          message.sqlResult &&
+          message.showResultInline &&
+          !message.streaming && (
+            <div className="w-full">
+              <Suspense fallback={<div className="h-24 animate-pulse rounded-lg bg-muted/40" />}>
+                <LazySqlResultsTable data={message.sqlResult} displayMode={resultDisplayMode} />
+              </Suspense>
+            </div>
+          )}
+        {!isUser &&
+          message.showSqlTable &&
+          message.sqlResult &&
+          !message.showResultInline &&
+          !message.streaming && (
+            <div className="w-full">
+              <button
+                type="button"
+                onClick={() => setDetailsOpen((open) => !open)}
+                aria-expanded={detailsOpen}
+                className="flex items-center gap-1.5 rounded-md px-1 py-1 text-[11px] font-medium text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+              >
+                <ChevronRight
+                  className={cn("h-3.5 w-3.5 transition-transform", detailsOpen && "rotate-90")}
+                  aria-hidden="true"
+                />
+                {tr.chat.technicalDetails}
+              </button>
+              <AnimatePresence initial={false}>
+                {detailsOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0, y: -4 }}
+                    animate={{ height: "auto", opacity: 1, y: 0 }}
+                    exit={{ height: 0, opacity: 0, y: -4 }}
+                    transition={panelTransition}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-2 w-full">
+                      {(message.sqlResult.technicalRowCount != null ||
+                        message.sqlResult.resultShape) && (
+                        <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
+                          {message.sqlResult.technicalRowCount != null && (
+                            <span>SQL sonuç satırı: {message.sqlResult.technicalRowCount}</span>
+                          )}
+                          {message.sqlResult.resultShape && (
+                            <span>Sonuç şekli: {message.sqlResult.resultShape}</span>
+                          )}
+                        </div>
+                      )}
+                      <Suspense
+                        fallback={<div className="h-24 animate-pulse rounded-lg bg-muted/40" />}
+                      >
+                        <LazySqlResultsTable
+                          data={message.sqlResult}
+                          displayMode={resultDisplayMode}
+                        />
+                      </Suspense>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
         {!isUser && !message.streaming && (
           <div
             className={cn(
@@ -264,6 +290,14 @@ export function ChatMessage({
   );
 }
 
+function AssistantSqlText({ sql }: { sql: string }) {
+  return (
+    <pre className="my-2 overflow-x-auto rounded-lg border border-border bg-background/60 p-3 text-xs">
+      <code>{sql}</code>
+    </pre>
+  );
+}
+
 function AssistantText({
   content,
   streaming = false,
@@ -284,13 +318,16 @@ function AssistantText({
             const isBlock = className?.includes("language-");
             if (isBlock) {
               return (
-                <pre className="my-2 overflow-x-auto rounded-lg border border-border bg-background/60 p-3 text-xs">
+                <pre className="my-2 overflow-x-auto rounded-lg border border-border bg-muted p-3 text-xs text-foreground">
                   <code {...props}>{children}</code>
                 </pre>
               );
             }
             return (
-              <code className="rounded bg-background/60 px-1.5 py-0.5 text-xs text-cyan" {...props}>
+              <code
+                className="rounded border border-border/60 bg-muted px-1.5 py-0.5 text-xs text-foreground"
+                {...props}
+              >
                 {children}
               </code>
             );

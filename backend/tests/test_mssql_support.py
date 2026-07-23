@@ -64,6 +64,20 @@ def test_database_url_constructed_from_parts():
     assert "UID" not in odbc and "PWD" not in odbc
 
 
+def test_database_url_can_disable_encrypt_for_development_hosts():
+    settings = Settings(
+        _env_file=None,
+        DB_SERVER="SRV1",
+        DB_DATABASE="Db1",
+        DB_ENCRYPT=False,
+    )
+    from urllib.parse import unquote_plus
+
+    odbc = unquote_plus(parse_qs(urlsplit(settings.DATABASE_URL).query)["odbc_connect"][0])
+    assert "Encrypt=no" in odbc
+    assert "TrustServerCertificate=yes" not in odbc
+
+
 def test_explicit_development_url_receives_odbc_tls_options():
     settings = Settings(
         _env_file=None,
@@ -75,6 +89,25 @@ def test_explicit_development_url_receives_odbc_tls_options():
     assert normalized["trusted_connection"] == ["yes"]
     assert normalized["encrypt"] == ["yes"]
     assert normalized["trustservercertificate"] == ["yes"]
+
+
+def test_explicit_development_url_respects_disabled_encrypt():
+    settings = Settings(
+        _env_file=None,
+        ENVIRONMENT="development",
+        DB_ENCRYPT=False,
+        DATABASE_URL=(
+            "mssql+aioodbc://@SRV/Db"
+            "?driver=ODBC+Driver+18+for+SQL+Server"
+            "&trusted_connection=yes"
+            "&Encrypt=yes"
+            "&TrustServerCertificate=yes"
+        ),
+    )
+    query = parse_qs(urlsplit(settings.DATABASE_URL).query)
+    normalized = {key.lower(): values for key, values in query.items()}
+    assert normalized["encrypt"] == ["no"]
+    assert "trustservercertificate" not in normalized
 
 
 def test_production_does_not_add_development_certificate_override():

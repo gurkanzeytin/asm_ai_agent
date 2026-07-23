@@ -32,7 +32,7 @@ export function SplashScreen({ visible, onReady, onFinish }: Props) {
             animate={{ scaleX: [0, 0.86, 1] }}
             transition={{ delay: 0.35, duration: 1.45, times: [0, 0.78, 1], ease: "easeInOut" }}
             onAnimationComplete={onReady}
-            className="mt-6 h-0.5 w-32 origin-left overflow-hidden rounded-full bg-gradient-to-r from-primary to-cyan shadow-[0_0_14px_oklch(0.72_0.14_205/0.28)]"
+            className="mt-6 h-0.5 w-32 origin-left overflow-hidden rounded-full bg-gradient-to-r from-primary to-cyan shadow-[0_0_14px_color-mix(in_oklch,var(--cyan)_28%,transparent)]"
           />
         </motion.div>
       )}

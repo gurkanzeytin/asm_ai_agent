@@ -21,6 +21,22 @@ _FOLD_TABLE = str.maketrans(
         "Ü": "u",
     }
 )
+_FOLD_TABLE.update(
+    {
+        ord("\u0131"): "i",
+        ord("\u0130"): "i",
+        ord("\u011f"): "g",
+        ord("\u011e"): "g",
+        ord("\u015f"): "s",
+        ord("\u015e"): "s",
+        ord("\u00e7"): "c",
+        ord("\u00c7"): "c",
+        ord("\u00f6"): "o",
+        ord("\u00d6"): "o",
+        ord("\u00fc"): "u",
+        ord("\u00dc"): "u",
+    }
+)
 
 _MONTH_NAMES = "ocak|subat|mart|nisan|mayis|haziran|temmuz|agustos|eylul|ekim|kasim|aralik"
 
@@ -112,6 +128,9 @@ _PRONOUN_PATTERNS = [
     r"\bbunlardan\b",
     r"\bonlardan\b",
     r"\bsunlardan\b",
+    r"\baynisini\b",
+    r"\baynisi\b",
+    r"\bbunun\b",
     r"\bbunlarin\b",
     r"\bonlarin\b",
     r"\bbunlari\b",
@@ -232,7 +251,10 @@ class ContextExtractor:
 
     def _detect_department(self, folded: str) -> str | None:
         for term, canonical in _DEPARTMENTS.items():
-            if re.search(rf"\b{re.escape(term)}\w*", folded):
+            pattern = rf"\b{re.escape(term)}\w*"
+            if term == "acil":
+                pattern = r"\bacil(?!is|an)\w*"
+            if re.search(pattern, folded):
                 return canonical
         return None
 

@@ -109,7 +109,7 @@ function Index() {
               className="min-h-full"
             >
               {chat.messages.length === 0 ? (
-                <EmptyState onPick={(prompt) => void chat.send(prompt)} />
+                <EmptyState />
               ) : (
                 <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8">
                   {chat.messages.map((message) => (
@@ -159,7 +159,7 @@ function Index() {
         sql={chat.lastSql}
       />
 
-      <Toaster position="top-right" theme="dark" visibleToasts={3} />
+      <Toaster position="top-right" theme="light" visibleToasts={3} />
     </div>
   );
 }

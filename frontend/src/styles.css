@@ -47,9 +47,54 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Dark-by-default: primary theme values */
+/* Light, corporate healthcare theme (ASM AI Agent). */
 :root {
   --radius: 1rem;
+  --background: #f6f8fb; /* app shell — never pure white, keeps cards distinct */
+  --foreground: #172033;
+  --card: #ffffff;
+  --card-foreground: #172033;
+  --popover: #ffffff;
+  --popover-foreground: #172033;
+  --primary: oklch(0.546 0.245 262.881); /* #2563EB — MedAgent blue, unchanged brand color */
+  --primary-foreground: #ffffff;
+  --secondary: #f1f4f8; /* surface-secondary */
+  --secondary-foreground: #172033;
+  --muted: #f1f4f8;
+  --muted-foreground: #55606f;
+  --accent: #eef2f7; /* surface-hover */
+  --accent-foreground: #172033;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #dfe5ec;
+  --border-strong: #cdd5df;
+  --input: #dfe5ec;
+  --ring: oklch(0.546 0.245 262.881);
+  --cyan: #0e7490; /* darkened from the dark-theme cyan so it stays legible as text on light surfaces */
+  --success: #15803d;
+  --warning: #b45309;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #172033;
+  --sidebar-primary: oklch(0.546 0.245 262.881);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f1f4f8;
+  --sidebar-accent-foreground: #172033;
+  --sidebar-border: #dfe5ec;
+  --sidebar-ring: oklch(0.546 0.245 262.881);
+
+  --gradient-hero: radial-gradient(ellipse at top, oklch(0.546 0.245 262.881 / 0.08), transparent 60%);
+  --gradient-accent: linear-gradient(135deg, var(--primary), var(--cyan));
+  --shadow-glow: 0 0 20px -6px oklch(0.546 0.245 262.881 / 0.25);
+  --shadow-panel: 0 10px 30px -14px rgb(15 23 42 / 0.14);
+
+  --brand-navy: oklch(0.208 0.042 265.755);
+  --brand-blue: oklch(0.546 0.245 262.881);
+  --brand-cyan: oklch(0.715 0.143 215.221);
+  --brand-bg: oklch(0.984 0.003 247.858);
+}
+
+/* Dark theme — applied via .dark on <html> (see useTheme / inline FOUC-guard script). */
+.dark {
   --background: oklch(0.17 0.04 265); /* #0B1020 */
   --foreground: oklch(0.97 0.01 250);
   --card: oklch(0.22 0.04 265); /* #151C2F */
@@ -67,6 +112,7 @@
   --destructive: oklch(0.65 0.22 25);
   --destructive-foreground: oklch(0.99 0 0);
   --border: oklch(1 0 0 / 8%);
+  --border-strong: oklch(1 0 0 / 16%);
   --input: oklch(1 0 0 / 10%);
   --ring: oklch(0.55 0.22 264);
   --cyan: oklch(0.72 0.14 205); /* #06B6D4 — MedAgent cyan */
@@ -82,14 +128,8 @@
   --sidebar-ring: oklch(0.55 0.22 264);
 
   --gradient-hero: radial-gradient(ellipse at top, oklch(0.55 0.22 264 / 0.15), transparent 60%);
-  --gradient-accent: linear-gradient(135deg, oklch(0.55 0.22 264), oklch(0.72 0.14 205));
   --shadow-glow: 0 0 40px -10px oklch(0.55 0.22 264 / 0.4);
   --shadow-panel: 0 8px 32px -8px oklch(0 0 0 / 0.5);
-
-  --brand-navy: oklch(0.208 0.042 265.755);
-  --brand-blue: oklch(0.546 0.245 262.881);
-  --brand-cyan: oklch(0.715 0.143 215.221);
-  --brand-bg: oklch(0.984 0.003 247.858);
 }
 
 @layer base {
@@ -122,6 +162,10 @@
   }
 
   ::selection {
+    background: oklch(0.546 0.245 262.881 / 0.22);
+  }
+
+  .dark ::selection {
     background: oklch(0.55 0.22 264 / 0.3);
   }
 
@@ -134,18 +178,29 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: oklch(1 0 0 / 0.08);
+    background: oklch(0.24 0.035 265 / 0.16);
     border-radius: 8px;
   }
   ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.24 0.035 265 / 0.26);
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: oklch(1 0 0 / 0.08);
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
     background: oklch(1 0 0 / 0.15);
   }
 }
 
 @utility glass {
-  background: oklch(0.22 0.04 265 / 0.6);
-  backdrop-filter: blur(20px);
-  border: 1px solid oklch(1 0 0 / 0.08);
+  background: oklch(1 0 0 / 0.78);
+  backdrop-filter: blur(16px);
+  border: 1px solid oklch(0.24 0.035 265 / 0.08);
+
+  .dark & {
+    background: oklch(0.22 0.04 265 / 0.6);
+    border: 1px solid oklch(1 0 0 / 0.08);
+  }
 }
 
 @utility gradient-text {
@@ -181,13 +236,13 @@
 
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 oklch(0.72 0.18 155 / 0.5);
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--success) 55%, transparent);
   }
   70% {
-    box-shadow: 0 0 0 6px oklch(0.72 0.18 155 / 0);
+    box-shadow: 0 0 0 6px color-mix(in oklch, var(--success) 0%, transparent);
   }
   100% {
-    box-shadow: 0 0 0 0 oklch(0.72 0.18 155 / 0);
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--success) 0%, transparent);
   }
 }
 .pulse-ring {
@@ -198,7 +253,7 @@
   position: relative;
   overflow: hidden;
   border-radius: 12px !important;
-  background: color-mix(in oklch, var(--background) 96%, var(--sidebar)) !important;
+  background: color-mix(in oklch, var(--card) 95%, var(--primary)) !important;
 }
 
 [data-sonner-toast].response-ready-toast::before {

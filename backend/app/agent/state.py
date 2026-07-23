@@ -122,6 +122,10 @@ class AgentState(BaseModel):
         default_factory=list,
         description="Deterministic domain/date/metric signals used by the answerability guard.",
     )
+    response_mode: str | None = Field(
+        default=None,
+        description="Explicit user-facing output mode requested for this turn.",
+    )
     answerability_context_signals: List[str] = Field(
         default_factory=list,
         description="Trusted typed signals supplied by conversational context resolution.",

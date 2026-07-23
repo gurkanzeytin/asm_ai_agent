@@ -14,6 +14,23 @@ _EXAMPLE_QUESTIONS = (
     "Şubelere göre randevu sayılarını göster.",
     "Son 6 ayın randevu eğilimini özetle.",
 )
+_UNSAFE_WRITE_SIGNAL_PREFIX = "unsafe_write_intent:"
+
+
+def _unsafe_write_markdown() -> str:
+    return "\n".join(
+        [
+            "# Bu İstek Güvenlik Nedeniyle Çalıştırılamaz",
+            "",
+            "Bu ajan yalnızca salt-okunur analiz sorguları üretebilir ve çalıştırabilir.",
+            "Tablo silme, kayıt güncelleme, veri ekleme veya şema değiştirme amaçlı SQL üretemem.",
+            "",
+            "Randevu verileri üzerinde analiz yapmak isterseniz şu tarz sorular sorabilirsiniz:",
+            '- "Bugünkü randevu sayısı kaç?"',
+            '- "Son 20 randevuyu getir."',
+            '- "Branşlara göre randevu grafiği çiz."',
+        ]
+    )
 
 
 @lru_cache(maxsize=1)
@@ -60,11 +77,35 @@ def _build_capability_markdown() -> str:
 
 
 class GenerateOutOfScopeNode(IAgentNode):
-    """Workflow node returning schema guidance when a question is outside the data domain (AG-022)."""
+    """Returns guidance when a question is outside the data domain."""
 
     async def execute(self, state: AgentState) -> AgentState:
         logger.info("GenerateOutOfScopeNode execution started.")
         start_time = time.perf_counter()
+
+        unsafe_write_requested = any(
+            signal.startswith(_UNSAFE_WRITE_SIGNAL_PREFIX)
+            for signal in state.answerability_signals
+        )
+        if unsafe_write_requested:
+            report_dto = GeneratedReport(
+                title="Güvenli Olmayan SQL İsteği",
+                markdown=_unsafe_write_markdown(),
+                provider="static",
+                model="read_only_safety_guidance",
+                latency_ms=0.0,
+            )
+            duration = (time.perf_counter() - start_time) * 1000
+            return state.model_copy(
+                update={
+                    "generated_report": report_dto,
+                    "outcome": AgentOutcome.OUT_OF_SCOPE.value,
+                    "current_node": "generate_out_of_scope",
+                    "completed_nodes": state.completed_nodes + ["generate_out_of_scope"],
+                    "duration_ms": state.duration_ms + duration,
+                    "node_timings": {**state.node_timings, "generate_out_of_scope": duration},
+                }
+            )
 
         report_dto = GeneratedReport(
             title="Veri Kapsamı Dışında",

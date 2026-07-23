@@ -82,6 +82,18 @@ def route_after_value_resolution(state: AgentState) -> str:
     return "clarify" if state.ambiguity is not None else "continue"
 
 
+def route_after_validation(state: AgentState) -> str:
+    """Skips DB execution when the user explicitly asked only for SQL."""
+    if state.response_mode == "sql" and state.generated_sql is not None and not state.errors:
+        logger.info(
+            "Validation Router Decision: SQL-only output requested; skipping "
+            "execution. workflow_id=%s",
+            state.workflow_id or "unknown",
+        )
+        return "sql_only"
+    return "execute"
+
+
 def route_after_execution(state: AgentState) -> str:
     """Routes execute_sql output: one rewrite-and-retry on a retryable DB error (AG-022).
 
@@ -97,6 +109,36 @@ def route_after_execution(state: AgentState) -> str:
             state.last_execution_error,
         )
         return "retry"
+    if (
+        state.response_mode == "data"
+        and state.query_result is not None
+        and not state.errors
+        and not state.last_execution_error
+    ):
+        logger.info(
+            "Execution Router Decision: data-only output requested; skipping "
+            "analytics/report generation. workflow_id=%s",
+            state.workflow_id or "unknown",
+        )
+        return "data_only"
+    return "continue"
+
+
+def route_after_analysis(state: AgentState) -> str:
+    """Skips LLM insight/report stages when deterministic chart metadata is enough."""
+    if (
+        state.response_mode == "visualization"
+        and state.query_result is not None
+        and state.analytics is not None
+        and not state.analytics_blocked_reason
+        and not state.errors
+    ):
+        logger.info(
+            "Analysis Router Decision: visualization-only output requested; "
+            "skipping insight/report generation. workflow_id=%s",
+            state.workflow_id or "unknown",
+        )
+        return "visualization_only"
     return "continue"
 
 
@@ -148,7 +190,20 @@ class AgentGraphBuilder:
         generate_node = GenerateSQLNode(self.workflow_service)
         validate_node = ValidateSQLNode()
         execute_node = ExecuteSQLNode(self.workflow_service)
-        analyze_results_node = AnalyzeResultsNode()
+
+        # DOCTOR-DISPLAY-NAME-ENRICHMENT-001: reuses the same read-only
+        # repository already wired for analytical SQL execution — no new
+        # database connection type, no parallel response system. Resolver is
+        # optional: when the repository isn't available (e.g. a test double
+        # workflow_service), analyze_results simply skips enrichment.
+        doctor_label_resolver = None
+        execution_service = getattr(self.workflow_service, "execution_service", None)
+        repository = getattr(execution_service, "repository", None)
+        if repository is not None:
+            from app.services.doctor_label_resolver import DoctorLabelResolver
+
+            doctor_label_resolver = DoctorLabelResolver(repository)
+        analyze_results_node = AnalyzeResultsNode(doctor_label_resolver=doctor_label_resolver)
         from app.insights.insight_engine import InsightEngine
         from app.intelligence.observation_engine import ObservationEngine
         from app.llm.provider import LLMFactory
@@ -256,7 +311,14 @@ class AgentGraphBuilder:
             },
         )
         workflow.add_edge("generate_sql", "validate_sql")
-        workflow.add_edge("validate_sql", "execute_sql")
+        workflow.add_conditional_edges(
+            "validate_sql",
+            route_after_validation,
+            {
+                "sql_only": END,
+                "execute": "execute_sql",
+            },
+        )
 
         # AG-022: a retryable execution failure loops back to SQL generation
         # exactly once, feeding the database error into the regeneration prompt.
@@ -265,10 +327,18 @@ class AgentGraphBuilder:
             route_after_execution,
             {
                 "retry": "generate_sql",
+                "data_only": END,
                 "continue": "analyze_results",
             },
         )
-        workflow.add_edge("analyze_results", "generate_insights")
+        workflow.add_conditional_edges(
+            "analyze_results",
+            route_after_analysis,
+            {
+                "visualization_only": END,
+                "continue": "generate_insights",
+            },
+        )
         workflow.add_edge("generate_insights", "generate_observations")
         workflow.add_edge("generate_observations", "generate_report")
         workflow.add_edge("generate_report", END)

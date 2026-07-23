@@ -56,6 +56,7 @@ def _map_to_response(result: WorkflowResult) -> ReportResponse:
                 qr.columns,
                 resolved_metrics=result.resolved_metrics,
                 resolved_dimensions=result.resolved_dimensions,
+                hidden_columns=qr.hidden_columns,
             ),
         )
 
@@ -190,6 +191,8 @@ def _map_to_response(result: WorkflowResult) -> ReportResponse:
         resolved_question=result.resolved_question,
         answerability_input_source=result.answerability_input_source,
         answerability_signals=result.answerability_signals,
+        response_mode=result.response_mode,
+        visible_sections=result.visible_sections,
         generated_sql=result.generated_sql,
         query_result=query_result_schema,
         report=report_schema,

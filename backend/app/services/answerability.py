@@ -1,4 +1,5 @@
 import logging
+import re
 
 from pydantic import BaseModel, Field
 
@@ -7,7 +8,16 @@ from app.services.query_analyzer import QueryAnalyzer
 
 logger = logging.getLogger(__name__)
 
-
+_UNSAFE_WRITE_SIGNAL_PREFIX = "unsafe_write_intent:"
+_UNSAFE_WRITE_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("delete", r"\b(delete\s+from|sil\w*)\b"),
+    ("drop", r"\b(drop\s+table|tablo\w*\s+sil\w*)\b"),
+    ("truncate", r"\btruncate\s+table\b"),
+    ("update", r"\b(update\s+\w+\s+set|guncelle\w*)\b"),
+    ("insert", r"\b(insert\s+into|kayit\s+ekle\w*|veri\s+ekle\w*)\b"),
+    ("alter", r"\balter\s+table\b"),
+    ("create_table", r"\bcreate\s+table\b"),
+)
 class AnswerabilityResult(BaseModel):
     """Deterministic verdict on whether a question maps onto the schema domain."""
 
@@ -107,6 +117,7 @@ class AnswerabilityGuard:
 
         analysis = self._query_analyzer.analyze(question)
         context_signals = self._context_extractor.extract(question)
+        folded_question = self._context_extractor.fold(question)
 
         signals: list[str] = []
         signals.extend(f"entity:{entity.entity_type}" for entity in analysis.entities)
@@ -117,6 +128,21 @@ class AnswerabilityGuard:
         )
         signals.extend(f"operation:{op}" for op in analysis.detected_operations)
         signals.extend(resolved_context_signals)
+
+        unsafe_write_intent = self._unsafe_write_intent(folded_question)
+        if unsafe_write_intent:
+            signal = f"{_UNSAFE_WRITE_SIGNAL_PREFIX}{unsafe_write_intent}"
+            logger.warning(
+                "AnswerabilityGuard blocked unsafe write intent: operation=%s question=%r",
+                unsafe_write_intent,
+                question,
+                extra={"answerable": False, "reason": "unsafe_write_intent", "signal": signal},
+            )
+            return AnswerabilityResult(
+                answerable=False,
+                reason="unsafe_write_intent",
+                signals=[*signals, signal],
+            )
 
         # Matched rewrite synonyms are intentionally NOT a domain signal: the
         # conversational rewrite group matches filler words ("bana", "acaba")
@@ -158,3 +184,9 @@ class AnswerabilityGuard:
             },
         )
         return AnswerabilityResult(answerable=verdict, reason=reason, signals=signals)
+
+    def _unsafe_write_intent(self, folded_question: str) -> str | None:
+        for operation, pattern in _UNSAFE_WRITE_PATTERNS:
+            if re.search(pattern, folded_question):
+                return operation
+        return None

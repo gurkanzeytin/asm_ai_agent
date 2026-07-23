@@ -49,6 +49,61 @@ describe("useChatController", () => {
     });
   });
 
+  it("LIVE-FOLLOWUP-NO-RESPONSE-FORENSICS-003: a zero-row follow-up in the same conversation still renders a visible terminal answer", async () => {
+    mockedGenerateReport.mockResolvedValueOnce({
+      success: true,
+      question: "Ocak 2026 için doktor bazında randevu sayılarını göster.",
+      outcome: "EXECUTE_SQL",
+      generated_sql:
+        "SELECT DoktorId, COUNT(*) AS appointment_count FROM dbo.vw_RandevuRaporu GROUP BY DoktorId",
+      query_result: {
+        columns: ["DoktorId", "appointment_count"],
+        rows: [{ DoktorId: 42, appointment_count: 3 }],
+        row_count: 1,
+      },
+      report: { markdown: "# Doktor Bazında Randevu Sayıları\n\nDoktor 42: 3 randevu." },
+    });
+    mockedGenerateReport.mockResolvedValueOnce({
+      success: true,
+      question: "Yalnız gerçekleşenleri göster.",
+      outcome: "NO_RESULT_GUIDANCE",
+      generated_sql:
+        "SELECT DoktorId, COUNT(*) AS appointment_count FROM dbo.vw_RandevuRaporu " +
+        "WHERE RandevuDurumu = N'Gerçekleşti' GROUP BY DoktorId",
+      query_result: { columns: [], rows: [], row_count: 0 },
+      report: {
+        title: "Sonuç Bulunamadı",
+        markdown: "Belirtilen kriterlere uygun kayıt bulunamadı.",
+      },
+    });
+    const { result } = renderHook(() => useChatController());
+
+    await act(async () => {
+      await result.current.send("Ocak 2026 için doktor bazında randevu sayılarını göster.");
+    });
+    await act(async () => {
+      await result.current.send("Yalnız gerçekleşenleri göster.");
+    });
+
+    expect(mockedGenerateReport).toHaveBeenCalledTimes(2);
+    const firstSessionId = mockedGenerateReport.mock.calls[0][1];
+    const secondSessionId = mockedGenerateReport.mock.calls[1][1];
+    // Same conversation both turns: the frontend must never mint a fresh
+    // session id for a follow-up sent into the same active conversation.
+    expect(secondSessionId).toBe(firstSessionId);
+
+    const assistantMessages = result.current.messages.filter((m) => m.role === "assistant");
+    expect(assistantMessages).toHaveLength(2);
+    const secondAnswer = assistantMessages[1];
+    // The actual live symptom under investigation: turn 2 must render a
+    // non-empty, non-streaming, non-error terminal message — never a blank
+    // or perpetually-loading placeholder.
+    expect(secondAnswer.streaming).toBe(false);
+    expect(secondAnswer.status).toBe("success");
+    expect(secondAnswer.content.trim()).not.toBe("");
+    expect(secondAnswer.content).toBe("Belirtilen kriterlere uygun kayıt bulunamadı.");
+  });
+
   it("finishes the assistant message when generation is stopped", async () => {
     mockedGenerateReport.mockImplementation(
       (_question, _sessionId, _onProgress, signal) =>
@@ -208,6 +263,206 @@ describe("useChatController", () => {
     expect(result.current.messages.at(-1)?.metadata?.latencyMs).toBe(4321);
     expect(result.current.messages.at(-1)?.sqlResult?.durationMs).toBe(87);
     expect(result.current.messages.at(-1)?.sqlResult?.visualization).toBe("LINE_CHART");
+  });
+
+  it("renders only SQL when the user asks for the SQL query", async () => {
+    mockedGenerateReport.mockResolvedValue({
+      success: true,
+      question: "Sadece SQL sorgusunu ver",
+      response_mode: "sql",
+      visible_sections: ["sql"],
+      generated_sql: "SELECT COUNT(*) AS appointment_count FROM dbo.vw_RandevuRaporu;",
+      query_result: {
+        columns: ["appointment_count"],
+        rows: [{ appointment_count: 42 }],
+        row_count: 1,
+      },
+      report: {
+        markdown: "```sql\nSELECT COUNT(*) AS appointment_count FROM dbo.vw_RandevuRaporu;\n```",
+      },
+    });
+    const { result } = renderHook(() => useChatController());
+
+    await act(async () => result.current.send("Sadece SQL sorgusunu ver"));
+
+    const message = result.current.messages.at(-1);
+    expect(message?.responseMode).toBe("sql");
+    expect(message?.content).toBe(
+      "SELECT COUNT(*) AS appointment_count FROM dbo.vw_RandevuRaporu;",
+    );
+    expect(message?.content).not.toContain("```");
+    expect(message?.visibleSections).toEqual(["sql"]);
+    expect(message?.showSqlTable).toBe(false);
+    expect(message?.showResultInline).toBe(false);
+    expect(message?.metricCards).toEqual([]);
+  });
+
+  it("shows the result table inline when the user asks to fetch data", async () => {
+    mockedGenerateReport.mockResolvedValue({
+      success: true,
+      question: "Son 100 randevuyu getir",
+      response_mode: "data",
+      visible_sections: ["table"],
+      generated_sql: "SELECT TOP (100) Id, BaslangicTarihi FROM dbo.vw_RandevuRaporu;",
+      query_result: {
+        columns: ["Id", "BaslangicTarihi"],
+        rows: [{ Id: 1, BaslangicTarihi: "2026-01-01T09:00:00" }],
+        row_count: 1,
+      },
+      report: { markdown: "Sonuçlar aşağıda listelenmiştir." },
+    });
+    const { result } = renderHook(() => useChatController());
+
+    await act(async () => result.current.send("Son 100 randevuyu getir"));
+
+    const message = result.current.messages.at(-1);
+    expect(message?.responseMode).toBe("data");
+    expect(message?.content).toBe("");
+    expect(message?.showSqlTable).toBe(true);
+    expect(message?.showResultInline).toBe(true);
+    expect(message?.metricCards).toEqual([]);
+  });
+
+  it("opens the visualization result inline when the user asks for a chart", async () => {
+    mockedGenerateReport.mockResolvedValue({
+      success: true,
+      question: "Şubelere göre randevu grafiği çiz",
+      generated_sql:
+        "SELECT SubeAdi, COUNT(*) AS appointment_count FROM dbo.vw_RandevuRaporu GROUP BY SubeAdi;",
+      query_result: {
+        columns: ["SubeAdi", "appointment_count"],
+        rows: [{ SubeAdi: "Merkez", appointment_count: 42 }],
+        row_count: 1,
+      },
+      report: { markdown: "Grafik aşağıda gösterilmiştir." },
+      visualization: { type: "BAR_CHART", reason: "Kategorik karşılaştırma" },
+      response_mode: "visualization",
+      visible_sections: ["chart"],
+      analytics: {
+        analytics_type: "distribution",
+        intents: [],
+        data_shape: "categorical",
+        metrics: {},
+        insights: {},
+        row_count: 1,
+        result_shape: "categorical_grouped_result",
+      },
+    });
+    const { result } = renderHook(() => useChatController());
+
+    await act(async () => result.current.send("Şubelere göre randevu grafiği çiz"));
+
+    const message = result.current.messages.at(-1);
+    expect(message?.responseMode).toBe("visualization");
+    expect(message?.content).toBe("");
+    expect(message?.showSqlTable).toBe(true);
+    expect(message?.showResultInline).toBe(true);
+    expect(message?.metricCards).toEqual([]);
+    expect(message?.sqlResult?.visualization).toBe("BAR_CHART");
+  });
+
+  it("honors chart-only backend sections without leaking report text", async () => {
+    mockedGenerateReport.mockResolvedValue({
+      success: true,
+      question: "Bunu grafik yap",
+      response_mode: "visualization",
+      visible_sections: ["chart"],
+      generated_sql:
+        "SELECT SubeAdi, COUNT(*) AS appointment_count FROM dbo.vw_RandevuRaporu GROUP BY SubeAdi;",
+      query_result: {
+        columns: ["SubeAdi", "appointment_count"],
+        rows: [{ SubeAdi: "Merkez", appointment_count: 42 }],
+        row_count: 1,
+      },
+      report: { markdown: "Bu rapor metni grafik-only istekte görünmemeli." },
+      visualization: { type: "BAR_CHART", reason: "Categorical comparison" },
+      analytics: {
+        analytics_type: "distribution",
+        intents: [],
+        data_shape: "categorical",
+        metrics: {},
+        insights: {},
+        row_count: 1,
+        result_shape: "categorical_grouped_result",
+      },
+    });
+    const { result } = renderHook(() => useChatController());
+
+    await act(async () => result.current.send("Bunu grafik yap"));
+
+    const message = result.current.messages.at(-1);
+    expect(message?.responseMode).toBe("visualization");
+    expect(message?.visibleSections).toEqual(["chart"]);
+    expect(message?.content).toBe("");
+    expect(message?.showSqlTable).toBe(true);
+    expect(message?.showResultInline).toBe(true);
+    expect(message?.metricCards).toEqual([]);
+  });
+
+  it("honors answer plus chart without showing SQL text", async () => {
+    mockedGenerateReport.mockResolvedValue({
+      success: true,
+      question: "Subelere gore randevu grafigini ciz ve kisaca yorumla",
+      response_mode: "visualization",
+      visible_sections: ["answer", "chart"],
+      generated_sql:
+        "SELECT SubeAdi, COUNT(*) AS appointment_count FROM dbo.vw_RandevuRaporu GROUP BY SubeAdi;",
+      query_result: {
+        columns: ["SubeAdi", "appointment_count"],
+        rows: [{ SubeAdi: "Merkez", appointment_count: 42 }],
+        row_count: 1,
+      },
+      report: { markdown: "Merkez subesinde 42 randevu var." },
+      visualization: { type: "BAR_CHART", reason: "Categorical comparison" },
+      analytics: {
+        analytics_type: "distribution",
+        intents: [],
+        data_shape: "categorical",
+        metrics: {},
+        insights: {},
+        row_count: 1,
+        result_shape: "categorical_grouped_result",
+      },
+    });
+    const { result } = renderHook(() => useChatController());
+
+    await act(async () =>
+      result.current.send("Subelere gore randevu grafigini ciz ve kisaca yorumla"),
+    );
+
+    const message = result.current.messages.at(-1);
+    expect(message?.responseMode).toBe("visualization");
+    expect(message?.visibleSections).toEqual(["answer", "chart"]);
+    expect(message?.content).toBe("Merkez subesinde 42 randevu var.");
+    expect(message?.content).not.toContain("SELECT");
+    expect(message?.showSqlTable).toBe(true);
+    expect(message?.showResultInline).toBe(true);
+  });
+
+  it("shows only requested mixed SQL and table artifacts", async () => {
+    mockedGenerateReport.mockResolvedValue({
+      success: true,
+      question: "SQL sorgusunu yaz ve calistirip tabloyu getir",
+      response_mode: "data",
+      visible_sections: ["sql", "table"],
+      generated_sql: "SELECT TOP (20) Id FROM dbo.vw_RandevuRaporu;",
+      query_result: {
+        columns: ["Id"],
+        rows: [{ Id: 1 }],
+        row_count: 1,
+      },
+      report: { markdown: "Tablo hazir." },
+    });
+    const { result } = renderHook(() => useChatController());
+
+    await act(async () => result.current.send("SQL sorgusunu yaz ve calistirip tabloyu getir"));
+
+    const message = result.current.messages.at(-1);
+    expect(message?.responseMode).toBe("data");
+    expect(message?.visibleSections).toEqual(["sql", "table"]);
+    expect(message?.content).toBe("SELECT TOP (20) Id FROM dbo.vw_RandevuRaporu;");
+    expect(message?.showSqlTable).toBe(true);
+    expect(message?.metricCards).toEqual([]);
   });
 
   it("does not persist conversations in localStorage", () => {

@@ -17,11 +17,13 @@ from datetime import datetime
 import pytest
 
 from app.application_models.generated_report import GeneratedReport
+from app.application_models.generated_sql import GeneratedSQL
 from app.application_models.outcome import AgentOutcome
 from app.application_models.workflow_models import QueryResult
 from app.context import ContextManager
 from app.context.analysis_type import CanonicalAnalysisType, resolve_canonical_analysis_type
 from app.context.session_store import DEFAULT_SESSION_ID, SessionStore, generate_session_id
+from app.planning.models import DateFilterPlan, QueryPlan
 from app.services.reporting_service import ReportingService
 
 
@@ -39,6 +41,46 @@ def make_query_result(row_count: int = 1) -> QueryResult:
 
 def make_report() -> GeneratedReport:
     return GeneratedReport(title="T", markdown="# T", provider="test", model="m", latency_ms=0.0)
+
+
+def make_sql() -> GeneratedSQL:
+    return GeneratedSQL(
+        sql=(
+            "SELECT SubeAdi, COUNT(*) AS appointment_count "
+            "FROM dbo.vw_RandevuRaporu GROUP BY SubeAdi;"
+        ),
+        provider="test",
+        model="deterministic",
+        latency_ms=1.0,
+        sql_source="deterministic",
+        result_schema="DistributionResult",
+        expected_aliases=["SubeAdi", "appointment_count"],
+        metric_aliases={"appointment_count": "appointment_count"},
+    )
+
+
+def make_grouped_plan(question: str) -> QueryPlan:
+    return QueryPlan(
+        question=question,
+        output_entity="Appointment",
+        fact_entity="Appointment",
+        output_table="dbo.vw_RandevuRaporu",
+        fact_table="dbo.vw_RandevuRaporu",
+        date_filters=[
+            DateFilterPlan(
+                expression="bugun",
+                start_date="2026-07-23",
+                end_date="2026-07-23",
+                column="BaslangicTarihi",
+            )
+        ],
+        aggregation="COUNT(*)",
+        analysis_type="distribution",
+        projection=["SubeAdi"],
+        metrics=["appointment_count"],
+        dimensions=["SubeAdi"],
+        required_columns=["SubeAdi", "BaslangicTarihi", "Id"],
+    )
 
 
 class FakeGraph:
@@ -316,6 +358,60 @@ class TestMemoryWritePolicy:
         result = await service.run_workflow("Kardiyoloji doktorlarını göster", session_id="s1")
 
         assert result.memory_updated is False
+
+    @pytest.mark.asyncio
+    async def test_sql_only_with_valid_plan_updates_memory_for_followups(self):
+        """A successful SQL-only answer has no query_result by design, but it
+        still has a validated QueryPlan. Persist that structured plan so the
+        same chat can continue with "bunu çalıştır", "grafik yap", or a status
+        refinement without losing the original topic."""
+        store = SessionStore()
+        manager = ContextManager(store=store)
+        first_question = "Sadece SQL: bugünkü randevu sayısını şubelere göre ver"
+        graph = FakeGraph(
+            {
+                "generated_report": make_report(),
+                "generated_sql": make_sql(),
+                "outcome": AgentOutcome.SQL_ONLY.value,
+                "query_plan": make_grouped_plan(first_question),
+            }
+        )
+        service = ReportingService(agent_graph=graph, context_manager=manager)
+
+        result = await service.run_workflow(first_question, session_id="s1")
+
+        assert result.memory_updated is True
+        context = manager._store.get("s1")
+        assert context.metrics == ["appointment_count"]
+        assert context.dimensions == ["branch"]
+        assert context.date_expression == "bugun"
+        assert context.query_plan_snapshot is not None
+        assert context.query_plan_snapshot["dimensions"] == ["SubeAdi"]
+
+        follow_up = manager.resolve("Bunu çalıştırıp tabloyu getir", "s1")
+        assert follow_up.follow_up_detected is True
+        assert follow_up.retained_query_plan_snapshot is not None
+
+    @pytest.mark.asyncio
+    async def test_sql_only_without_query_plan_does_not_update_memory(self):
+        """A raw SQL string alone is not enough context to persist. Memory must
+        be sourced from the structured planner contract, not parsed back from
+        rendered SQL text."""
+        store = SessionStore()
+        manager = ContextManager(store=store)
+        graph = FakeGraph(
+            {
+                "generated_report": make_report(),
+                "generated_sql": make_sql(),
+                "outcome": AgentOutcome.SQL_ONLY.value,
+            }
+        )
+        service = ReportingService(agent_graph=graph, context_manager=manager)
+
+        result = await service.run_workflow("Sadece SQL: bugünkü randevu sayısı", session_id="s1")
+
+        assert result.memory_updated is False
+        assert manager._store.get("s1").query_plan_snapshot is None
 
     @pytest.mark.asyncio
     async def test_no_result_guidance_still_updates_memory(self):

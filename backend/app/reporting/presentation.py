@@ -108,6 +108,7 @@ DIMENSION_LABELS_TR: dict[str, str] = {
     "RandevuDurumu": "Randevu Durumu",
     "GenelRandevuKaynakAdi": "Randevu Kaynağı",
     "DoktorId": "Doktor",
+    "DoktorAdi": "Doktor",
     "Uyruk": "Uyruk",
     "CinsiyetId": "Cinsiyet",
     "KategoriAdi": "Kategori",
@@ -432,15 +433,24 @@ def build_column_metadata(
     columns: list[str],
     resolved_metrics: "list[str] | None" = None,
     resolved_dimensions: "list[str] | None" = None,
-) -> list[dict[str, str | None]]:
-    """Builds `[{key, label, format, unit}, ...]` for a QueryResult's raw
-    `columns`, preserving order. Raw keys (and therefore `row[key]` access,
-    sorting, filtering, and exports) are completely untouched — this is
-    purely additive presentation metadata for the SQL result table header.
+    hidden_columns: "list[str] | None" = None,
+) -> list[dict[str, str | bool | None]]:
+    """Builds `[{key, label, format, unit, hidden}, ...]` for a QueryResult's
+    raw `columns`, preserving order. Raw keys (and therefore `row[key]`
+    access, sorting, filtering, and exports) are completely untouched — this
+    is purely additive presentation metadata for the SQL result table header.
+
+    `hidden` (DOCTOR-DISPLAY-NAME-ENRICHMENT-001) flags columns retained in
+    the result for internal/diagnostic use (e.g. DoktorId once DoktorAdi has
+    been resolved) that the normal user-facing table should not show by
+    default — the frontend may still let a user reveal them.
     """
-    metadata: list[dict[str, str | None]] = []
+    hidden = set(hidden_columns or [])
+    metadata: list[dict[str, str | bool | None]] = []
     for column in columns:
         label = get_column_label(column, resolved_metrics, resolved_dimensions)
         fmt, unit = _infer_column_format(column)
-        metadata.append({"key": column, "label": label, "format": fmt, "unit": unit})
+        metadata.append(
+            {"key": column, "label": label, "format": fmt, "unit": unit, "hidden": column in hidden}
+        )
     return metadata

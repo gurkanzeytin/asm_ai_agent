@@ -13,7 +13,7 @@ Covers:
 - OpenAPI schema generation
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -51,7 +51,7 @@ def _make_workflow_result(errors: list | None = None) -> WorkflowResult:
         latency_ms=210.0,
         prompt_tokens=350,
         completion_tokens=180,
-        generated_at=datetime.now(timezone.utc),
+        generated_at=datetime.now(UTC),
         execution_id="wf-test-001",
     )
     qr = QueryResult(
@@ -66,7 +66,11 @@ def _make_workflow_result(errors: list | None = None) -> WorkflowResult:
     return WorkflowResult(
         workflow_id="wf-test-001",
         question="Which doctor has the highest number of appointments?",
-        generated_sql="SELECT d.ad_soyad, COUNT(r.id) AS randevu_sayisi FROM doktorlar d JOIN randevular r ON d.id = r.doktor_id GROUP BY d.ad_soyad ORDER BY randevu_sayisi DESC LIMIT 1;",
+        generated_sql=(
+            "SELECT d.ad_soyad, COUNT(r.id) AS randevu_sayisi "
+            "FROM doktorlar d JOIN randevular r ON d.id = r.doktor_id "
+            "GROUP BY d.ad_soyad ORDER BY randevu_sayisi DESC LIMIT 1;"
+        ),
         query_result=qr,
         generated_report=report,
         metrics=WorkflowMetrics(
@@ -136,6 +140,40 @@ async def test_report_success(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_report_output_contract_exposes_requested_sections(client: AsyncClient):
+    """The API must expose the backend output policy unchanged for the UI router."""
+    result = _make_workflow_result()
+    result.response_mode = "sql"
+    result.visible_sections = ["sql"]
+    result.generated_sql = (
+        "SELECT COUNT(*) AS appointment_count "
+        "FROM dbo.vw_RandevuRaporu "
+        "WHERE CAST([RandevuBaslangicTarihi] AS date) = CAST(GETDATE() AS date);"
+    )
+    result.generated_report = result.generated_report.model_copy(
+        update={"markdown": "This narrative must not drive SQL-only UI output."}
+    )
+
+    mock_service = _mock_reporting_service(return_value=result)
+    app.dependency_overrides[get_reporting_service] = lambda: mock_service
+
+    try:
+        response = await client.post(
+            ENDPOINT,
+            json={"question": "Bugunku randevu sayisi icin sadece SQL sorgusunu ver"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["response_mode"] == "sql"
+        assert data["visible_sections"] == ["sql"]
+        assert data["generated_sql"] == result.generated_sql
+        assert "```" not in data["generated_sql"]
+        assert data["report"]["markdown"] == result.generated_report.markdown
+    finally:
+        app.dependency_overrides.pop(get_reporting_service, None)
+
+
+@pytest.mark.asyncio
 async def test_report_missing_question(client: AsyncClient):
     """POST with empty body returns HTTP 422 from Pydantic validation."""
     response = await client.post(ENDPOINT, json={})
@@ -185,7 +223,9 @@ async def test_report_sql_validation_failure(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_report_sql_generation_failure(client: AsyncClient):
     """SQLServiceException raised by ReportingService → HTTP 400."""
-    mock_service = _mock_reporting_service(side_effect=SQLServiceException("LLM returned invalid SQL"))
+    mock_service = _mock_reporting_service(
+        side_effect=SQLServiceException("LLM returned invalid SQL")
+    )
     app.dependency_overrides[get_reporting_service] = lambda: mock_service
 
     try:
@@ -242,7 +282,16 @@ async def test_response_schema_shape(client: AsyncClient):
         )
         assert response.status_code == 200
         data = response.json()
-        for field in ("success", "workflow_id", "question", "generated_sql", "query_result", "report", "metadata"):
+        expected_fields = (
+            "success",
+            "workflow_id",
+            "question",
+            "generated_sql",
+            "query_result",
+            "report",
+            "metadata",
+        )
+        for field in expected_fields:
             assert field in data, f"Missing field: {field}"
         for field in ("columns", "rows", "row_count"):
             assert field in data["query_result"], f"Missing query_result field: {field}"
@@ -271,6 +320,8 @@ async def test_openapi_schema_generated(client: AsyncClient):
     assert response.status_code == 200
     schema = response.json()
     paths = schema.get("paths", {})
-    assert "/api/v1/report/" in paths, f"Expected /api/v1/report/ in OpenAPI paths, got: {list(paths.keys())}"
+    assert "/api/v1/report/" in paths, (
+        f"Expected /api/v1/report/ in OpenAPI paths, got: {list(paths.keys())}"
+    )
     post_op = paths["/api/v1/report/"]["post"]
     assert post_op["summary"] == "Generate an AI analytical report"

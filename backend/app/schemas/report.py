@@ -60,6 +60,11 @@ class ColumnMetadataSchema(BaseModel):
     unit: Optional[str] = Field(
         default=None, description="Display unit for the formatted value (e.g. '%', 'dakika')."
     )
+    hidden: bool = Field(
+        default=False,
+        description="Retained in the result for internal/diagnostic use (e.g. DoktorId once "
+        "DoktorAdi has resolved) — the normal user table should not show it by default.",
+    )
 
 
 class QueryResultSchema(BaseModel):
@@ -277,6 +282,14 @@ class ReportResponse(BaseModel):
     resolved_question: Optional[str] = None
     answerability_input_source: str = "raw_question"
     answerability_signals: List[str] = Field(default_factory=list)
+    response_mode: Optional[str] = Field(
+        default=None,
+        description="Primary user-facing output mode: answer, sql, data, or visualization.",
+    )
+    visible_sections: List[str] = Field(
+        default_factory=list,
+        description="Sections the client should show by default for this turn.",
+    )
     generated_sql: Optional[str] = Field(default=None, description="SQL statement generated and executed during the workflow.")
     query_result: Optional[QueryResultSchema] = Field(default=None, description="Structured database result set.")
     report: Optional[ReportSchema] = Field(default=None, description="Generated narrative report.")

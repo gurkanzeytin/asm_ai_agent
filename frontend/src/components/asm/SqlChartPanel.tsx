@@ -43,7 +43,16 @@ const PALETTE_THEME = [
   "var(--destructive)",
   "var(--muted-foreground)",
 ];
-const PALETTE_HIGH_CONTRAST = ["#FFFFFF", "#F0E442", "#56B4E9", "#E69F00", "#009E73", "#CC79A7"];
+// First entry uses the theme foreground token (not a fixed hex) so it stays
+// visible against both the light and dark app backgrounds.
+const PALETTE_HIGH_CONTRAST = [
+  "var(--foreground)",
+  "#0072B2",
+  "#D55E00",
+  "#009E73",
+  "#CC79A7",
+  "#E69F00",
+];
 
 function formatNumber(value: number) {
   return trNumberFormatter.format(value);

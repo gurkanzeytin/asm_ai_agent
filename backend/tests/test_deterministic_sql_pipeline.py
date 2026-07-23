@@ -304,14 +304,49 @@ def test_compliance_single_metric_plan_unaffected_by_metric_coverage_check():
 
 
 @pytest.mark.asyncio
-async def test_metric_coverage_gap_falls_through_to_llm_without_raising():
+async def test_metric_coverage_gap_blocks_after_bounded_llm_repair():
     plan = _plan("Subelere gore randevu sayisini goster").model_copy(
         update={"metrics": ["appointment_count", "protocol_state_based_completion"]}
     )
     provider = _Provider()
     service = SQLService(provider, _Parser(), SQLValidator())
+    with pytest.raises(Exception) as exc_info:
+        await service.generate_sql("prompt", query_plan=plan)
+    assert provider.calls == 2
+    assert "protocol_state_based_completion" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_metric_coverage_gap_can_be_repaired_once_by_llm():
+    plan = _plan("Subelere gore randevu sayisini goster").model_copy(
+        update={"metrics": ["appointment_count", "protocol_state_based_completion"]}
+    )
+
+    class RepairProvider:
+        calls = 0
+
+        async def generate(self, *args, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                content = (
+                    "SELECT SubeAdi AS SubeAdi, COUNT(*) AS appointment_count "
+                    "FROM dbo.vw_RandevuRaporu GROUP BY SubeAdi;"
+                )
+            else:
+                content = (
+                    "SELECT SubeAdi AS SubeAdi, COUNT(*) AS appointment_count, "
+                    "SUM(CASE WHEN ProtokolIslemState IS NOT NULL THEN 1 ELSE 0 END) "
+                    "AS protocol_state_based_completion "
+                    "FROM dbo.vw_RandevuRaporu GROUP BY SubeAdi;"
+                )
+            return LLMResponse(content=content, model="fake", latency_ms=1.0)
+
+        def get_metadata(self):
+            return {"provider": "fake"}
+
+    provider = RepairProvider()
+    service = SQLService(provider, _Parser(), SQLValidator())
     generated = await service.generate_sql("prompt", query_plan=plan)
-    assert provider.calls >= 1
-    assert generated.sql_source in ("llm", "repaired_llm")
-    assert generated.repair_attempted is True
-    assert "protocol_state_based_completion" in generated.missing_metrics_before
+    assert provider.calls == 2
+    assert generated.sql_source == "repaired_llm"
+    assert generated.missing_metrics_after == []

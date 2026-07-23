@@ -39,13 +39,16 @@ async def main() -> int:
     print(f"Detected provider  : {provider}")
     print(f"SQL dialect        : {settings.SQL_DIALECT}")
     print(f"Configured schema  : {settings.DATABASE_SCHEMA}")
-    print(f"Allowed objects    : {', '.join(settings.DATABASE_ALLOWED_OBJECTS) or '(unrestricted)'}")
+    allowed_objects = ", ".join(settings.DATABASE_ALLOWED_OBJECTS) or "(unrestricted)"
+    print(f"Allowed objects    : {allowed_objects}")
     print(f"Windows auth       : {'yes' if settings.DB_TRUSTED_CONNECTION else 'no'}")
-    print("ODBC encryption    : yes")
-    print(
-        "Certificate trust  : "
-        + ("yes (development only)" if settings.ENVIRONMENT == "development" else "managed by production policy")
+    print(f"ODBC encryption    : {'yes' if settings.DB_ENCRYPT else 'no'}")
+    certificate_trust = (
+        "yes (development only)"
+        if settings.ENVIRONMENT == "development"
+        else "managed by production policy"
     )
+    print("Certificate trust  : " + certificate_trust)
 
     try:
         async with engine.connect() as conn:

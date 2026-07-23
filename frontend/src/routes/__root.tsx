@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/loveable-error-reporting";
 import { tr } from "../locales/tr";
+import { THEME_FOUC_GUARD_SCRIPT } from "../hooks/use-theme";
 
 function NotFoundComponent() {
   return (
@@ -107,6 +108,8 @@ function RootShell({ children }: { children: ReactNode }) {
     <html lang="tr">
       <head>
         <HeadContent />
+        {/* Must run before first paint to avoid a light->dark flash on reload. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_FOUC_GUARD_SCRIPT }} />
       </head>
       <body>
         {children}

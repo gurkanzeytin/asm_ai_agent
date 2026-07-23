@@ -54,6 +54,12 @@ class QueryResult(BaseModel):
         default=False,
         description="Oversized identifier-bearing analytical detail blocked from presentation.",
     )
+    hidden_columns: List[str] = Field(
+        default_factory=list,
+        description="Columns present in `columns`/`rows` for internal/diagnostic use "
+        "(e.g. DoktorId once DoktorAdi has been resolved) that the normal user-facing "
+        "table should not show by default. Never removed from the data itself.",
+    )
 
 
 class WorkflowExecutionResult(BaseModel):

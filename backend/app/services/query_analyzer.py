@@ -42,6 +42,22 @@ _TURKISH_FOLD_TABLE = str.maketrans(
         "Ü": "u",
     }
 )
+_TURKISH_FOLD_TABLE.update(
+    {
+        ord("\u0131"): "i",
+        ord("\u0130"): "i",
+        ord("\u011f"): "g",
+        ord("\u011e"): "g",
+        ord("\u015f"): "s",
+        ord("\u015e"): "s",
+        ord("\u00e7"): "c",
+        ord("\u00c7"): "c",
+        ord("\u00f6"): "o",
+        ord("\u00d6"): "o",
+        ord("\u00fc"): "u",
+        ord("\u00dc"): "u",
+    }
+)
 
 # Spelled-out Turkish counts (folded: ü->u, ç->c...), used alongside digits so
 # "son üç ay" is detected exactly like "son 3 ay" — previously only \d+ was
@@ -81,6 +97,23 @@ _MONTHS = {
     "aralik": 12,
     "aralık": 12,
 }
+
+
+_FORMAT_ONLY_SQL_MARKER = re.compile(r"\b(sql|sorgu\w*)\b")
+_FORMAT_ONLY_OUTPUT_MARKER = re.compile(
+    r"\b(tablo\w*|veri\w*|sonuc\w*|calistir\w*|getir\w*|liste\w*)\b"
+)
+_DOMAIN_SUBJECT_MARKER = re.compile(
+    r"\b("
+    r"randevu\w*|hasta\w*|doktor\w*|hekim\w*|kaynak\w*|"
+    r"sube\w*|hastane\w*|lokasyon\w*|bolum\w*|brans\w*|klinik\w*|"
+    r"kategori\w*|hizmet\w*|cinsiyet\w*|uyruk\w*|yas\w*|"
+    r"durum\w*|bekleyen\w*|beklemede|gelmeyen\w*|gelmedi|"
+    r"gerceklesen\w*|giris\w*|islem\w*|protokol\w*|"
+    r"olusturulan\w*|olusturan\w*|kaydedilen\w*|sure\w*|"
+    r"bugun\w*|dun\w*|yarin\w*|hafta\w*|ay\w*|yil\w*|tarih\w*"
+    r")\b"
+)
 
 
 class QueryAnalyzer:
@@ -148,6 +181,16 @@ class QueryAnalyzer:
         from app.semantics import catalog
 
         folded = self._fold(self._normalize_query_text(query))
+        if self._is_format_only_database_request(folded):
+            return AmbiguityResult(
+                matched_phrase="format_only_database_request",
+                question="Hangi verinin sorgusunu olusturmami veya calistirmami istiyorsunuz?",
+                options=[
+                    "Bugun olusturulan son 20 randevuyu getir",
+                    "Subelere gore randevu sayisini goster",
+                    "Cinsiyete gore randevu dagilimini goster",
+                ],
+            )
         answerable, reason, alternative = catalog.check_answerability(folded)
         if not answerable:
             return AmbiguityResult(
@@ -156,6 +199,15 @@ class QueryAnalyzer:
                 options=[alternative or "Farklı bir analiz", "Sorumu değiştireceğim"],
             )
         return None
+
+    @staticmethod
+    def _is_format_only_database_request(folded_query: str) -> bool:
+        """True when the user asks for SQL/table output but omits the data subject."""
+        return bool(
+            _FORMAT_ONLY_SQL_MARKER.search(folded_query)
+            and _FORMAT_ONLY_OUTPUT_MARKER.search(folded_query)
+            and not _DOMAIN_SUBJECT_MARKER.search(folded_query)
+        )
 
     def _load_rules(self) -> dict[str, Any]:
         mtime = self.synonyms_path.stat().st_mtime
@@ -175,6 +227,7 @@ class QueryAnalyzer:
         # Turkish dotted capital İ lowercases to "i" + U+0307 combining dot in
         # Python; map it up front so word-boundary matching works on "İlk", "İç"...
         lowered = query.replace("İ", "i").lower().replace("̇", "").strip()
+        lowered = lowered.replace("\u0307", "")
         punctuation = string.punctuation.replace("-", "")
         translator = str.maketrans({char: " " for char in punctuation})
         normalized = lowered.translate(translator)
@@ -473,19 +526,24 @@ class QueryAnalyzer:
             )
             for match in re.finditer(pattern, query_ascii)
         ]
-        if len(explicit_dates) >= 2:
-            for index in range(0, len(explicit_dates) - 1, 2):
-                first, second = explicit_dates[index], explicit_dates[index + 1]
-                first_date = date(
-                    int(first.group(3)), months_ascii[first.group(2)], int(first.group(1))
+        for index in range(0, len(explicit_dates), 2):
+            first = explicit_dates[index]
+            first_date = date(
+                int(first.group(3)), months_ascii[first.group(2)], int(first.group(1))
+            )
+            if index + 1 >= len(explicit_dates):
+                ranges.append(
+                    self._date_range(first.group(0), first_date, first_date, "day")
                 )
-                second_date = date(
-                    int(second.group(3)), months_ascii[second.group(2)], int(second.group(1))
-                )
-                if second_date < first_date:
-                    first_date, second_date = second_date, first_date
-                expression = query_ascii[first.start() : second.end()]
-                ranges.append(self._date_range(expression, first_date, second_date, "custom"))
+                continue
+            second = explicit_dates[index + 1]
+            second_date = date(
+                int(second.group(3)), months_ascii[second.group(2)], int(second.group(1))
+            )
+            if second_date < first_date:
+                first_date, second_date = second_date, first_date
+            expression = query_ascii[first.start() : second.end()]
+            ranges.append(self._date_range(expression, first_date, second_date, "custom"))
 
         # Suffixed forms ("bugunku", "yarinki", "dunku") must also match; the
         # actual matched text is stored so date resolution can replace it.

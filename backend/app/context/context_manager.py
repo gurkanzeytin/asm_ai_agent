@@ -50,17 +50,24 @@ class ContextManager:
 
         logger.info(
             "Conversational context resolution: session=%s applied=%s "
-            "clarification=%s confidence=%.2f\n"
-            "  Original : %s\n"
-            "  Resolved : %s\n"
-            "  Inherited: %s",
+            "follow_up=%s clarification=%s confidence=%.2f\n"
+            "  Original       : %s\n"
+            "  Resolved       : %s\n"
+            "  Inherited      : %s\n"
+            "  Explicit fields: %s\n"
+            "  Removed fields : %s\n"
+            "  Follow-up sigs : %s",
             session_id,
             result.applied,
+            result.follow_up_detected,
             result.clarification_needed,
             result.confidence,
             result.original_question,
             result.resolved_question,
             result.inherited or "none",
+            result.explicit_fields or "none",
+            result.removed_fields or "none",
+            result.follow_up_signals or "none",
             extra={
                 "session_id": session_id,
                 "original_question": result.original_question,
@@ -68,6 +75,10 @@ class ContextManager:
                 "inherited_filters": result.inherited,
                 "confidence": result.confidence,
                 "clarification_required": result.clarification_needed,
+                "follow_up_detected": result.follow_up_detected,
+                "explicit_fields": result.explicit_fields,
+                "removed_fields": result.removed_fields,
+                "follow_up_signals": result.follow_up_signals,
             },
         )
         return result

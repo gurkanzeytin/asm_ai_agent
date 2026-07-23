@@ -1,0 +1,199 @@
+{
+  "id": "ASM-MULTI-TURN-GOLDEN-EVAL",
+  "view": "dbo.vw_RandevuRaporu",
+  "description": "Session-scoped multi-turn evaluation set for ASM agent memory, planner merge, SQL safety, and output routing.",
+  "scenarios": [
+    {
+      "id": "MT-001",
+      "title": "Branch count, status refinement, chart, then SQL",
+      "turns": [
+        {
+          "question": "Bugunku randevu sayisini subelere gore goster",
+          "expected": {"follow_up": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "date_column": "BaslangicTarihi", "date_start": "2026-07-23", "date_end": "2026-07-23", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "Sadece bekleyenleri goster",
+          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "date_column": "BaslangicTarihi", "date_start": "2026-07-23", "date_end": "2026-07-23", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "Bunu grafik yap",
+          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "date_column": "BaslangicTarihi", "date_start": "2026-07-23", "date_end": "2026-07-23", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": "visualization", "visible_sections": ["chart"]}
+        },
+        {
+          "question": "SQL ini ver",
+          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "date_column": "BaslangicTarihi", "date_start": "2026-07-23", "date_end": "2026-07-23", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": "sql", "visible_sections": ["sql"]}
+        }
+      ]
+    },
+    {
+      "id": "MT-002",
+      "title": "Doctor month context, status filter, metric switch to no-show rate, table",
+      "turns": [
+        {
+          "question": "Ocak 2026 icin doktor bazinda randevu sayilarini goster",
+          "expected": {"follow_up": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["DoktorId"], "date_column": "BaslangicTarihi", "date_start": "2026-01-01", "date_end": "2026-01-31", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "Yalniz gerceklesenleri goster",
+          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["DoktorId"], "date_column": "BaslangicTarihi", "date_start": "2026-01-01", "date_end": "2026-01-31", "extra_include": ["Gerçekleşti"], "extra_exclude": ["Beklemede", "Gelmedi"], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "O zaman gelmeyenleri oran olarak goster",
+          "expected": {"follow_up": true, "analysis_type": "ratio", "metrics": ["no_show_rate"], "dimensions": ["DoktorId"], "date_column": "BaslangicTarihi", "date_start": "2026-01-01", "date_end": "2026-01-31", "extra_include": [], "extra_exclude": ["Gerçekleşti", "Beklemede"], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "Bunu tabloya cevir",
+          "expected": {"follow_up": true, "analysis_type": "ratio", "metrics": ["no_show_rate"], "dimensions": ["DoktorId"], "date_column": "BaslangicTarihi", "date_start": "2026-01-01", "date_end": "2026-01-31", "extra_include": [], "extra_exclude": ["Gerçekleşti", "Beklemede"], "response_mode": "data", "visible_sections": ["table"]}
+        }
+      ]
+    },
+    {
+      "id": "MT-003",
+      "title": "Gender distribution, previous month, chart, SQL",
+      "turns": [
+        {
+          "question": "Bu ay cinsiyete gore randevu dagilimini goster",
+          "expected": {"follow_up": false, "analysis_type": "distribution", "metrics": ["appointment_count"], "dimensions": ["CinsiyetId"], "date_column": "BaslangicTarihi", "date_start": "2026-07-01", "date_end": "2026-07-31", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "Aynisini gecen ay icin goster",
+          "expected": {"follow_up": true, "analysis_type": "distribution", "metrics": ["appointment_count"], "dimensions": ["CinsiyetId"], "date_column": "BaslangicTarihi", "date_start": "2026-06-01", "date_end": "2026-06-30", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "Bunu grafik ciz",
+          "expected": {"follow_up": true, "analysis_type": "distribution", "metrics": ["appointment_count"], "dimensions": ["CinsiyetId"], "date_column": "BaslangicTarihi", "date_start": "2026-06-01", "date_end": "2026-06-30", "extra_include": [], "extra_exclude": [], "response_mode": "visualization", "visible_sections": ["chart"]}
+        },
+        {
+          "question": "SQL sorgusunu ver",
+          "expected": {"follow_up": true, "analysis_type": "distribution", "metrics": ["appointment_count"], "dimensions": ["CinsiyetId"], "date_column": "BaslangicTarihi", "date_start": "2026-06-01", "date_end": "2026-06-30", "extra_include": [], "extra_exclude": [], "response_mode": "sql", "visible_sections": ["sql"]}
+        }
+      ]
+    },
+    {
+      "id": "MT-004",
+      "title": "Raw list, status refinement, then SQL",
+      "turns": [
+        {
+          "question": "Son 20 randevuyu getir",
+          "expected": {"follow_up": false, "analysis_type": "list", "metrics": [], "dimensions": [], "limit": 20, "ranking": "DESC", "extra_include": [], "extra_exclude": [], "response_mode": "data", "visible_sections": ["table"]}
+        },
+        {
+          "question": "Sadece gelmedi durumundakileri getir",
+          "expected": {"follow_up": true, "analysis_type": "list", "metrics": [], "dimensions": [], "limit": 20, "ranking": "DESC", "extra_include": ["Gelmedi"], "extra_exclude": ["Beklemede", "Gerçekleşti"], "response_mode": "data", "visible_sections": ["table"]}
+        },
+        {
+          "question": "Bunu SQL olarak ver",
+          "expected": {"follow_up": true, "analysis_type": "list", "metrics": [], "dimensions": [], "limit": 20, "ranking": "DESC", "extra_include": ["Gelmedi"], "extra_exclude": ["Beklemede", "Gerçekleşti"], "response_mode": "sql", "visible_sections": ["sql"]}
+        }
+      ]
+    },
+    {
+      "id": "MT-005",
+      "title": "Protocol conversion rate, chart, then same metric by department",
+      "turns": [
+        {
+          "question": "Subelere gore protokole donusum oranini goster",
+          "expected": {"follow_up": false, "analysis_type": "conversion", "metrics": ["protocol_conversion_rate"], "dimensions": ["SubeAdi"], "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "Bunu grafik yap",
+          "expected": {"follow_up": true, "analysis_type": "conversion", "metrics": ["protocol_conversion_rate"], "dimensions": ["SubeAdi"], "extra_include": [], "extra_exclude": [], "response_mode": "visualization", "visible_sections": ["chart"]}
+        },
+        {
+          "question": "Aynisini branslara gore goster",
+          "expected": {"follow_up": true, "analysis_type": "conversion", "metrics": ["protocol_conversion_rate"], "dimensions": ["GenelRandevuBolumAdi"], "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+        }
+      ]
+    },
+    {
+      "id": "MT-006",
+      "title": "Average duration by doctor, ranking continuation, table",
+      "turns": [
+        {
+          "question": "Doktorlara gore ortalama randevu suresini goster",
+          "expected": {"follow_up": false, "analysis_type": "duration_analysis", "metrics": ["appointment_duration_average"], "dimensions": ["GenelRandevuKaynakAdi"], "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "En yuksek 10 doktoru goster",
+          "expected": {"follow_up": true, "analysis_type": "duration_analysis", "metrics": ["appointment_duration_average"], "dimensions": ["GenelRandevuKaynakAdi"], "limit": 10, "ranking": "DESC", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "Bunu tablo olarak getir",
+          "expected": {"follow_up": true, "analysis_type": "duration_analysis", "metrics": ["appointment_duration_average"], "dimensions": ["GenelRandevuKaynakAdi"], "limit": 10, "ranking": "DESC", "extra_include": [], "extra_exclude": [], "response_mode": "data", "visible_sections": ["table"]}
+        }
+      ]
+    },
+    {
+      "id": "MT-007",
+      "title": "Created-date appointment count by creator, waiting status, chart",
+      "turns": [
+        {
+          "question": "Bugun olusturulan randevu sayisini randevuyu verenlere gore goster",
+          "expected": {"follow_up": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["RandevuyuVeren"], "date_column": "CreatedDate", "date_start": "2026-07-23", "date_end": "2026-07-23", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "Sadece bekleyenler",
+          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["RandevuyuVeren"], "date_column": "CreatedDate", "date_start": "2026-07-23", "date_end": "2026-07-23", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "Bunun grafigini ciz",
+          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["RandevuyuVeren"], "date_column": "CreatedDate", "date_start": "2026-07-23", "date_end": "2026-07-23", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": "visualization", "visible_sections": ["chart"]}
+        }
+      ]
+    },
+    {
+      "id": "MT-008",
+      "title": "No-show rate changes dimension with same-analysis wording",
+      "turns": [
+        {
+          "question": "Bransa gore gelmeme oranini goster",
+          "expected": {"follow_up": false, "analysis_type": "ratio", "metrics": ["no_show_rate"], "dimensions": ["GenelRandevuBolumAdi"], "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "Aynisini randevu tipine gore goster",
+          "expected": {"follow_up": true, "analysis_type": "ratio", "metrics": ["no_show_rate"], "dimensions": ["RandevuTipiAdi"], "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "SQL ini ver",
+          "expected": {"follow_up": true, "analysis_type": "ratio", "metrics": ["no_show_rate"], "dimensions": ["RandevuTipiAdi"], "extra_include": [], "extra_exclude": [], "response_mode": "sql", "visible_sections": ["sql"]}
+        }
+      ]
+    },
+    {
+      "id": "MT-009",
+      "title": "Data-quality metric keeps metric while changing dimension",
+      "turns": [
+        {
+          "question": "Kategoriye gore sifir sureli kayit sayisini goster",
+          "expected": {"follow_up": false, "analysis_type": "data_quality", "metrics": ["zero_or_negative_duration_count"], "dimensions": ["KategoriAdi"], "extra_include": [], "extra_exclude": [], "response_mode": "data", "visible_sections": ["table"]}
+        },
+        {
+          "question": "Bunu hizmete gore goster",
+          "expected": {"follow_up": true, "analysis_type": "data_quality", "metrics": ["zero_or_negative_duration_count"], "dimensions": ["HizmetAdi"], "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "Tabloyu getir",
+          "expected": {"follow_up": true, "analysis_type": "data_quality", "metrics": ["zero_or_negative_duration_count"], "dimensions": ["HizmetAdi"], "extra_include": [], "extra_exclude": [], "response_mode": "data", "visible_sections": ["table"]}
+        }
+      ]
+    },
+    {
+      "id": "MT-010",
+      "title": "Cross analysis can switch output mode without losing both dimensions",
+      "turns": [
+        {
+          "question": "Uyruk ve cinsiyete gore randevu sayisini goster",
+          "expected": {"follow_up": false, "analysis_type": "cross_analysis", "metrics": ["appointment_count"], "dimensions": ["CinsiyetId", "Uyruk"], "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "Bunu grafik yap",
+          "expected": {"follow_up": true, "analysis_type": "cross_analysis", "metrics": ["appointment_count"], "dimensions": ["CinsiyetId", "Uyruk"], "extra_include": [], "extra_exclude": [], "response_mode": "visualization", "visible_sections": ["chart"]}
+        },
+        {
+          "question": "Sadece SQL ver",
+          "expected": {"follow_up": true, "analysis_type": "cross_analysis", "metrics": ["appointment_count"], "dimensions": ["CinsiyetId", "Uyruk"], "extra_include": [], "extra_exclude": [], "response_mode": "sql", "visible_sections": ["sql"]}
+        }
+      ]
+    }
+  ]
+}

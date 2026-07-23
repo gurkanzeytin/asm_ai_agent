@@ -11,7 +11,10 @@ from app.llm.interfaces import ILLMProvider
 from app.parsers.interfaces import IOutputParser
 from app.planning.compliance import PlanComplianceValidator
 from app.planning.models import QueryPlan
-from app.services.deterministic_sql_builder import DeterministicSQLBuilder, DeterministicSQL, UnsupportedPlan
+from app.services.deterministic_sql_builder import (
+    DeterministicSQLBuilder,
+    UnsupportedPlan,
+)
 from app.services.exceptions import SQLServiceException
 from app.services.interfaces import ISQLService
 from app.sql_validator.interfaces import ISQLValidator
@@ -101,7 +104,7 @@ class SQLService(ISQLService):
             )
             trend_issue = self._trend_aggregation_issue(question, cleaned_sql) if is_sql else None
             truncated = llm_response.finish_reason == "max_tokens"
-            compliance_missing = self._compliance_missing(
+            compliance_missing = self._compliance_blockers(
                 cleaned_sql, query_plan, is_sql, validation_result, schema_issues
             )
 
@@ -123,7 +126,8 @@ class SQLService(ISQLService):
                 logger.warning(
                     f"First SQL generation attempt failed safety, formatting, or schema checks.\n"
                     f"  - Bounded raw output preview: {raw_preview!r}\n"
-                    f"  - Validation Result: {validation_result.valid if validation_result else False}\n"
+                    f"  - Validation Result: "
+                    f"{validation_result.valid if validation_result else False}\n"
                     f"  - Schema identifier issues: {schema_issues or 'none'}\n"
                     f"  - Trend aggregation issue: {trend_issue or 'none'}\n"
                     f"  - Plan compliance missing: {compliance_missing or 'none'}\n"
@@ -139,7 +143,13 @@ class SQLService(ISQLService):
                         "with only the columns and JOINs strictly needed to answer the "
                         "question. Do not explain. Return only SQL."
                     )
-                elif trend_issue and is_sql and validation_result and validation_result.valid and not schema_issues:
+                elif (
+                    trend_issue
+                    and is_sql
+                    and validation_result
+                    and validation_result.valid
+                    and not schema_issues
+                ):
                     repair_instruction = (
                         "The question asks for an analysis/trend over a time period, but the "
                         "previous SQL returns raw rows without time aggregation. Rewrite it as "
@@ -201,16 +211,20 @@ class SQLService(ISQLService):
                 cleaned_sql, is_sql, validation_result, schema_issues = self._parse_and_validate(
                     llm_response.content, question, database_context
                 )
-                # Post-repair compliance status is logged for observability; a
-                # still-missing constraint never blocks an otherwise valid SQL.
-                compliance_missing = self._compliance_missing(
+                compliance_missing = self._compliance_blockers(
                     cleaned_sql, query_plan, is_sql, validation_result, schema_issues
                 )
                 if compliance_missing:
-                    logger.warning(
-                        "Plan compliance still incomplete after repair attempt: %s",
+                    logger.error(
+                        "Plan compliance still incomplete after repair attempt; "
+                        "blocking execution: %s",
                         "; ".join(compliance_missing),
                         extra={"missing_constraints": compliance_missing},
+                    )
+                    raise SQLServiceException(
+                        "Generated SQL does not satisfy the query plan after the "
+                        "bounded repair attempt: "
+                        f"{'; '.join(compliance_missing)}"
                     )
 
             # 2. Final check before completing flow:
@@ -221,7 +235,10 @@ class SQLService(ISQLService):
                     f"SQL generation failed: Output does not start with SELECT or WITH.\n"
                     f"  - Bounded raw output preview: {raw_preview!r}"
                 )
-                raise SQLServiceException("Failed to generate a valid SQL query: output does not start with SELECT or WITH.")
+                raise SQLServiceException(
+                    "Failed to generate a valid SQL query: output does not start "
+                    "with SELECT or WITH."
+                )
 
             # Schema identifier check: never let SQL with unknown identifiers reach execution
             if schema_issues:
@@ -293,10 +310,28 @@ class SQLService(ISQLService):
                 },
             )
 
-            missing_metrics_after = (
-                self.compliance_validator.check(cleaned_sql, query_plan).missing_metrics
+            compliance_after = (
+                self.compliance_validator.check(cleaned_sql, query_plan)
                 if query_plan is not None
-                else []
+                else None
+            )
+            if compliance_after is not None and not compliance_after.compliant:
+                blockers = self._format_compliance_blockers(compliance_after)
+                logger.error(
+                    "Plan compliance incomplete before execution; blocking SQL: %s",
+                    "; ".join(blockers),
+                    extra={
+                        "missing_constraints": compliance_after.missing,
+                        "missing_metrics": compliance_after.missing_metrics,
+                        "missing_dimensions": compliance_after.missing_dimensions,
+                    },
+                )
+                raise SQLServiceException(
+                    "Generated SQL does not satisfy the query plan: "
+                    f"{'; '.join(blockers)}"
+                )
+            missing_metrics_after = (
+                compliance_after.missing_metrics if compliance_after is not None else []
             )
             return GeneratedSQL(
                 sql=cleaned_sql,
@@ -407,7 +442,7 @@ class SQLService(ISQLService):
             [],
         )
 
-    def _compliance_missing(
+    def _compliance_blockers(
         self,
         sql: str,
         query_plan: QueryPlan | None,
@@ -429,10 +464,23 @@ class SQLService(ISQLService):
         ):
             return []
         try:
-            return self.compliance_validator.check(sql, query_plan).missing
+            return self._format_compliance_blockers(
+                self.compliance_validator.check(sql, query_plan)
+            )
         except Exception as error:  # compliance must never break generation
             logger.error(f"Plan compliance check failed open: {error}")
             return []
+
+    def _format_compliance_blockers(self, compliance) -> list[str]:
+        """Flattens every plan-compliance failure into repair/blocking reasons."""
+        blockers = list(compliance.missing)
+        blockers.extend(f"metric alias {metric}" for metric in compliance.missing_metrics)
+        blockers.extend(
+            f"dimension column {dimension}"
+            for dimension in compliance.missing_dimensions
+            if f"dimension column {dimension}" not in blockers
+        )
+        return sorted(set(blockers))
 
     def _parse_and_validate(
         self,

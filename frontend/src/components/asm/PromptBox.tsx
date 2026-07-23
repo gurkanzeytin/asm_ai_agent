@@ -65,7 +65,7 @@ export function PromptBox({ value, onChange, onSend, onStop, isGenerating }: Pro
             className={cn(
               "absolute bottom-2.5 right-2.5 grid h-10 w-10 place-items-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
               value.trim()
-                ? "bg-gradient-to-br from-primary to-cyan text-primary-foreground shadow-[0_8px_22px_-8px_oklch(0.72_0.14_205/0.75)]"
+                ? "bg-gradient-to-br from-primary to-cyan text-primary-foreground shadow-[0_8px_20px_-8px_color-mix(in_oklch,var(--cyan)_55%,transparent)]"
                 : "bg-muted text-muted-foreground",
             )}
             aria-label={tr.chat.sendLabel}

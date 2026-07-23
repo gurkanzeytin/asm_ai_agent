@@ -9,15 +9,17 @@ from app.agent.nodes.generate_sql import GenerateSQLNode
 from app.agent.nodes.resolve_filter_values import ResolveFilterValuesNode
 from app.agent.nodes.retrieve_context import RetrieveContextNode
 from app.agent.nodes.validate_sql import ValidateSQLNode
+from app.agent.state import AgentState
 from app.application_models.generated_report import GeneratedReport
 from app.application_models.outcome import AgentOutcome
 from app.application_models.workflow_models import QueryResult
 from app.context import ContextManager
+from app.context.analytical_signals import merge_query_plans
 from app.context.session_store import SessionStore
 from app.database_intelligence.models import DatabaseContext, ViewMetadata
 from app.llm.schemas import LLMResponse
 from app.planning.compliance import PlanComplianceValidator
-from app.planning.models import QueryPlan, ResolvedFilterPlan
+from app.planning.models import DateFilterPlan, QueryPlan, ResolvedFilterPlan
 from app.services.deterministic_sql_builder import DeterministicSQL, DeterministicSQLBuilder
 from app.services.reporting_service import ReportingService
 from app.services.sql_service import SQLService
@@ -89,6 +91,7 @@ class _ExistingPipelineGraph:
         self.validate = ValidateSQLNode()
         self.execute = ExecuteSQLNode(workflow_service)
         self.states = []
+        self.final_states = []
 
     async def ainvoke(self, state):
         state = await self.retrieve.execute(state)
@@ -97,13 +100,21 @@ class _ExistingPipelineGraph:
         state = await self.generate.execute(state)
         state = await self.validate.execute(state)
         state = await self.execute.execute(state)
+        self.final_states.append(state)
         result = dict(state)
-        result.update(
-            generated_report=GeneratedReport(
-                title="Test", markdown="# Test", provider="test", model="test", latency_ms=0
-            ),
-            outcome=AgentOutcome.EXECUTE_SQL.value,
-        )
+        # Mirrors ReportingService's own SAFE_ERROR fallback (generated_report
+        # stays None when an upstream node recorded an error) so a regression
+        # that makes GenerateSQLNode raise is visible as SAFE_ERROR here too,
+        # not masked by an unconditionally-forced EXECUTE_SQL outcome.
+        if state.errors:
+            result.update(generated_report=None, outcome=AgentOutcome.SAFE_ERROR.value)
+        else:
+            result.update(
+                generated_report=GeneratedReport(
+                    title="Test", markdown="# Test", provider="test", model="test", latency_ms=0
+                ),
+                outcome=AgentOutcome.EXECUTE_SQL.value,
+            )
         return result
 
 
@@ -156,6 +167,211 @@ async def test_same_session_second_turn_executes_retained_plan_with_status_filte
 
     compliance = PlanComplianceValidator().check(second.generated_sql, second_plan)
     assert compliance.compliant, compliance.missing
+
+
+@pytest.mark.asyncio
+async def test_same_session_third_turn_replaces_status_filter_family():
+    """AI-INTELLIGENCE regression: a third-turn status change ('beklemede')
+    must replace the second turn's status filter ('gerçekleşti') and must not
+    be mistaken for a metric switch merely because the metric catalog's
+    'waiting_count' synonym ('beklemede olan') overlaps the filter wording."""
+    session_id = "same-live-session-turn3"
+    workflow_service = _WorkflowService()
+    graph = _ExistingPipelineGraph(workflow_service)
+    service = ReportingService(graph, ContextManager(store=SessionStore()))
+
+    first = await service.run_workflow(
+        "2026 Ocak ayında doktorların randevu sayılarını ver.",
+        session_id=session_id,
+    )
+    second = await service.run_workflow(
+        "Sadece gerçekleşenleri göster.",
+        session_id=session_id,
+    )
+    third = await service.run_workflow(
+        "O zaman sadece beklemede olanları göster.",
+        session_id=session_id,
+    )
+
+    first_plan = graph.states[0].query_plan
+    second_plan = graph.states[1].query_plan
+    third_plan = graph.states[2].query_plan
+    assert first_plan is not None and second_plan is not None and third_plan is not None
+
+    # Retained across all three turns.
+    assert third_plan.date_filters == first_plan.date_filters
+    assert third_plan.dimensions == ["DoktorId"]
+    assert third_plan.metrics == ["appointment_count"]
+    assert (third_plan.ranking, third_plan.order) == ("DESC", "DESC")
+
+    # Exactly one status filter, and it replaced (not appended to) Gerçekleşti.
+    assert third_plan.extra_filters == ["RandevuDurumu = 'Beklemede'"]
+    assert "Gerçekleşti" not in third_plan.extra_filters[0]
+
+    third_final_state = graph.final_states[2]
+    assert third_final_state.errors == []
+    assert third.outcome != AgentOutcome.SAFE_ERROR.value
+
+    assert third.generated_sql is not None
+    assert "N'Beklemede'" in third.generated_sql
+    assert "Gerçekleşti" not in third.generated_sql
+    assert "GROUP BY DoktorId" in third.generated_sql
+    assert "ORDER BY appointment_count DESC" in third.generated_sql
+    assert workflow_service.executed_sql[-1] == third.generated_sql
+
+    compliance = PlanComplianceValidator().check(third.generated_sql, third_plan)
+    assert compliance.compliant, compliance.missing
+
+
+async def _plan_after_followup(
+    first_question: str, second_question: str
+) -> tuple[QueryPlan, QueryPlan]:
+    """Runs two turns through the real RetrieveContextNode (real QueryAnalyzer +
+    QueryPlanner + merge_query_plans) and returns (first_plan, second_plan).
+
+    Deliberately stops before GenerateSQLNode/compliance/SQL generation: those
+    stages are unrelated to conversational-memory merge behavior and this
+    helper isolates exactly the planner+merge slice the metric/filter
+    ambiguity fix lives in.
+    """
+    manager = ContextManager(store=SessionStore())
+    session_id = "plan-after-followup"
+    retrieve = RetrieveContextNode(_PromptService())
+    resolve_filters = ResolveFilterValuesNode()
+
+    resolution1 = manager.resolve(first_question, session_id)
+    state1 = AgentState(
+        question=resolution1.resolved_question,
+        raw_question=first_question,
+        retained_query_plan=None,
+        context_follow_up_detected=resolution1.follow_up_detected,
+    )
+    state1 = await retrieve.execute(state1)
+    state1 = await resolve_filters.execute(state1)
+    manager.update(resolution1, session_id, query_plan=state1.query_plan)
+
+    resolution2 = manager.resolve(second_question, session_id)
+    state2 = AgentState(
+        question=resolution2.resolved_question,
+        raw_question=second_question,
+        retained_query_plan=(
+            QueryPlan.model_validate(resolution2.retained_query_plan_snapshot)
+            if resolution2.retained_query_plan_snapshot
+            else None
+        ),
+        context_follow_up_detected=resolution2.follow_up_detected,
+    )
+    state2 = await retrieve.execute(state2)
+    state2 = await resolve_filters.execute(state2)
+
+    return state1.query_plan, state2.query_plan
+
+
+@pytest.mark.asyncio
+async def test_same_session_explicit_measure_request_switches_metric_despite_status_overlap():
+    """The mirror-image regression of turn 3 above: when the current turn is
+    an unambiguous measure/count request ('... sayısı nedir?') that happens to
+    also match a status word ('bekleyen' -> RandevuDurumu='Beklemede'), the
+    metric MUST switch — filter-restricting wording is what suppresses a
+    metric switch, not mere status-value overlap (see
+    app.context.analytical_signals._MEASURE_REQUEST_MARKERS)."""
+    first_plan, second_plan = await _plan_after_followup(
+        "2026 Ocak ayında doktorların randevu sayılarını ver.",
+        "Bekleyen randevu sayısı nedir?",
+    )
+    assert first_plan is not None and second_plan is not None
+    assert first_plan.metrics == ["appointment_count"]
+
+    # Explicit measure request wins: metric actually switches this time.
+    assert second_plan.metrics == ["waiting_count"]
+    # Compatible retained context (date) survives the metric switch.
+    assert second_plan.date_filters == first_plan.date_filters
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("question", "expected_metric"),
+    [
+        # Filter-shaped: no measure noun -> retained metric must survive.
+        ("O zaman sadece beklemede olanları göster.", "appointment_count"),
+        ("Beklemede olanları göster.", "appointment_count"),
+        ("Yalnız gerçekleşenleri göster.", "appointment_count"),
+        # Measure-shaped: explicit count/rate noun -> metric switches.
+        ("Bekleyen randevu sayısı nedir?", "waiting_count"),
+        ("Bekleme oranı nedir?", "waiting_rate"),
+    ],
+)
+async def test_same_status_wording_resolves_to_filter_or_metric_by_phrasing(
+    question, expected_metric
+):
+    """AI-INTELLIGENCE regression (generalized): the SAME status word
+    ('bekleyen'/'beklemede') must resolve to a status filter when the wording
+    only restricts rows, and to a genuine metric switch when the wording is an
+    explicit measure/count request — verified on the structured QueryPlan
+    through the real planner + merge pipeline, never on raw text equality."""
+    _, second_plan = await _plan_after_followup(
+        "2026 Ocak ayında doktorların randevu sayılarını ver.", question
+    )
+    assert second_plan is not None
+    assert second_plan.metrics == [expected_metric], second_plan.metrics
+
+
+@pytest.mark.parametrize(
+    ("first_question", "first_field", "first_value", "second_question", "second_field", "second_value", "predicate_column"),
+    [
+        ("Pendik şubesini göster.", "branch", "Pendik", "Şimdi Kartal şubesini göster.", "branch", "Kartal", "SubeAdi"),
+        ("Kadın hastaları göster.", "gender", "K", "Erkek hastalarla sınırla.", "gender", "E", "CinsiyetId"),
+        (
+            "Türk hastaları göster.",
+            "nationality",
+            "Türkiye",
+            "Sadece Alman hastaları göster.",
+            "nationality",
+            "Almanya",
+            "Uyruk",
+        ),
+    ],
+)
+def test_generic_filter_family_replacement(
+    first_question,
+    first_field,
+    first_value,
+    second_question,
+    second_field,
+    second_value,
+    predicate_column,
+):
+    """A second explicit value for the SAME filter family (branch/gender/
+    nationality) must replace, not accumulate onto, the first — mirroring the
+    status-filter override semantics, generically across every grounded
+    filter family (AI-INTELLIGENCE-016 resolved_filters)."""
+    first_plan_kwargs: dict = {"question": first_question, "resolved_filters": {first_field: _grounded(first_field, first_value)}}
+    second_plan_kwargs: dict = {
+        "question": second_question,
+        "resolved_filters": {second_field: _grounded(second_field, second_value)},
+    }
+    if first_field == "branch":
+        first_plan_kwargs["branch_filters"] = [first_value]
+    if second_field == "branch":
+        second_plan_kwargs["branch_filters"] = [second_value]
+
+    first_plan = QueryPlan(**first_plan_kwargs)
+    second_plan = QueryPlan(**second_plan_kwargs)
+
+    merged = merge_query_plans(
+        current=second_plan,
+        retained=first_plan,
+        raw_question=second_question,
+        follow_up_detected=True,
+    )
+
+    assert merged.resolved_filters[second_field].values == [second_value]
+    if second_field == "branch":
+        assert merged.branch_filters == [second_value]
+
+    built = DeterministicSQLBuilder().build(merged)
+    assert f"{predicate_column} = N'{second_value}'" in built.sql
+    assert f"{predicate_column} = N'{first_value}'" not in built.sql
 
 
 def _grounded(field_name: str, value: str) -> ResolvedFilterPlan:
@@ -220,3 +436,64 @@ def test_compliance_rejects_missing_planned_status_filter():
     result = PlanComplianceValidator().check(sql, plan)
     assert not result.compliant
     assert "planned filter RandevuDurumu" in " ".join(result.missing)
+
+
+def test_multi_field_explicit_override_replaces_branch_date_and_grouping():
+    """A follow-up that explicitly restates branch, date/year, and grouping
+    together must replace all three at once — none of the first turn's
+    values (branch, dimension) may leak into the merged plan, while the
+    untouched metric is retained (AI-INTELLIGENCE regression, item K)."""
+    retained = QueryPlan(
+        question="2025 yılında Gebze şubesinde doktor bazında randevu sayıları.",
+        metrics=["appointment_count"],
+        dimensions=["DoktorId"],
+        aggregation="COUNT(*)",
+        branch_filters=["Gebze"],
+        resolved_filters={"branch": _grounded("branch", "Gebze")},
+        date_filters=[
+            DateFilterPlan(
+                column="BaslangicTarihi",
+                start_date="2025-01-01",
+                end_date="2025-12-31",
+                expression="2025 yilinda",
+            )
+        ],
+    )
+    current_question = "2024 için Ataşehir şubesinde bölüm bazında göster."
+    current = QueryPlan(
+        question=current_question,
+        dimensions=["GenelRandevuBolumAdi"],
+        branch_filters=["Ataşehir"],
+        resolved_filters={"branch": _grounded("branch", "Ataşehir")},
+        date_filters=[
+            DateFilterPlan(
+                column="BaslangicTarihi",
+                start_date="2024-01-01",
+                end_date="2024-12-31",
+                expression="2024 icin",
+            )
+        ],
+    )
+
+    merged = merge_query_plans(
+        current=current,
+        retained=retained,
+        raw_question=current_question,
+        follow_up_detected=True,
+    )
+
+    # Explicitly restated fields replaced, no stale Gebze/doctor leakage.
+    assert merged.branch_filters == ["Ataşehir"]
+    assert merged.resolved_filters["branch"].values == ["Ataşehir"]
+    assert merged.dimensions == ["GenelRandevuBolumAdi"]
+    assert [f.start_date for f in merged.date_filters] == ["2024-01-01"]
+    assert [f.end_date for f in merged.date_filters] == ["2024-12-31"]
+
+    # Untouched metric retained.
+    assert merged.metrics == ["appointment_count"]
+
+    built = DeterministicSQLBuilder().build(merged)
+    assert "SubeAdi = N'Ataşehir'" in built.sql
+    assert "Gebze" not in built.sql
+    assert "2024-01-01" in built.sql
+    assert "2025-01-01" not in built.sql

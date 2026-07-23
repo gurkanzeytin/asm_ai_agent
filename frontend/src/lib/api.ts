@@ -18,6 +18,7 @@ export interface ColumnMetadataPayload {
   label: string;
   format: ColumnFormat;
   unit: string | null;
+  hidden?: boolean;
 }
 
 export interface QueryResultPayload {
@@ -122,6 +123,8 @@ export interface ReportResponse {
   success: boolean;
   workflow_id?: string | null;
   question: string;
+  response_mode?: "answer" | "sql" | "data" | "visualization" | null;
+  visible_sections?: string[];
   raw_question?: string | null;
   resolved_question?: string | null;
   answerability_input_source?: string;
@@ -155,6 +158,8 @@ const reportResponseSchema = z
   .object({
     success: z.boolean(),
     question: z.string(),
+    response_mode: z.enum(["answer", "sql", "data", "visualization"]).nullable().optional(),
+    visible_sections: z.array(z.string()).optional(),
     generated_sql: z.string().nullable().optional(),
     query_result: z
       .object({
@@ -176,6 +181,7 @@ const reportResponseSchema = z
               label: z.string(),
               format: z.string(),
               unit: z.string().nullable().optional(),
+              hidden: z.boolean().optional(),
             }),
           )
           .optional(),

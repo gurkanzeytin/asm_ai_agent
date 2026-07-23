@@ -11,6 +11,7 @@ from app.database_intelligence.models import ViewMetadata
 from app.planning.compliance import PlanComplianceValidator
 from app.planning.planner import QueryPlanner
 from app.semantics import view_mapping
+from app.services.deterministic_sql_builder import DeterministicSQLBuilder
 from app.services.query_analyzer import QueryAnalyzer
 
 VIEW_NAME = "dbo.vw_RandevuRaporu"
@@ -105,8 +106,15 @@ def test_distinct_patients_uses_count_distinct_hasta_id():
 
 
 def test_completed_appointment_count_uses_count_star_and_status():
+    # PLANNER-METRIC-CONSISTENCY-002: the matched conditional metric
+    # (completed_appointment_count) is a conditional_count catalog formula,
+    # not a plain COUNT(*) — plan.aggregation must mirror the metric that
+    # will actually be rendered, not a stale generic default (Blocker 2).
     plan = plan_for("Gerçekleşen randevuların sayısı kaç?")
-    assert plan.aggregation == "COUNT(*)"
+    assert plan.metrics == ["completed_appointment_count"]
+    assert plan.aggregation == (
+        "SUM(CASE WHEN RandevuDurumu = N'Gerçekleşti' THEN 1 ELSE 0 END)"
+    )
     assert any("RandevuDurumu = 'Gerçekleşti'" in flt for flt in plan.extra_filters)
 
 
@@ -133,6 +141,30 @@ def test_date_column_resolution_rules():
     assert view_mapping.resolve_date_column("bugunku randevular") == "BaslangicTarihi"
     assert view_mapping.resolve_date_column("bugun olusturulan randevular") == "CreatedDate"
     assert view_mapping.resolve_date_column("protokolu bugun acilanlar") == "ProtokolAcilisTarihi"
+
+
+def test_single_explicit_day_is_preserved_in_count_sql():
+    plan = plan_for("23 temmuz 2025 için randevu sayılarını verecek sql sorgusunu oluştur")
+    assert len(plan.date_filters) == 1
+    assert plan.date_filters[0].column == "BaslangicTarihi"
+    assert plan.date_filters[0].start_date == "2025-07-23"
+    assert plan.date_filters[0].end_date == "2025-07-23"
+
+    built = DeterministicSQLBuilder().build(plan)
+    assert "BaslangicTarihi >= '2025-07-23'" in built.sql
+    assert "BaslangicTarihi < DATEADD(day, 1, '2025-07-23')" in built.sql
+
+
+def test_last_20_appointments_is_raw_list_not_count():
+    plan = plan_for("Son 20 randevuyu getir")
+    assert plan.analysis_type == "list"
+    assert plan.limit == 20
+    assert plan.metrics == []
+
+    built = DeterministicSQLBuilder().build(plan)
+    assert "SELECT TOP (20) Id, BaslangicTarihi" in built.sql
+    assert "ORDER BY BaslangicTarihi DESC" in built.sql
+    assert "COUNT(" not in built.sql.upper()
 
 
 def test_measure_resolution():

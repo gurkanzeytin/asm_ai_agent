@@ -24,6 +24,7 @@ SUPPORTED_ANALYSIS_TYPES = {
     "bottom_n",
     "ratio",
     "percentage",
+    "conversion",
     "average",
     "minimum",
     "maximum",
@@ -35,6 +36,9 @@ SUPPORTED_ANALYSIS_TYPES = {
     "variance_analysis",
     "cross_analysis",
     "data_quality",
+    "duration_analysis",
+    "lead_time_analysis",
+    "list",
     "adaptive_time_comparison",
     "percentage_change",
 }
@@ -111,6 +115,8 @@ class DeterministicSQLBuilder:
             return self._variance(plan)
         if analysis_type == "time_trend":
             return self._trend(plan)
+        if analysis_type == "list":
+            return self._list(plan)
         return self._standard(plan, analysis_type)
 
     def metric_sql_map(self) -> dict[str, str]:
@@ -149,7 +155,12 @@ class DeterministicSQLBuilder:
         order_by = self._order_by(plan, analysis_type, expected_aliases[-1])
         top = (
             f"TOP ({plan.limit}) "
-            if plan.limit and analysis_type in {"ranking", "top_n", "bottom_n"}
+            if plan.limit
+            and (
+                analysis_type in {"ranking", "top_n", "bottom_n"}
+                or plan.ranking is not None
+                or plan.order is not None
+            )
             else ""
         )
         sql = (
@@ -165,6 +176,42 @@ class DeterministicSQLBuilder:
             expected_aliases=expected_aliases,
             skipped_metrics=skipped,
             metric_aliases=metric_aliases,
+        )
+
+    def _list(self, plan: QueryPlan) -> DeterministicSQL | UnsupportedPlan:
+        columns = [
+            column
+            for column in (
+                plan.projection
+                or [
+                    "Id",
+                    "BaslangicTarihi",
+                    "BitisTarihi",
+                    "RandevuDurumu",
+                    "GenelRandevuKaynakAdi",
+                    "GenelRandevuBolumAdi",
+                    "SubeAdi",
+                    "RandevuTipiAdi",
+                ]
+            )
+            if self._is_safe_identifier(column)
+        ]
+        if not columns:
+            return UnsupportedPlan("list request has no safe projection")
+        top = f"TOP ({plan.limit}) " if plan.limit else ""
+        where = self._where(plan)
+        order = "DESC" if (plan.order or "DESC") == "DESC" else "ASC"
+        order_column = (plan.date_filters[0].column if plan.date_filters else None) or DATE_COLUMN
+        sql = (
+            f"SELECT {top}{', '.join(columns)}\n"
+            f"FROM {VIEW}\n"
+            f"{where}"
+            f"ORDER BY {order_column} {order};"
+        )
+        return DeterministicSQL(
+            sql=sql,
+            result_schema="RawRecordRows",
+            expected_aliases=[],
         )
 
     def _cohort(self, *, adaptive_retry: bool) -> DeterministicSQL:
@@ -513,9 +560,12 @@ class DeterministicSQLBuilder:
         mapping = {
             "ratio": "RatioResult",
             "percentage": "RatioResult",
+            "conversion": "RatioResult",
             "time_trend": "TrendResult",
             "distribution": "DistributionResult",
             "cross_analysis": "DistributionResult",
+            "duration_analysis": "DistributionResult",
+            "lead_time_analysis": "DistributionResult",
             "ranking": "DistributionResult",
             "top_n": "DistributionResult",
             "bottom_n": "DistributionResult",

@@ -68,6 +68,25 @@ _CONSTRAINT_EDIT_MARKERS = (
     "ayir",
 )
 
+_OUTPUT_ACTION_FOLLOWUP_MARKERS = (
+    "bunu calistir",
+    "bunun grafig",
+    "calistir",
+    "tabloya cevir",
+    "tablo olarak getir",
+    "tablo yap",
+    "tabloyu getir",
+    "tablo getir",
+    "grafik yap",
+    "grafik ciz",
+    "grafige cevir",
+    "sql olarak ver",
+    "sql ini ver",
+    "sqlini ver",
+    "sorgusunu ver",
+)
+_CONVERSATIONAL_CONTINUATION_MARKERS = ("o zaman", "peki")
+
 _CLARIFICATION_MULTIPLE = (
     "Daha önce birden fazla konu konuşuldu. Hangisini kastettiğinizi belirtir misiniz?"
 )
@@ -363,6 +382,28 @@ class ContextResolver:
         ):
             result.follow_up_signals.append("constraint_edit_followup")
 
+        if (
+            not result.follow_up_signals
+            and not context.is_empty()
+            and any(
+                marker in folded_question
+                for marker in _CONVERSATIONAL_CONTINUATION_MARKERS
+            )
+            and not current_signals.is_empty()
+        ):
+            result.follow_up_signals.append("conversational_continuation")
+
+        if (
+            not result.follow_up_signals
+            and context.query_plan_snapshot is not None
+            and any(
+                marker in folded_question
+                for marker in _OUTPUT_ACTION_FOLLOWUP_MARKERS
+            )
+            and current_signals.is_empty()
+        ):
+            result.follow_up_signals.append("output_action_followup")
+
         # "Top 10 departments" does not state what is being ranked.  When a
         # successful prior plan supplies that metric, it is a genuine ranking
         # continuation; a fully specified ranking question with its own metric
@@ -516,6 +557,13 @@ class ContextResolver:
     ) -> str | None:
         """Determines the unique referent for a pronoun, or None when ambiguous."""
         pronoun_text = " ".join(signals.pronouns)
+        if any(marker in pronoun_text for marker in ("aynisi", "aynisini", "bunun")):
+            if (
+                context.metrics
+                or context.dimensions
+                or context.query_plan_snapshot is not None
+            ):
+                return _PLURAL_REFERENTS["Appointment"]
 
         # "o bölüm" / "aynı bölüm" — direct department reference.
         if "bolum" in pronoun_text:

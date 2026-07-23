@@ -1,0 +1,399 @@
+{
+  "view": "dbo.vw_RandevuRaporu",
+  "version": 1,
+  "description": "ASM RandevuRaporu 24-column golden evaluation set for deterministic planner, SQL, output-routing, and safe-field behavior.",
+  "cases": [
+    {
+      "id": "ASM24-001",
+      "question": "Son 20 randevuyu getir",
+      "covered_columns": ["Id", "BaslangicTarihi", "BitisTarihi", "RandevuDurumu", "GenelRandevuKaynakAdi", "GenelRandevuBolumAdi", "SubeAdi", "RandevuTipiAdi"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "list", "metrics": [], "dimensions": [], "response_mode": "data", "visible_sections": ["table"], "sql_should_build": true},
+      "sql": {"must_include": ["SELECT TOP (20)", "ORDER BY BaslangicTarihi DESC"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-002",
+      "question": "Sadece SQL: bugunku randevu sayisi",
+      "covered_columns": ["Id", "BaslangicTarihi"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": [], "date_column": "BaslangicTarihi", "response_mode": "sql", "visible_sections": ["sql"], "sql_should_build": true},
+      "sql": {"must_include": ["COUNT(*) AS appointment_count", "BaslangicTarihi"], "must_not_include": ["CreatedDate", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-003",
+      "question": "Bugun olusturulan randevu sayisi kac?",
+      "covered_columns": ["CreatedDate", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": [], "date_column": "CreatedDate", "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["COUNT(*) AS appointment_count", "CreatedDate"], "must_not_include": ["BaslangicTarihi >=", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-004",
+      "question": "Bitis tarihi baslangictan once olan kayit sayisi",
+      "covered_columns": ["BitisTarihi", "BaslangicTarihi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "data_quality", "metrics": ["invalid_date_range_count"], "dimensions": [], "response_mode": "data", "visible_sections": ["table"], "sql_should_build": true},
+      "sql": {"must_include": ["BitisTarihi < BaslangicTarihi"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-005",
+      "question": "Ortalama randevu suresini subelere gore goster",
+      "covered_columns": ["RandevuSuresi", "SubeAdi"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "duration_analysis", "metrics": ["appointment_duration_average"], "dimensions": ["SubeAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["AVG(CAST(RandevuSuresi AS FLOAT))", "GROUP BY SubeAdi"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-006",
+      "question": "Randevu durumuna gore dagilim",
+      "covered_columns": ["RandevuDurumu", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "distribution", "metrics": ["appointment_count"], "dimensions": ["RandevuDurumu"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY RandevuDurumu"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-007",
+      "question": "Kac farkli hasta randevu almis?",
+      "covered_columns": ["HastaId"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "distinct_count", "metrics": ["unique_patient_count"], "dimensions": ["HastaId"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["COUNT(DISTINCT HastaId)"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-008",
+      "question": "Randevu tipine gore bekleyenleri say",
+      "covered_columns": ["RandevuTipiAdi", "RandevuDurumu", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["waiting_count"], "dimensions": ["RandevuTipiAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["RandevuTipiAdi", "RandevuDurumu = N'Beklemede'"], "must_not_include": ["appointments_per_type", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-009",
+      "question": "Randevuyu verenlere gore randevu sayisi",
+      "covered_columns": ["RandevuyuVeren", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["RandevuyuVeren"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY RandevuyuVeren"], "must_not_include": ["GenelRandevuKaynakAdi AS", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-010",
+      "question": "Hasta adlarini cikarma, sadece randevu listesini getir",
+      "covered_columns": ["HastaAdi", "HastaSoyadi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "list", "metrics": [], "dimensions": [], "response_mode": "data", "visible_sections": ["table"], "sql_should_build": true},
+      "sql": {"must_include": ["FROM dbo.vw_RandevuRaporu"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-011",
+      "question": "Yas gruplarina gore randevu dagilimi",
+      "covered_columns": ["DogumTarihi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "distribution", "metrics": ["appointment_count"], "dimensions": ["DogumTarihi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["DogumTarihi", "GROUP BY DogumTarihi"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-012",
+      "question": "Cinsiyete gore gelmeme orani",
+      "covered_columns": ["CinsiyetId", "RandevuDurumu", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "ratio", "metrics": ["no_show_rate"], "dimensions": ["CinsiyetId"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["CinsiyetId", "RandevuDurumu = N'Gelmedi'", "NULLIF(COUNT(*), 0)"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-013",
+      "question": "Hasta id uyusmazligi sayisi",
+      "covered_columns": ["HastaId", "HastaId2", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "data_quality", "metrics": ["patient_id_mismatch_count"], "dimensions": [], "response_mode": null, "visible_sections": [], "sql_should_build": false},
+      "sql": {"must_include": [], "must_not_include": []}
+    },
+    {
+      "id": "ASM24-014",
+      "question": "Uyruga gore gerceklesme orani",
+      "covered_columns": ["Uyruk", "RandevuDurumu", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "ratio", "metrics": ["completed_appointment_rate"], "dimensions": ["Uyruk"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["Uyruk", "Gerçekleşti", "NULLIF(COUNT(*), 0)"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-015",
+      "question": "Bolum id bazinda randevu sayisi",
+      "covered_columns": ["BolumId", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["BolumId"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY BolumId"], "must_not_include": ["GenelRandevuBolumAdi AS", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-016",
+      "question": "Doktor id bazinda randevu sayisi",
+      "covered_columns": ["DoktorId", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["DoktorId"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY DoktorId"], "must_not_include": ["DoktorAdi", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-017",
+      "question": "Hizmete gore ortalama randevu suresi",
+      "covered_columns": ["HizmetAdi", "RandevuSuresi"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "duration_analysis", "metrics": ["appointment_duration_average"], "dimensions": ["HizmetAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["HizmetAdi", "AVG(CAST(RandevuSuresi AS FLOAT))"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-018",
+      "question": "Protokol islem durumuna gore randevu dagilimi",
+      "covered_columns": ["ProtokolIslemState", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "distribution", "metrics": ["appointment_count"], "dimensions": ["ProtokolIslemState"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY ProtokolIslemState"], "must_not_include": ["RandevuDurumu AS", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-019",
+      "question": "Kategoriye gore randevu sayisi",
+      "covered_columns": ["KategoriAdi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["KategoriAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY KategoriAdi"], "must_not_include": ["GenelRandevuBolumAdi AS", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-020",
+      "question": "Doktorlara gore randevu sayisi",
+      "covered_columns": ["GenelRandevuKaynakAdi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["GenelRandevuKaynakAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY GenelRandevuKaynakAdi"], "must_not_include": ["RandevuyuVeren AS", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-021",
+      "question": "Branslara gore randevu sayisi",
+      "covered_columns": ["GenelRandevuBolumAdi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["GenelRandevuBolumAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY GenelRandevuBolumAdi"], "must_not_include": ["KategoriAdi AS", "SubeAdi AS", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-022",
+      "question": "Protokol acilis tarihi dolu olan randevu sayisi",
+      "covered_columns": ["ProtokolAcilisTarihi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["protocol_created_count"], "dimensions": [], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["ProtokolAcilisTarihi IS NOT NULL"], "must_not_include": ["GenelRandevuBolumAdi = N'Acil'", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-023",
+      "question": "Subelere gore randevu grafigi ciz",
+      "covered_columns": ["SubeAdi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["appointments_per_branch"], "dimensions": ["SubeAdi"], "response_mode": "visualization", "visible_sections": ["chart"], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY SubeAdi"], "must_not_include": ["GenelRandevuBolumAdi AS", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-024",
+      "question": "Bugun kaydedilen randevulari listele",
+      "covered_columns": ["CreatedDate"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "list", "metrics": [], "dimensions": [], "date_column": "CreatedDate", "response_mode": "data", "visible_sections": ["table"], "sql_should_build": true},
+      "sql": {"must_include": ["CreatedDate"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-025",
+      "question": "SQL sorgusunu yaz ve calistirip tabloyu getir",
+      "covered_columns": [],
+      "expected": {"answerable": false, "clarification_required": true, "analysis_type": null, "metrics": [], "dimensions": [], "response_mode": "data", "visible_sections": ["sql", "table"], "sql_should_build": false},
+      "sql": {"must_include": [], "must_not_include": []}
+    },
+    {
+      "id": "ASM24-026",
+      "question": "Bugunku randevu sayisinin SQL sorgusunu yaz ve calistirip tabloyu getir",
+      "covered_columns": ["BaslangicTarihi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": [], "date_column": "BaslangicTarihi", "response_mode": "data", "visible_sections": ["sql", "table"], "sql_should_build": true},
+      "sql": {"must_include": ["COUNT(*) AS appointment_count", "BaslangicTarihi"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-027",
+      "question": "Cinsiyete gore randevu grafigi ciz",
+      "covered_columns": ["CinsiyetId", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "distribution", "metrics": ["appointment_count"], "dimensions": ["CinsiyetId"], "response_mode": "visualization", "visible_sections": ["chart"], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY CinsiyetId"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-028",
+      "question": "Subelere gore gelmeme oranini yorumla",
+      "covered_columns": ["SubeAdi", "RandevuDurumu", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "ratio", "metrics": ["no_show_rate"], "dimensions": ["SubeAdi"], "response_mode": "answer", "visible_sections": ["answer"], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY SubeAdi", "RandevuDurumu = N'Gelmedi'"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-029",
+      "question": "Cinsiyet ve subeye gore randevu sayisi",
+      "covered_columns": ["CinsiyetId", "SubeAdi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "cross_analysis", "metrics": ["appointment_count"], "dimensions": ["SubeAdi", "CinsiyetId"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY SubeAdi, CinsiyetId"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-030",
+      "question": "Uyruk ve bransa gore randevu dagilimi",
+      "covered_columns": ["Uyruk", "GenelRandevuBolumAdi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "cross_analysis", "metrics": ["appointment_count"], "dimensions": ["GenelRandevuBolumAdi", "Uyruk"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY GenelRandevuBolumAdi, Uyruk"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-031",
+      "question": "Randevu durumu ve randevu tipine gore dagilim",
+      "covered_columns": ["RandevuDurumu", "RandevuTipiAdi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "cross_analysis", "metrics": ["appointments_per_type"], "dimensions": ["RandevuDurumu", "RandevuTipiAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY RandevuDurumu, RandevuTipiAdi"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-032",
+      "question": "Hizmet ve subeye gore randevu sayisi",
+      "covered_columns": ["HizmetAdi", "SubeAdi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "cross_analysis", "metrics": ["appointment_count"], "dimensions": ["SubeAdi", "HizmetAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY SubeAdi, HizmetAdi"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-033",
+      "question": "Kategori ve bransa gore randevu sayisi",
+      "covered_columns": ["KategoriAdi", "GenelRandevuBolumAdi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "cross_analysis", "metrics": ["appointment_count"], "dimensions": ["GenelRandevuBolumAdi", "KategoriAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY GenelRandevuBolumAdi, KategoriAdi"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-034",
+      "question": "Doktor ve bransa gore gelmeme orani",
+      "covered_columns": ["GenelRandevuKaynakAdi", "GenelRandevuBolumAdi", "RandevuDurumu", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "ratio", "metrics": ["no_show_rate"], "dimensions": ["GenelRandevuBolumAdi", "GenelRandevuKaynakAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GenelRandevuBolumAdi", "GenelRandevuKaynakAdi", "RandevuDurumu = N'Gelmedi'"], "must_not_include": ["RandevuyuVeren AS", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-035",
+      "question": "Randevuyu veren ve subeye gore bugun olusturulan randevu sayisi",
+      "covered_columns": ["RandevuyuVeren", "SubeAdi", "CreatedDate", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "cross_analysis", "metrics": ["appointment_count"], "dimensions": ["RandevuyuVeren", "SubeAdi"], "date_column": "CreatedDate", "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY RandevuyuVeren, SubeAdi", "CreatedDate"], "must_not_include": ["GenelRandevuKaynakAdi AS", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-036",
+      "question": "Sube bazinda ortalama kac gun once randevu aliniyor",
+      "covered_columns": ["SubeAdi", "CreatedDate", "BaslangicTarihi"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "lead_time_analysis", "metrics": ["appointment_lead_time_average"], "dimensions": ["SubeAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["DATEDIFF(day, CreatedDate, BaslangicTarihi)", "GROUP BY SubeAdi"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-037",
+      "question": "Bransa gore ayni gun alinan randevu orani",
+      "covered_columns": ["GenelRandevuBolumAdi", "CreatedDate", "BaslangicTarihi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "ratio", "metrics": ["same_day_booking_rate"], "dimensions": ["GenelRandevuBolumAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["CAST(CreatedDate AS DATE) = CAST(BaslangicTarihi AS DATE)", "NULLIF(COUNT(*), 0)", "GROUP BY GenelRandevuBolumAdi"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-038",
+      "question": "Cinsiyete gore gerceklesen randevu orani",
+      "covered_columns": ["CinsiyetId", "RandevuDurumu", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "ratio", "metrics": ["completed_appointment_rate"], "dimensions": ["CinsiyetId"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY CinsiyetId", "RandevuDurumu = N'Gerçekleşti'", "NULLIF(COUNT(*), 0)"], "must_not_include": ["completed_appointment_count", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-039",
+      "question": "Uyruga gore gelmeyen randevu sayisi",
+      "covered_columns": ["Uyruk", "RandevuDurumu", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["no_show_count"], "dimensions": ["Uyruk"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY Uyruk", "RandevuDurumu = N'Gelmedi'"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-040",
+      "question": "Randevu tipine gore gelmeme orani",
+      "covered_columns": ["RandevuTipiAdi", "RandevuDurumu", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "ratio", "metrics": ["no_show_rate"], "dimensions": ["RandevuTipiAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY RandevuTipiAdi", "NULLIF(COUNT(*), 0)"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-041",
+      "question": "Hizmete gore gerceklesme orani",
+      "covered_columns": ["HizmetAdi", "RandevuDurumu", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "ratio", "metrics": ["completed_appointment_rate"], "dimensions": ["HizmetAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY HizmetAdi", "RandevuDurumu = N'Gerçekleşti'"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-042",
+      "question": "Kategoriye gore bekleyen randevu sayisi",
+      "covered_columns": ["KategoriAdi", "RandevuDurumu", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["waiting_count"], "dimensions": ["KategoriAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY KategoriAdi", "RandevuDurumu = N'Beklemede'"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-043",
+      "question": "Giris yapilmis randevulari subeye gore say",
+      "covered_columns": ["SubeAdi", "RandevuDurumu", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["checked_in_count"], "dimensions": ["SubeAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY SubeAdi", "RandevuDurumu = N'Giriş Yapılmış'"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-044",
+      "question": "Islem surmekte olan randevulari bransa gore say",
+      "covered_columns": ["GenelRandevuBolumAdi", "RandevuDurumu", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["in_progress_count"], "dimensions": ["GenelRandevuBolumAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY GenelRandevuBolumAdi", "RandevuDurumu = N'İşlem Sürmekte'"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-045",
+      "question": "Gelmedi durumundaki son 20 randevuyu getir",
+      "covered_columns": ["RandevuDurumu", "Id", "BaslangicTarihi"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "list", "metrics": [], "dimensions": [], "response_mode": "data", "visible_sections": ["table"], "sql_should_build": true},
+      "sql": {"must_include": ["SELECT TOP (20)", "RandevuDurumu = N'Gelmedi'"], "must_not_include": ["COUNT(", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-046",
+      "question": "Bugun olusturulan gelmeyen randevulari listele",
+      "covered_columns": ["CreatedDate", "RandevuDurumu", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "list", "metrics": [], "dimensions": [], "date_column": "CreatedDate", "response_mode": "data", "visible_sections": ["table"], "sql_should_build": true},
+      "sql": {"must_include": ["CreatedDate", "RandevuDurumu = N'Gelmedi'"], "must_not_include": ["COUNT(", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-047",
+      "question": "Bu ay subelere gore randevu sayisi",
+      "covered_columns": ["BaslangicTarihi", "SubeAdi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "date_column": "BaslangicTarihi", "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY SubeAdi", "BaslangicTarihi"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-048",
+      "question": "Gecen ay cinsiyete gore randevu dagilimi",
+      "covered_columns": ["BaslangicTarihi", "CinsiyetId", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "distribution", "metrics": ["appointment_count"], "dimensions": ["CinsiyetId"], "date_column": "BaslangicTarihi", "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY CinsiyetId", "BaslangicTarihi"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-049",
+      "question": "Doktorlara gore ortalama randevu suresi",
+      "covered_columns": ["GenelRandevuKaynakAdi", "RandevuSuresi"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "duration_analysis", "metrics": ["appointment_duration_average"], "dimensions": ["GenelRandevuKaynakAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY GenelRandevuKaynakAdi", "AVG(CAST(RandevuSuresi AS FLOAT))"], "must_not_include": ["RandevuyuVeren AS", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-050",
+      "question": "Bolumlere gore protokol acilan randevu sayisi",
+      "covered_columns": ["GenelRandevuBolumAdi", "ProtokolAcilisTarihi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["protocol_created_count"], "dimensions": ["GenelRandevuBolumAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY GenelRandevuBolumAdi", "ProtokolAcilisTarihi IS NOT NULL"], "must_not_include": ["GenelRandevuBolumAdi = N'Acil'", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-051",
+      "question": "Subelere gore protokole donusum orani",
+      "covered_columns": ["SubeAdi", "ProtokolAcilisTarihi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "conversion", "metrics": ["protocol_conversion_rate"], "dimensions": ["SubeAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY SubeAdi", "ProtokolAcilisTarihi IS NOT NULL", "NULLIF(COUNT(*), 0)"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-052",
+      "question": "Randevu tipine gore sifir sureli kayit sayisi",
+      "covered_columns": ["RandevuTipiAdi", "RandevuSuresi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "data_quality", "metrics": ["zero_or_negative_duration_count"], "dimensions": ["RandevuTipiAdi"], "response_mode": "data", "visible_sections": ["table"], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY RandevuTipiAdi", "RandevuSuresi <= 0"], "must_not_include": ["appointment_duration_average", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-053",
+      "question": "Bransa gore sure tutarsizligi sayisi",
+      "covered_columns": ["GenelRandevuBolumAdi", "BaslangicTarihi", "BitisTarihi", "RandevuSuresi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "data_quality", "metrics": ["duration_mismatch_count"], "dimensions": ["GenelRandevuBolumAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY GenelRandevuBolumAdi", "DATEDIFF(minute, BaslangicTarihi, BitisTarihi) <> RandevuSuresi"], "must_not_include": ["appointment_duration_average", "HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-054",
+      "question": "Sadece grafik: cinsiyete gore gelmeme orani",
+      "covered_columns": ["CinsiyetId", "RandevuDurumu", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "ratio", "metrics": ["no_show_rate"], "dimensions": ["CinsiyetId"], "response_mode": "visualization", "visible_sections": ["chart"], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY CinsiyetId", "RandevuDurumu = N'Gelmedi'"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-055",
+      "question": "Sadece SQL: subelere gore randevu sayisi",
+      "covered_columns": ["SubeAdi", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "response_mode": "sql", "visible_sections": ["sql"], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY SubeAdi"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+    },
+    {
+      "id": "ASM24-056",
+      "question": "Protokol durumuna gore bekleyen randevu sayisi",
+      "covered_columns": ["ProtokolIslemState", "RandevuDurumu", "Id"],
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["waiting_count"], "dimensions": ["ProtokolIslemState"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["GROUP BY ProtokolIslemState", "RandevuDurumu = N'Beklemede'"], "must_not_include": ["RandevuDurumu AS", "HastaAdi", "HastaSoyadi"]}
+    }
+  ]
+}

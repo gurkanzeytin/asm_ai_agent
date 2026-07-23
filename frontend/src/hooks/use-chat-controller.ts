@@ -21,6 +21,12 @@ import {
   formatValueTr,
   type MetricCard,
 } from "@/lib/presentation";
+import {
+  buildResponseContent,
+  inferResponseMode,
+  visibleSections,
+  type ResponseMode,
+} from "@/lib/output-intent";
 import { tr } from "@/locales/tr";
 import { MAX_UI_ROWS_PER_PAGE } from "@/lib/result-limits";
 import { traceChatRuntime } from "@/lib/chat-runtime-trace";
@@ -36,8 +42,19 @@ const SCALAR_RESULT_SHAPES = new Set(["scalar_aggregate", "multi_metric_scalar_a
 export function shouldShowSqlTable(
   response: ReportResponse,
   sqlResult: SqlResult | undefined,
+  responseMode: ResponseMode = "answer",
 ): boolean {
   if (!sqlResult || TABLE_HIDDEN_OUTCOMES.has(response.outcome ?? "")) return false;
+  const sections = visibleSections(response);
+  if (sections.length > 0) return sections.includes("table") || sections.includes("chart");
+  if (responseMode === "sql") return false;
+  if (responseMode === "data") return sqlResult.columns.length > 0;
+  if (responseMode === "visualization") {
+    return (
+      Boolean(sqlResult.visualization) ||
+      !SCALAR_RESULT_SHAPES.has(response.analytics?.result_shape ?? "")
+    );
+  }
   return !SCALAR_RESULT_SHAPES.has(response.analytics?.result_shape ?? "");
 }
 
@@ -226,6 +243,8 @@ export function useChatController() {
         onProgress,
         controller.signal,
       );
+      const responseMode = inferResponseMode(content, response);
+      const sections = visibleSections(response);
       const queryResult = response.query_result;
       const backendRowCount = queryResult?.rows.length ?? 0;
       const boundedQueryResult = queryResult
@@ -257,9 +276,15 @@ export function useChatController() {
             appliedLimit: boundedQueryResult.applied_limit,
           }
         : undefined;
+      const modeContent = buildResponseContent(response, responseMode);
+      const suppressText =
+        response.success &&
+        sections.length > 0 &&
+        !sections.includes("answer") &&
+        !sections.includes("sql");
       const responseContent =
-        response.report?.markdown?.trim() ||
-        (response.success ? tr.chat.noReport : tr.chat.requestFailedFallback);
+        modeContent ||
+        (suppressText ? "" : response.success ? tr.chat.noReport : tr.chat.requestFailedFallback);
       const hasControlledReport = Boolean(response.report?.markdown?.trim());
       const workflowDurationMs = response.timing?.total_ms;
       const latencyMs =
@@ -301,8 +326,19 @@ export function useChatController() {
                 outcome: response.outcome ?? undefined,
                 rowCount: boundedQueryResult?.row_count,
                 sqlResult,
-                showSqlTable: shouldShowSqlTable(response, sqlResult),
-                metricCards: buildKeyMetricCards(response, boundedQueryResult),
+                responseMode,
+                visibleSections: sections,
+                showSqlTable: shouldShowSqlTable(response, sqlResult, responseMode),
+                showResultInline:
+                  sections.length > 0
+                    ? sections.includes("table") || sections.includes("chart")
+                    : responseMode === "data" || responseMode === "visualization",
+                metricCards:
+                  responseMode === "sql" ||
+                  responseMode === "data" ||
+                  (sections.length > 0 && !sections.includes("metrics"))
+                    ? []
+                    : buildKeyMetricCards(response, boundedQueryResult),
                 metadata: {
                   model,
                   latencyMs,

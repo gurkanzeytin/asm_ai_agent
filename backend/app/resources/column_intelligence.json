@@ -236,7 +236,10 @@
         "kaydeden",
         "olusturan kullanici",
         "randevu olusturan kullanici",
-        "olusturan kisiler"
+        "olusturan kisiler",
+        "randevuyu verenlere gore",
+        "olusturanlara gore",
+        "kaydedenlere gore"
       ],
       "supported_operations": [
         "filter",
@@ -524,6 +527,9 @@
       "semantic_type": "integer_code",
       "synonyms": [
         "protokol durumu",
+        "protokol islem durumu",
+        "protokol islem durumuna gore",
+        "islem durumu",
         "muayene durumu"
       ],
       "supported_operations": [
@@ -587,7 +593,10 @@
         "kaynak",
         "kaynaga gore",
         "doktor adi",
-        "randevu kaynagi"
+        "randevu kaynagi",
+        "doktorlara gore",
+        "hekimlere gore",
+        "kaynaklara gore"
       ],
       "supported_operations": [
         "filter",
@@ -623,7 +632,10 @@
         "klinik",
         "poliklinik",
         "bolum bazinda",
-        "bolumlere gore"
+        "bolumlere gore",
+        "branslara gore",
+        "kliniklere gore",
+        "brans bazinda"
       ],
       "supported_operations": [
         "filter",
@@ -691,7 +703,9 @@
         "hastane",
         "lokasyon",
         "sube bazinda",
-        "subelere gore"
+        "subelere gore",
+        "lokasyonlara gore",
+        "hastanelere gore"
       ],
       "supported_operations": [
         "filter",
@@ -810,6 +824,23 @@
     },
     {
       "terms": [
+        "email",
+        "e mail",
+        "eposta",
+        "e posta",
+        "mail",
+        "mail adresi",
+        "mail adresleri",
+        "hasta maili",
+        "hasta mailleri",
+        "email adresi",
+        "email adresleri"
+      ],
+      "reason": "E-posta bilgisi bu veri görünümünde bulunmuyor.",
+      "alternative": "Hasta sayısı, yaş, cinsiyet, uyruk ve randevu davranışları üzerinden analiz yapılabilir."
+    },
+    {
+      "terms": [
         "adres",
         "ikamet",
         "sehirde oturan",
@@ -831,7 +862,12 @@
     {
       "terms": [
         "telefon numarasi",
+        "telefon numaralari",
+        "hasta telefonu",
+        "hasta telefonlari",
+        "telefonlari",
         "telefon bilgisi",
+        "telefon bilgileri",
         "telefonu olmayan",
         "telefon doluluk",
         "telefon eksigi",

@@ -14,6 +14,10 @@ from app.context.analysis_type import resolve_canonical_analysis_type
 from app.context.analytical_signals import FILTER_FAMILIES as _FILTER_FAMILIES
 from app.context.session_store import generate_session_id
 from app.planning.models import QueryPlan
+from app.reporting.output_policy import (
+    determine_output_policy,
+    determine_requested_response_mode,
+)
 from app.services.answerability import AnswerabilityInput
 from app.services.workflow_progress import (
     ProgressCallback,
@@ -23,13 +27,20 @@ from app.services.workflow_progress import (
 
 logger = logging.getLogger(__name__)
 
-# Memory write policy (Part 7): conversational context is only persisted after
-# a genuinely successful, data-bearing workflow outcome. Every other terminal
-# outcome (clarification, out-of-scope, help, a retry loop that never
-# resolved, or the synthetic SAFE_ERROR fallback) must never overwrite
-# previously valid context with an incomplete/failed turn's signals.
+# Memory write policy (Part 7): conversational context is persisted only after
+# a genuinely successful structured workflow outcome. Executed/data-bearing
+# outcomes must have a QueryResult; SQL-only outcomes intentionally have no
+# QueryResult, so they persist only when a generated SQL DTO and authoritative
+# QueryPlan are present. Every other terminal outcome (clarification,
+# out-of-scope, help, a retry loop that never resolved, or SAFE_ERROR) must
+# never overwrite previously valid context with incomplete/failed signals.
 _MEMORY_WRITE_ELIGIBLE_OUTCOMES = frozenset(
-    {AgentOutcome.EXECUTE_SQL.value, AgentOutcome.NO_RESULT_GUIDANCE.value}
+    {
+        AgentOutcome.EXECUTE_SQL.value,
+        AgentOutcome.NO_RESULT_GUIDANCE.value,
+        AgentOutcome.DATA_ONLY.value,
+        AgentOutcome.VISUALIZATION_ONLY.value,
+    }
 )
 
 # Sentinel distinguishing "session_id truly omitted" (generate an isolated
@@ -54,6 +65,38 @@ Sorunuzu işlerken beklenmedik bir sorunla karşılaştım. Bu sizin hatanız de
 
 Sorun devam ederse sistem yöneticinize başvurabilirsiniz.
 """
+
+
+def _sql_only_markdown(sql: str) -> str:
+    return f"```sql\n{sql.strip()}\n```"
+
+
+def _data_only_report(row_count: int) -> GeneratedReport:
+    if row_count == 0:
+        return GeneratedReport(
+            title="Sonuç Bulunamadı",
+            markdown="İstenen sorgu çalıştı ancak eşleşen kayıt bulunamadı.",
+            provider="static",
+            model="data_only_output",
+            latency_ms=0.0,
+        )
+    return GeneratedReport(
+        title="Veri Hazır",
+        markdown=f"{row_count} satırlık sonuç hazır.",
+        provider="static",
+        model="data_only_output",
+        latency_ms=0.0,
+    )
+
+
+def _visualization_only_report() -> GeneratedReport:
+    return GeneratedReport(
+        title="Grafik Hazır",
+        markdown="Grafik için gerekli veri hazır.",
+        provider="static",
+        model="visualization_only_output",
+        latency_ms=0.0,
+    )
 
 
 class ReportingService:
@@ -119,6 +162,7 @@ class ReportingService:
         logger.info(
             f"ReportingService: Starting workflow run [{workflow_id}] for question: {question!r}"
         )
+        requested_response_mode = determine_requested_response_mode(question)
 
         # Conversational context resolution (PRODUCT-001): rewrite follow-up
         # questions using session context before the NLU pipeline runs.
@@ -183,6 +227,7 @@ class ReportingService:
             ambiguity=seeded_ambiguity,
             answerability_input_source=answerability_input_source,
             answerability_context_signals=answerability_context_signals,
+            response_mode=requested_response_mode,
             answerability_input=answerability_input,
             forced_filter_override=(resolution.filter_override if resolution else {}),
             retained_query_plan=(
@@ -212,26 +257,52 @@ class ReportingService:
         errors = final_state.get("errors", [])
         node_timings: dict[str, float] = final_state.get("node_timings") or {}
         outcome = final_state.get("outcome")
+        requested_response_mode = final_state.get("response_mode") or requested_response_mode
         query_plan_dto = final_state.get("query_plan")
         semantic_frame_dto = final_state.get("semantic_frame")
 
         # AG-022 SAFE_ERROR: the workflow must never end without a user-facing
         # response. If no node produced a report, synthesize friendly guidance.
         if generated_report_dto is None:
-            logger.warning(
-                "ReportingService: Workflow [%s] produced no report "
-                "(errors: %s) — returning SAFE_ERROR guidance.",
-                workflow_id,
-                errors or "none",
-            )
-            generated_report_dto = GeneratedReport(
-                title="Yanıt Oluşturulamadı",
-                markdown=_SAFE_ERROR_MARKDOWN,
-                provider="static",
-                model="safe_error_fallback",
-                latency_ms=0.0,
-            )
-            outcome = AgentOutcome.SAFE_ERROR.value
+            if requested_response_mode == "sql" and generated_sql_dto is not None and not errors:
+                generated_report_dto = GeneratedReport(
+                    title="SQL Sorgusu",
+                    markdown=_sql_only_markdown(generated_sql_dto.sql),
+                    provider="static",
+                    model="sql_only_output",
+                    latency_ms=0.0,
+                )
+                outcome = AgentOutcome.SQL_ONLY.value
+            elif requested_response_mode == "data" and query_result_dto is not None and not errors:
+                generated_report_dto = _data_only_report(query_result_dto.row_count)
+                outcome = (
+                    AgentOutcome.NO_RESULT_GUIDANCE.value
+                    if query_result_dto.row_count == 0
+                    else AgentOutcome.DATA_ONLY.value
+                )
+            elif (
+                requested_response_mode == "visualization"
+                and query_result_dto is not None
+                and analytics_dto is not None
+                and not errors
+            ):
+                generated_report_dto = _visualization_only_report()
+                outcome = AgentOutcome.VISUALIZATION_ONLY.value
+            else:
+                logger.warning(
+                    "ReportingService: Workflow [%s] produced no report "
+                    "(errors: %s) — returning SAFE_ERROR guidance.",
+                    workflow_id,
+                    errors or "none",
+                )
+                generated_report_dto = GeneratedReport(
+                    title="Yanıt Oluşturulamadı",
+                    markdown=_SAFE_ERROR_MARKDOWN,
+                    provider="static",
+                    model="safe_error_fallback",
+                    latency_ms=0.0,
+                )
+                outcome = AgentOutcome.SAFE_ERROR.value
 
         # Memory write policy (Part 7): only persist conversational context after
         # a genuinely successful, data-bearing outcome. A validation failure,
@@ -241,11 +312,52 @@ class ReportingService:
         memory_updated = False
         memory_turn_count: int | None = None
         if resolution is not None and session_id is not None:
+            successful_data_bearing_turn = (
+                outcome in _MEMORY_WRITE_ELIGIBLE_OUTCOMES
+                and query_result_dto is not None
+            )
+            successful_sql_only_turn = (
+                outcome == AgentOutcome.SQL_ONLY.value
+                and generated_sql_dto is not None
+                and query_plan_dto is not None
+            )
             should_persist_memory = (
                 not resolution.clarification_needed
                 and not errors
-                and outcome in _MEMORY_WRITE_ELIGIBLE_OUTCOMES
-                and query_result_dto is not None
+                and (successful_data_bearing_turn or successful_sql_only_turn)
+            )
+            logger.info(
+                "Memory commit decision: session=%s workflow=%s outcome=%s "
+                "should_persist=%s reason=%s",
+                session_id,
+                workflow_id,
+                outcome,
+                should_persist_memory,
+                "eligible_outcome_with_result"
+                if should_persist_memory
+                and successful_data_bearing_turn
+                else "sql_only_with_plan"
+                if should_persist_memory
+                and successful_sql_only_turn
+                else (
+                    "clarification_needed"
+                    if resolution.clarification_needed
+                    else "errors_present"
+                    if errors
+                    else "sql_only_missing_plan"
+                    if outcome == AgentOutcome.SQL_ONLY.value
+                    and generated_sql_dto is not None
+                    and query_plan_dto is None
+                    else "no_query_result"
+                    if query_result_dto is None
+                    else "outcome_not_memory_eligible"
+                ),
+                extra={
+                    "session_id": session_id,
+                    "workflow_id": workflow_id,
+                    "outcome": outcome,
+                    "should_persist_memory": should_persist_memory,
+                },
             )
             if should_persist_memory:
                 canonical_analysis_type = resolve_canonical_analysis_type(
@@ -356,22 +468,22 @@ class ReportingService:
         # Log timing summary
         logger.info(
             "ReportingService: Workflow [%s] completed.\n"
-            "  ┌─────────────────────────┬─────────────┐\n"
-            "  │ Stage                   │ Duration    │\n"
-            "  ├─────────────────────────┼─────────────┤\n"
-            "  │ Analyze Intent          │ %9s  │\n"
-            "  │ Retrieve Context        │ %9s  │\n"
-            "  │ Generate SQL            │ %9s  │\n"
-            "  │ Validate SQL            │ %9s  │\n"
-            "  │ Execute SQL             │ %9s  │\n"
-            "  │ Analytics Engine        │ %9s  │\n"
-            "  │ Insight Engine          │ %9s  │\n"
-            "  │ Observation Engine      │ %9s  │\n"
-            "  │ Generate Report         │ %9s  │\n"
-            "  ├─────────────────────────┼─────────────┤\n"
-            "  │ Total                   │ %9s  │\n"
-            "  │ LLM Inference           │ %9s  │\n"
-            "  └─────────────────────────┴─────────────┘",
+            "  +-------------------------+-------------+\n"
+            "  | Stage                   | Duration    |\n"
+            "  +-------------------------+-------------+\n"
+            "  | Analyze Intent          | %9s  |\n"
+            "  | Retrieve Context        | %9s  |\n"
+            "  | Generate SQL            | %9s  |\n"
+            "  | Validate SQL            | %9s  |\n"
+            "  | Execute SQL             | %9s  |\n"
+            "  | Analytics Engine        | %9s  |\n"
+            "  | Insight Engine          | %9s  |\n"
+            "  | Observation Engine      | %9s  |\n"
+            "  | Generate Report         | %9s  |\n"
+            "  +-------------------------+-------------+\n"
+            "  | Total                   | %9s  |\n"
+            "  | LLM Inference           | %9s  |\n"
+            "  +-------------------------+-------------+",
             workflow_id,
             _fmt_ms(metrics.analyze_intent_ms),
             _fmt_ms(metrics.retrieve_context_ms),
@@ -414,6 +526,14 @@ class ReportingService:
 
         logger.info(f"ReportingService: Workflow [{workflow_id}] errors: {errors or 'none'}")
 
+        output_policy = determine_output_policy(
+            question=question,
+            outcome=outcome,
+            generated_sql=generated_sql_dto.sql if generated_sql_dto else None,
+            query_result=query_result_dto,
+            analytics=analytics_dto,
+        )
+
         return WorkflowResult(
             workflow_id=workflow_id,
             question=question,
@@ -423,6 +543,8 @@ class ReportingService:
                 "answerability_input_source", answerability_input_source
             ),
             answerability_signals=final_state.get("answerability_signals", []),
+            response_mode=output_policy.response_mode,
+            visible_sections=output_policy.visible_sections,
             generated_sql=generated_sql_dto.sql if generated_sql_dto else None,
             query_result=query_result_dto,
             generated_report=generated_report_dto,

@@ -67,25 +67,6 @@ export const tr = {
       "İstek yorumlandı, ilgili veri kaynakları seçildi, SQL sorgusu oluşturuldu, sonuçlar doğrulandı ve nihai yanıt hazırlandı.",
   },
 
-  suggestions: {
-    patientStatistics: {
-      title: "Bugünün hasta istatistikleri",
-      description: "Bugünkü hasta istatistiklerini tüm aile sağlığı merkezleri için göster.",
-    },
-    centerPerformance: {
-      title: "Merkez performansı",
-      description: "Aile sağlığı merkezlerinin performansını analiz et.",
-    },
-    busiestDoctor: {
-      title: "En yoğun doktor",
-      description: "Bu haftanın en yoğun doktorunu ve hasta sayılarını bul.",
-    },
-    monthlyReport: {
-      title: "Aylık rapor",
-      description: "Aylık performans ve faaliyet raporu oluştur.",
-    },
-  },
-
   chat: {
     placeholder: "Bir şey sorun...",
     thinking: "Düşünüyor…",
@@ -281,6 +262,8 @@ export const tr = {
     other: "Diğer",
     limitedData: "Okunabilirlik için gösterilen veri noktaları sınırlandırıldı.",
     noChartData: "Grafik için uygun veri bulunamadı.",
+    scalarMetricTitle: "Tek değerli sonuç",
+    scalarMetricDescription: "Bu sonuç kırılımlı grafik yerine metrik kart olarak gösterildi.",
     lineNeedsTwoPoints: "Çizgi grafik için en az iki geçerli veri noktası gerekir.",
     keyboardHelp: "Veri noktaları arasında gezinmek için ok tuşlarını kullanın.",
     summary: (

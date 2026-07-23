@@ -133,6 +133,7 @@ class QueryPlanner:
         aggregation = self._aggregation(analysis)
         ranking, order = self._ranking(analysis, signals.analysis_type, folded)
         extra_filters = self._extra_filters(folded)
+        raw_list_request = self._raw_list_request(analysis, folded)
 
         join_path = self._join_path(
             fact_table,
@@ -202,10 +203,29 @@ class QueryPlanner:
             status_filter = view_mapping.resolve_status_filter(folded, view_name)
             if status_filter:
                 extra_filters = extra_filters + [status_filter]
+            status_value = view_mapping.resolve_status_value(folded, view_name)
 
             intelligence = self._resolve_intelligence(
-                folded, analysis, projection, aggregation, ranking
+                folded, analysis, projection, aggregation, ranking, status_value
             )
+            if raw_list_request:
+                list_projection = self._view_list_projection(view_name)
+                intelligence.update(
+                    {
+                        "metrics": [],
+                        "dimensions": [],
+                        "analysis_type": "list",
+                        "aggregation": None,
+                        "projection": list_projection,
+                        "numerator": None,
+                        "denominator": None,
+                        "granularity": None,
+                        "comparisons": [],
+                        "derived": [],
+                        "required_columns": list_projection,
+                    }
+                )
+                aggregation = None
             # A conditional-rate metric embeds the status condition in its own
             # numerator; a hard status WHERE filter would corrupt the denominator.
             if intelligence["numerator"] and status_filter:
@@ -276,7 +296,17 @@ class QueryPlanner:
                 signals_type = signals.analysis_type
             if intelligence["aggregation"]:
                 aggregation = intelligence["aggregation"]
-            if intelligence["projection"]:
+            if group_column and intelligence["dimensions"]:
+                # The catalog-resolved canonical GROUP BY dimension(s) (from
+                # column_intelligence.json, e.g. "doktor bazinda" -> DoktorId)
+                # supersede the separately-derived view-concepts display
+                # column (view_semantics.json, deliberately id-averse) for
+                # the SAME grouping phrase — projection must never lag behind
+                # the final canonical grouping decision, for any dimension
+                # family (doctor/department/branch/status/...), not just
+                # DoktorId.
+                projection = list(intelligence["dimensions"])
+            elif intelligence["projection"]:
                 projection = intelligence["projection"]
 
             periods = self._comparison_periods(
@@ -432,6 +462,7 @@ class QueryPlanner:
         projection: list[str],
         aggregation: str | None,
         ranking: str | None,
+        status_value: str | None = None,
     ) -> dict:
         """Catalog-driven analytical resolution (Agent Intelligence Foundation).
 
@@ -442,6 +473,25 @@ class QueryPlanner:
         answerable, reason, alternative = catalog.check_answerability(folded)
         metrics = catalog.match_metrics(folded)
         dimensions = catalog.match_dimensions(folded)
+
+        # Measure-phrase fallback: a status concept was independently resolved
+        # (view_mapping.resolve_status_filter) and the utterance carries a
+        # generic count/total/ratio request ("say", "toplamını", "adedini",
+        # "oranı", ...) that no metric SYNONYM phrase covers ("Bekleyenleri
+        # say." never matches waiting_count's "beklemede olan"/"bekleyen
+        # randevu" synonyms). Separate concerns: status/entity resolution
+        # (view_mapping, already ran), measure-request detection
+        # (catalog.detect_measure_request, generic wording only), and metric
+        # selection (catalog.metrics_for_status_value, catalog-authoritative
+        # — only applied when exactly one candidate exists, never invented).
+        if not metrics and status_value:
+            measure_kind = catalog.detect_measure_request(folded)
+            if measure_kind:
+                candidates = catalog.metrics_for_status_value(
+                    status_value, rate=(measure_kind == "rate")
+                )
+                if len(candidates) == 1:
+                    metrics = candidates
         date_range_count = len(analysis.detected_dates)
         pattern = catalog.match_pattern(folded, date_range_count)
         granularity = catalog.match_granularity(folded)
@@ -463,6 +513,8 @@ class QueryPlanner:
             pattern = "time_trend"
         elif len(dimensions) >= 2 and pattern in generic_patterns:
             pattern = "cross_analysis"
+        elif dimensions and not metrics and pattern is None:
+            pattern = "distribution"
         if pattern in ("period_comparison", "percentage_change") and not comparisons:
             comparisons = ["current_period_vs_previous_period"]
 
@@ -511,28 +563,30 @@ class QueryPlanner:
         if primary is not None:
             if primary.numerator and primary.denominator:
                 numerator, denominator = primary.numerator, primary.denominator
-            if pattern is None:
+            if primary.analysis_type == "data_quality" and pattern in (
+                None,
+                "count",
+                "duration_analysis",
+            ):
+                pattern = primary.analysis_type
+            elif pattern is None:
                 pattern = primary.analysis_type
             if granularity is None and primary.grouping_granularity:
                 granularity = primary.grouping_granularity
             if primary.fixed_dimension and primary.fixed_dimension not in dimensions:
                 dimensions = dimensions + [primary.fixed_dimension]
 
+        # The final metric catalog definition is the sole source of truth for
+        # aggregation: whenever a primary metric with a formula was matched,
+        # its formula supersedes any earlier generic aggregation guess —
+        # generic for every formula_type (conditional_count/conditional_rate
+        # included), not an allow-listed subset. DeterministicSQLBuilder
+        # already renders every metric from its own catalog formula
+        # regardless of plan.aggregation, so leaving a stale generic guess
+        # (e.g. "COUNT(*)") here would only mislead the LLM prompt and
+        # PlanComplianceValidator's aggregation check.
         resolved_aggregation = None
-        if (
-            primary is not None
-            and primary.formula
-            and primary.formula_type
-            in (
-                "count_rows",
-                "count_distinct",
-                "avg",
-                "min",
-                "max",
-                "count_rows_grouped",
-                "count_rows_grouped_time",
-            )
-        ):
+        if primary is not None and primary.formula:
             resolved_aggregation = primary.formula
 
         resolved_projection: list[str] = []
@@ -589,6 +643,41 @@ class QueryPlanner:
         if patient_terms and patient_terms <= {"kisi"}:
             return "Creator"
         return output_entity
+
+    def _raw_list_request(self, analysis: QueryAnalysis, folded_question: str) -> bool:
+        if "LIST" not in analysis.detected_operations:
+            return False
+        if any(operation in analysis.detected_operations for operation in ("COUNT", "SUM", "AVG")):
+            return False
+        ranking_markers = (*_VOLUME_RANKING_MARKERS, *_ASCENDING_MARKERS)
+        if any(marker in folded_question for marker in ranking_markers):
+            return False
+        if analysis.detected_order and analysis.detected_limit:
+            return True
+        if any(marker in folded_question for marker in ("gore", "bazinda", "dagilim", "oran")):
+            return False
+        if any(
+            marker in folded_question
+            for marker in ("trend", "egilim", "aylik", "gunluk", "haftalik")
+        ):
+            return False
+        if "randevu" in folded_question:
+            return True
+        return bool(analysis.detected_limit)
+
+    def _view_list_projection(self, view_name: str) -> list[str]:
+        columns = view_mapping.get_view_entry(view_name).get("columns", {})
+        preferred = [
+            "Id",
+            "BaslangicTarihi",
+            "BitisTarihi",
+            "RandevuDurumu",
+            "GenelRandevuKaynakAdi",
+            "GenelRandevuBolumAdi",
+            "SubeAdi",
+            "RandevuTipiAdi",
+        ]
+        return [column for column in preferred if column in columns]
 
     def _view_group_dimension(self, folded_question: str, view_name: str) -> str | None:
         """Resolves 'X bazında / X'e göre' grouping wording to a descriptive view column."""

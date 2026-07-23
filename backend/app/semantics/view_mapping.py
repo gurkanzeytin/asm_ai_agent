@@ -34,6 +34,22 @@ _FOLD_TABLE = str.maketrans(
         "Ü": "u",
     }
 )
+_FOLD_TABLE.update(
+    {
+        ord("\u0131"): "i",
+        ord("\u0130"): "i",
+        ord("\u011f"): "g",
+        ord("\u011e"): "g",
+        ord("\u015f"): "s",
+        ord("\u015e"): "s",
+        ord("\u00e7"): "c",
+        ord("\u00c7"): "c",
+        ord("\u00f6"): "o",
+        ord("\u00d6"): "o",
+        ord("\u00fc"): "u",
+        ord("\u00dc"): "u",
+    }
+)
 
 
 def fold(text: str) -> str:
@@ -113,15 +129,26 @@ def resolve_measure(folded_question: str, view_name: str | None = None) -> str |
     return None
 
 
-def resolve_status_filter(folded_question: str, view_name: str | None = None) -> str | None:
-    """Maps status wording (gerçekleşen, iptal, ...) to a RandevuDurumu filter value."""
+def resolve_status_value(folded_question: str, view_name: str | None = None) -> str | None:
+    """Maps status wording (gerçekleşen, iptal, ...) to the bare RandevuDurumu
+    value (e.g. 'Beklemede'), with no column name or predicate wrapper —
+    used wherever the raw value itself is needed (e.g. catalog metric
+    selection), not just a rendered SQL filter."""
     status_filters = get_view_entry(view_name).get("status_filters", {})
-    concepts = get_view_entry(view_name).get("concepts", {})
-    status_column = concepts.get("AppointmentStatus", {}).get("column", "RandevuDurumu")
     for term, stored_value in status_filters.items():
         if fold(term) in folded_question:
-            return f"{status_column} = '{stored_value}'"
+            return stored_value
     return None
+
+
+def resolve_status_filter(folded_question: str, view_name: str | None = None) -> str | None:
+    """Maps status wording (gerçekleşen, iptal, ...) to a RandevuDurumu filter value."""
+    value = resolve_status_value(folded_question, view_name)
+    if value is None:
+        return None
+    concepts = get_view_entry(view_name).get("concepts", {})
+    status_column = concepts.get("AppointmentStatus", {}).get("column", "RandevuDurumu")
+    return f"{status_column} = '{value}'"
 
 
 def concept_mapping_lines(view_name: str | None = None) -> list[str]:

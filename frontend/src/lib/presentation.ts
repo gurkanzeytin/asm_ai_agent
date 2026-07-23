@@ -215,6 +215,10 @@ export interface ColumnMetadata {
   label: string;
   format: ColumnFormat;
   unit: string | null;
+  /** Retained in the result for internal/diagnostic use (e.g. DoktorId once
+   * DoktorAdi has resolved) — the normal table hides it by default; the user
+   * may still reveal it via column visibility controls. */
+  hidden?: boolean;
 }
 
 const DURATION_COLUMNS = new Set(["RandevuSuresi"]);
