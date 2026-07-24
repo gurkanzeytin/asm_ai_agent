@@ -148,6 +148,29 @@ async def test_gender_ratio_date_override_branch_split_full_chain():
 
 
 @pytest.mark.asyncio
+async def test_explicit_list_request_after_ratio_resets_to_raw_records():
+    """'Son 100 randevuyu listele' after a gender no-show-ratio question kept
+    showing the 2-row gender breakdown table (dimensions=['CinsiyetId'],
+    metrics=['no_show_rate']) instead of the 100 raw appointment rows asked
+    for - `merge_query_plans` inherited metrics/dimensions from the retained
+    plan because the current turn's OWN raw plan legitimately has empty
+    metrics/dimensions too (a raw listing has neither), which merge treated
+    as "nothing new stated, keep the old analytical state" instead of "this
+    IS the complete, self-sufficient request" (2026-07-24 real UI bug
+    report)."""
+    chain = _Chain()
+    await chain.turn("Kadın erkek gelmeme oranını göster.")
+
+    second, resolution, _ = await chain.turn("Son 100 randevuyu listele.")
+    assert resolution.follow_up_detected
+    assert second.analysis_type == "list"
+    assert second.metrics == []
+    assert second.dimensions == []
+    assert second.limit == 100
+    assert second.projection  # the raw record column set, not empty
+
+
+@pytest.mark.asyncio
 async def test_nationality_top_five_then_female_filter_full_chain():
     chain = _Chain()
     first, _, _ = await chain.turn("Uyruk dağılımını listele.")

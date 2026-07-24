@@ -507,6 +507,30 @@ def merge_query_plans(
     if not follow_up_detected or retained is None:
         return current
 
+    # A GENUINE explicit "listele" (list) request for raw records is always
+    # self-contained: it asks a fundamentally different question ("show me
+    # rows") than any analytical metric/dimension/ratio/comparison from an
+    # earlier turn, and continuing to merge those in produced nonsense - e.g.
+    # "Son 100 randevuyu listele" after a gender no-show-ratio question kept
+    # showing a 2-row gender breakdown table (dimensions=['CinsiyetId'],
+    # metrics=['no_show_rate']) instead of the 100 raw appointment rows
+    # asked for (2026-07-24 real UI bug report). The planner already builds
+    # a complete, correct raw-listing plan (projection, limit, order) from
+    # this turn's own text alone - never merge it with retained analytical
+    # state, exactly as an independent (non-follow-up) list request already
+    # behaves.
+    #
+    # Scoped to a REAL listing request (`projection` carries the raw column
+    # set - only set when the planner's `_raw_list_request` heuristic fired)
+    # rather than every `analysis_type == "list"`: that value is ALSO the
+    # planner's fallback default for a bare filter-refinement follow-up with
+    # no metric/dimension/listing wording of its own ("Sadece gerçekleşenleri
+    # göster." -> limit=None, projection=[]), which genuinely must keep
+    # inheriting the retained metric/dimension (existing, tested behavior -
+    # a blanket `analysis_type == "list"` bypass broke it).
+    if current.analysis_type == "list" and current.projection:
+        return current
+
     from app.semantics import catalog
     from app.semantics.view_mapping import fold
 

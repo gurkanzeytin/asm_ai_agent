@@ -22,8 +22,16 @@ _SQL_ONLY_MARKER = re.compile(
     r"(ver\w*|yaz\w*|uret\w*|olustur\w*|goster\w*)\b"
     r"|\bcalistirma\b"
 )
+# "veri(?!r)" excludes "verir"/"verirsin"/"verir misin" etc - conjugated
+# forms of the VERB "vermek" (to give, as in "SQL'ini verir misin?" = "would
+# you give me the SQL?"), which otherwise false-positive-matched the NOUN
+# "veri" (data) + \w* and silently demoted a plain "give me the SQL"
+# request from response_mode "sql" to "data", triggering an unrelated
+# "which data do you mean?" clarification (2026-07-24 real UI bug report).
+# Genuine noun inflections (verisi/verileri/veriyi/verinin/...) are
+# unaffected - none of them have "r" immediately after "veri".
 _DATA_MARKER = re.compile(
-    r"\b(veri\w*|kayit\w*|liste\w*|getir\w*|cek\w*|tablo\w*|sonuc\w*)\b"
+    r"\b(veri(?!r)\w*|kayit\w*|liste\w*|getir\w*|cek\w*|tablo\w*|sonuc\w*)\b"
 )
 _EXECUTION_MARKER = re.compile(r"\b(calistir\w*|cek\w*|getir\w*|listele\w*|sonuc\w*)\b")
 _VISUAL_MARKER = re.compile(

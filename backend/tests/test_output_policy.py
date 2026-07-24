@@ -36,6 +36,25 @@ def test_sql_only_question_can_be_detected_before_execution():
     assert determine_requested_response_mode("Sadece SQL sorgusunu ver") == "sql"
 
 
+def test_verir_misin_phrasing_is_sql_not_data():
+    """'Bu sorgunun SQL'ini verir misin?' (polite '(will you) give me the
+    SQL?') was demoted from 'sql' to 'data' mode - the VERB 'verir'
+    (conjugated form of 'vermek', to give) false-positive-matched the DATA
+    marker's 'veri\\w*' (the NOUN 'veri', data), since 'verir' = 'veri' + 'r'
+    is a literal prefix match. Silently triggered an unrelated 'which data
+    do you mean?' clarification instead of returning the SQL
+    (2026-07-24 real UI bug report)."""
+    assert determine_requested_response_mode("Bu sorgunun SQL'ini verir misin?") == "sql"
+    assert determine_requested_response_mode("Sorgusunu verir misin?") == "sql"
+
+
+def test_veri_noun_forms_still_read_as_data_request():
+    """Regression guard: excluding the 'verir' verb form must not affect
+    genuine noun inflections of 'veri' (data)."""
+    assert determine_requested_response_mode("Verileri göster") == "data"
+    assert determine_requested_response_mode("Verilerini getir") == "data"
+
+
 def test_data_fetch_question_shows_table_section():
     policy = determine_output_policy(
         question="Son 100 randevuyu getir",
