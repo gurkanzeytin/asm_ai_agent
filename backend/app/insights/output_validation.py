@@ -9,6 +9,7 @@ or machine-translate free text.
 
 import logging
 import re
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -43,6 +44,81 @@ _CAUSAL_CERTAINTY_PATTERNS = (
     "kesinlikle",
     "şüphesiz",
 )
+
+# Matches a percentage CLAIM the narrative makes: "%45", "45%", "yüzde 45.2".
+# Deliberately narrow to percentage phrasing only (not every digit in the
+# text) — dates, rank positions ("3."), and category counts are not claims
+# the prompt's "every number must appear verbatim" rule is guarding against.
+_PERCENTAGE_CLAIM_PATTERN = re.compile(
+    r"%\s*(\d+(?:[.,]\d+)?)|(\d+(?:[.,]\d+)?)\s*%|y[uü]zde\s+(\d+(?:[.,]\d+)?)",
+    re.IGNORECASE,
+)
+# A claimed percentage this close to some percentage the LLM actually received
+# counts as "verbatim" — covers the model rounding 44.6 to "yaklaşık %45"
+# without excusing a genuinely different number (e.g. claiming %45 when the
+# only percentage supplied was %12).
+_PERCENTAGE_CLAIM_TOLERANCE = 0.6
+_RATE_KEY_MARKERS = ("percentage", "percent", "rate", "yuzde", "oran")
+
+
+def _parse_turkish_number(raw: str) -> float:
+    return float(raw.replace(",", "."))
+
+
+def _extract_percentage_claims(narrative: InsightNarrative) -> list[float]:
+    text = " ".join(
+        [narrative.summary, *narrative.highlights, *narrative.observations, *narrative.considerations]
+    )
+    claims = []
+    for match in _PERCENTAGE_CLAIM_PATTERN.finditer(text):
+        raw = match.group(1) or match.group(2) or match.group(3)
+        if raw:
+            claims.append(_parse_turkish_number(raw))
+    return claims
+
+
+def _collect_reference_percentages(analytics: AnalyticsResult) -> list[float]:
+    """Every percentage-shaped number actually sent to the LLM (prompt_builder's
+    whitelisted payload) — anything the narrative claims as a percentage that
+    isn't close to one of these was never given to the model, so it is either
+    a forbidden on-the-fly calculation or a plain miscopy."""
+    values: list[float] = []
+
+    def add(value: Any) -> None:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            values.append(float(value))
+
+    def add_rate_keyed(mapping: dict[str, Any]) -> None:
+        for key, value in mapping.items():
+            if any(marker in key.lower() for marker in _RATE_KEY_MARKERS):
+                add(value)
+
+    add_rate_keyed(analytics.metrics)
+    add_rate_keyed(analytics.insights)
+    distribution = analytics.metrics.get("distribution")
+    if isinstance(distribution, dict):
+        for value in distribution.values():
+            add(value)
+    if analytics.trend_metrics is not None:
+        add_rate_keyed(analytics.trend_metrics.model_dump())
+    for summary in (analytics.metric_summaries or {}).values():
+        if summary.format == "percentage":
+            add(summary.value)
+    return values
+
+
+def _has_unverified_percentage_claim(
+    narrative: InsightNarrative, analytics: AnalyticsResult
+) -> bool:
+    claims = _extract_percentage_claims(narrative)
+    if not claims:
+        return False
+    references = _collect_reference_percentages(analytics)
+    return any(
+        all(abs(claim - reference) > _PERCENTAGE_CLAIM_TOLERANCE for reference in references)
+        for claim in claims
+    )
+
 
 # AI-INTELLIGENCE-018 (item 9): unsupported HEDGED causal speculation — the
 # view has no operational/process data (no logs, no staff records, no system
@@ -115,6 +191,21 @@ def validate_and_repair(
             language_ok=False,
             narrative_replaced=True,
             reason="llm_output_not_turkish",
+        )
+
+    # 3. Unverified percentage claim — the prompt tells the model "every number
+    # you mention must appear verbatim in the analytics below" and forbids it
+    # from calculating anything, but nothing enforced that instruction in code
+    # until now. A stated "%N" that matches no percentage the model was
+    # actually given is either a forbidden on-the-fly calculation or a plain
+    # transcription slip — cannot be safely patched (which number is right?),
+    # so the whole narrative is replaced the same way an English body is.
+    if _has_unverified_percentage_claim(narrative, analytics):
+        fallback = templates.build_deterministic_narrative(analytics, rules)
+        return fallback, NarrativeValidationVerdict(
+            language_ok=True,
+            narrative_replaced=True,
+            reason="unverified_percentage_claim",
         )
 
     title_replaced = False

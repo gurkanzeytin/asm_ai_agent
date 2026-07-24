@@ -290,11 +290,40 @@ export function ChatMessage({
   );
 }
 
+function CodeCopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error(tr.common.copyFailed);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      aria-label={tr.common.copy}
+      className="absolute right-2 top-2 flex items-center gap-1 rounded-md border border-border/60 bg-background/80 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur transition hover:bg-accent hover:text-foreground"
+    >
+      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+      {copied ? tr.common.copied : tr.common.copy}
+    </button>
+  );
+}
+
 function AssistantSqlText({ sql }: { sql: string }) {
   return (
-    <pre className="my-2 overflow-x-auto rounded-lg border border-border bg-background/60 p-3 text-xs">
-      <code>{sql}</code>
-    </pre>
+    <div className="relative my-2">
+      <pre className="overflow-x-auto rounded-lg border border-border bg-background/60 p-3 pr-20 text-xs">
+        <code>{sql}</code>
+      </pre>
+      <CodeCopyButton text={sql} />
+    </div>
   );
 }
 
@@ -317,10 +346,14 @@ function AssistantText({
           code({ className, children, ...props }) {
             const isBlock = className?.includes("language-");
             if (isBlock) {
+              const codeText = String(children).replace(/\n$/, "");
               return (
-                <pre className="my-2 overflow-x-auto rounded-lg border border-border bg-muted p-3 text-xs text-foreground">
-                  <code {...props}>{children}</code>
-                </pre>
+                <div className="relative my-2">
+                  <pre className="overflow-x-auto rounded-lg border border-border bg-muted p-3 pr-20 text-xs text-foreground">
+                    <code {...props}>{children}</code>
+                  </pre>
+                  <CodeCopyButton text={codeText} />
+                </div>
               );
             }
             return (

@@ -3,7 +3,7 @@ import re
 
 from app.context import analytical_signals as _analytical_signals
 from app.context import merge_policy as _merge_policy
-from app.context.extractor import ContextExtractor
+from app.context.extractor import _MONTH_NAMES, ContextExtractor
 from app.context.models import (
     ConversationContext,
     ExtractedSignals,
@@ -25,6 +25,13 @@ CONFIDENCE_DATE_FOLLOWUP = 0.92
 CONFIDENCE_DATE_INHERIT = 0.90
 CONFIDENCE_DEPARTMENT_INHERIT = 0.85
 CONFIDENCE_THRESHOLD = 0.80
+
+# A bare month name ("haziran ayinda") carries no year of its own - only
+# matched when the WHOLE expression is exactly this shape, never a relative
+# span like "son 3 ayinda" ("last 3 months", which also contains "ayinda"
+# but must stay relative to today, not get a fixed year prepended).
+_BARE_MONTH_EXPRESSION = re.compile(rf"^(?:{_MONTH_NAMES})\s+ayinda$")
+_YEAR_TOKEN = re.compile(r"\b(19|20)\d{2}\b")
 
 _PLURAL_REFERENTS = {
     "Doctor": "doktorlar",
@@ -209,8 +216,9 @@ class ContextResolver:
             new_date = self._resolve_relative_year(
                 signals.date_expression or "", context.date_expression
             )
-            result.resolved_question = self._swap_date(
-                context.last_question or "", new_date
+            swapped = self._swap_date(context.last_question or "", new_date)
+            result.resolved_question = self._anchor_bare_month_year(
+                swapped, signals.date_expression or "", context.date_expression
             )
             result.inherited["previous_question"] = context.last_question
             result.inherited["entity_types"] = ",".join(context.entity_types)
@@ -635,10 +643,44 @@ class ContextResolver:
         if folded not in {"bir onceki yil", "onceki yil"}:
             return expression
         if reference_expression:
-            match = re.search(r"\b((?:19|20)\d{2})\b", reference_expression)
+            match = _YEAR_TOKEN.search(reference_expression)
             if match:
-                return f"{int(match.group(1)) - 1} yilinda"
+                return f"{int(match.group()) - 1} yilinda"
         return "gecen yil"
+
+    def _anchor_bare_month_year(
+        self, swapped: str, expression: str, reference_expression: str | None
+    ) -> str:
+        """A bare month name ('haziran ayında') carries no year of its own.
+
+        `_swap_date` excises whatever span `ContextExtractor` re-detects
+        inside the PREVIOUS question's raw text and drops the new (year-less)
+        expression in its place. Whether a year survives depends entirely on
+        that previous span's shape: "2025 Mayıs ayında..." -> the extractor's
+        span is just "mayıs ayında" (year excluded), so the leading "2025 "
+        text is untouched by the replace and survives on its own (MT-011).
+        But "2025 yılında..." -> the span IS "2025 yılında" (year included),
+        so replacing it with a year-less month erases the year outright.
+
+        Rather than predict which case applies (the two "date_expression"
+        values in play - `ContextExtractor`'s own re-extraction inside
+        `_swap_date` vs. `context.date_expression`, which may instead be
+        sourced from the query plan's own date-detector - can disagree on
+        whether a span includes its year), this checks the ACTUAL swapped
+        output: only inject the conversation's anchor year when it is
+        genuinely missing, never when the swap already preserved one
+        (avoids a duplicated "2025 2025 haziran ayında...").
+        """
+        folded_expression = self._extractor.fold(expression)
+        if not _BARE_MONTH_EXPRESSION.match(folded_expression):
+            return swapped
+        if _YEAR_TOKEN.search(swapped):
+            return swapped
+        if reference_expression:
+            match = _YEAR_TOKEN.search(reference_expression)
+            if match:
+                return f"{match.group()} {swapped}"
+        return swapped
 
     def _date_clarification(self, expression: str | None) -> str:
         match = re.search(r"\b((?:19|20)\d{2})\b", expression or "")

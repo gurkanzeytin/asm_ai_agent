@@ -314,6 +314,10 @@ def test_engine_prepares_insight_fields():
         (DataShape.SINGLE_VALUE, [], 1, 0, VisualizationType.CARD),
         (DataShape.SINGLE_ROW, [], 1, 0, VisualizationType.CARD),
         (DataShape.TIME_SERIES, [], 6, 6, VisualizationType.LINE_CHART),
+        # A full year of daily counts (365 rows) must still be a line chart,
+        # not silently downgraded to a raw table by the large-result cutoff
+        # that exists for illegible bar/pie charts, not trend lines (2026-07-24).
+        (DataShape.TIME_SERIES, [], 365, 365, VisualizationType.LINE_CHART),
         (DataShape.CATEGORICAL, [], 3, 3, VisualizationType.BAR_CHART),
         (
             DataShape.CATEGORICAL,

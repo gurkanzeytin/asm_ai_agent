@@ -60,6 +60,26 @@ def test_explicit_year_replaces_inherited_year_and_previous_year_is_relative_to_
     assert "2024" in relative.resolved_question
 
 
+def test_bare_month_followup_inherits_year_from_year_only_previous_turn():
+    """'2025 yılında ...' then 'Peki Haziran ayında?' previously dropped the
+    year entirely - `_resolve_relative_year` only special-cased 'önceki yıl',
+    and a year-only previous expression ('2025 yılında') is fully replaced by
+    `_swap_date`, taking the year down with it (unlike a month+year previous
+    expression such as '2025 Mayıs ayında', whose own detected span excludes
+    the year and so incidentally leaves it behind - MT-011, still covered by
+    `test_year_only_forms_are_genuine_followups_with_typed_context` above).
+    Fixed 2026-07-24 via a post-swap year-anchor check in `_swap_date`'s
+    caller, `_anchor_bare_month_year`."""
+    context = _context()  # date_expression="2025 yilinin", last_question anchored to 2025
+    resolution = ContextResolver().resolve("Peki Haziran ayında?", context)
+
+    assert resolution.follow_up_detected is True
+    assert "2025" in resolution.resolved_question
+    assert "haziran" in resolution.resolved_question
+    # Exactly one year token - never a duplicate like "2025 2025 haziran...".
+    assert resolution.resolved_question.count("2025") == 1
+
+
 def test_year_fragment_without_context_requests_clarification_not_out_of_scope():
     resolution = ContextResolver().resolve(
         "2024 yılının?", ConversationContext(session_id="new-session")

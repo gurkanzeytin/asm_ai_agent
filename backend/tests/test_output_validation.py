@@ -154,3 +154,102 @@ def test_insufficient_evidence_rule_untouched_when_no_english():
 
     assert repaired.title == "Trend Analizi"
     assert verdict.narrative_replaced is False
+
+
+# ── Unverified percentage claims ─────────────────────────────────────────────
+# The prompt tells the LLM "every number you mention must appear verbatim in
+# the analytics below" and "do not calculate anything" — these tests enforce
+# that instruction in code instead of trusting the model to follow it.
+
+
+def test_percentage_claim_matching_a_rate_metric_passes_through():
+    narrative = InsightNarrative(
+        title="Gelmeme Analizi",
+        summary="Gelmeme oranı %12.5 olarak hesaplandı.",
+        highlights=[],
+        observations=[],
+    )
+    analytics = _analytics(metrics={"no_show_rate": 12.5})
+
+    repaired, verdict = validate_and_repair(narrative, analytics, [])
+
+    assert repaired == narrative
+    assert verdict.narrative_replaced is False
+
+
+def test_percentage_claim_close_to_a_rate_metric_passes_through():
+    """A model rounding 44.6 to 'yaklaşık %45' is not a fabrication."""
+    narrative = InsightNarrative(
+        title="Analiz", summary="Oran yaklaşık %45 seviyesinde.", highlights=[]
+    )
+    analytics = _analytics(metrics={"completion_rate": 44.6})
+
+    repaired, verdict = validate_and_repair(narrative, analytics, [])
+
+    assert verdict.narrative_replaced is False
+
+
+def test_percentage_claim_with_no_matching_reference_is_replaced():
+    narrative = InsightNarrative(
+        title="Gelmeme Analizi",
+        summary="Gelmeme oranı %45 olarak gerçekleşti.",
+        highlights=[],
+        observations=[],
+    )
+    analytics = _analytics(metrics={"no_show_rate": 12.5})
+
+    repaired, verdict = validate_and_repair(narrative, analytics, [])
+
+    assert verdict.narrative_replaced is True
+    assert verdict.reason == "unverified_percentage_claim"
+    assert repaired.summary != narrative.summary
+
+
+def test_percentage_claim_with_no_percentage_reference_at_all_is_replaced():
+    """The model states a percentage but nothing percentage-shaped was ever
+    sent to it (only a plain count) — a from-scratch calculation."""
+    narrative = InsightNarrative(
+        title="Analiz", summary="Randevuların %100'ü aynı gün alındı.", highlights=[]
+    )
+    analytics = _analytics(metrics={"count": 30})
+
+    repaired, verdict = validate_and_repair(narrative, analytics, [])
+
+    assert verdict.narrative_replaced is True
+    assert verdict.reason == "unverified_percentage_claim"
+
+
+def test_percentage_claim_matching_distribution_value_passes_through():
+    narrative = InsightNarrative(
+        title="Dağılım", summary="Kardiyoloji payı %38.2 ile öne çıktı.", highlights=[]
+    )
+    analytics = _analytics(metrics={"distribution": {"Kardiyoloji": 38.2, "Nöroloji": 61.8}})
+
+    repaired, verdict = validate_and_repair(narrative, analytics, [])
+
+    assert verdict.narrative_replaced is False
+
+
+def test_percentage_claim_matching_trend_endpoint_change_passes_through():
+    narrative = InsightNarrative(
+        title="Trend", summary="Dönem sonunda %20 artış gözlendi.", highlights=[]
+    )
+    analytics = _analytics(trend_metrics=TrendMetrics(endpoint_percentage_change=20.0))
+
+    repaired, verdict = validate_and_repair(narrative, analytics, [])
+
+    assert verdict.narrative_replaced is False
+
+
+def test_narrative_with_no_percentage_claim_is_unaffected():
+    """No '%'/'yüzde' phrasing at all — the new check must never fire."""
+    narrative = InsightNarrative(
+        title="Trend Analizi",
+        summary="Toplam 3 kayıt bulundu, ortalama 10.",
+        highlights=["En yüksek değer 15."],
+    )
+
+    repaired, verdict = validate_and_repair(narrative, _analytics(), [])
+
+    assert repaired == narrative
+    assert verdict.narrative_replaced is False

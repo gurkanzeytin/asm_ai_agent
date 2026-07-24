@@ -61,12 +61,12 @@ class VisualizationSelector:
                 type=VisualizationType.CARD, reason="Single metric detected"
             )
 
-        if row_count > self.large_result_threshold:
-            return VisualizationRecommendation(
-                type=VisualizationType.TABLE,
-                reason=f"Large result list ({row_count} rows)",
-            )
-
+        # The large-result cutoff exists for CATEGORICAL data (a bar/pie chart
+        # with 100+ slices is illegible) - it must not apply to TIME_SERIES,
+        # where more points is the normal, desired case for a line chart (a
+        # full year of daily counts is >30 rows and is exactly what a line
+        # chart is for). Checked BEFORE the cutoff so dense time series never
+        # get silently downgraded to a raw table.
         if data_shape == DataShape.TIME_SERIES:
             if metric_count >= 2:
                 return VisualizationRecommendation(
@@ -75,6 +75,12 @@ class VisualizationSelector:
                 )
             return VisualizationRecommendation(
                 type=VisualizationType.LINE_CHART, reason="Time-series data detected"
+            )
+
+        if row_count > self.large_result_threshold:
+            return VisualizationRecommendation(
+                type=VisualizationType.TABLE,
+                reason=f"Large result list ({row_count} rows)",
             )
 
         if data_shape == DataShape.CATEGORICAL:

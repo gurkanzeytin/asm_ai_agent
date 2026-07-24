@@ -1,5 +1,7 @@
 import logging
 import re
+from datetime import date as _date
+from datetime import timedelta
 
 import sqlglot
 from sqlglot import exp
@@ -80,7 +82,21 @@ class PlanComplianceValidator:
         missing: list[str] = []
 
         for date_filter in plan.date_filters:
-            if date_filter.start_date not in folded_sql and date_filter.end_date not in folded_sql:
+            # Both bounds must be present - `and` here would only flag a
+            # filter as missing when NEITHER bound appears, letting a SQL that
+            # kept the lower bound but silently dropped the upper one (e.g.
+            # "haziran ayında" rendered as "BaslangicTarihi >= '2026-06-01'"
+            # with no upper bound, matching every appointment from June 1st
+            # onward forever) pass compliance undetected (2026-07-24).
+            # The upper bound may legitimately appear either as the inclusive
+            # end_date itself (deterministic builder: "< DATEADD(day, 1,
+            # 'end_date')") or as its half-open exclusive form, end_date + 1
+            # day (period-comparison SQL: "< 'end_date_plus_one'") - both
+            # render the exact same date range, only the literal differs.
+            end_present = date_filter.end_date in folded_sql or (
+                self._exclusive_end(date_filter.end_date) in folded_sql
+            )
+            if date_filter.start_date not in folded_sql or not end_present:
                 missing.append(
                     f"date filter {date_filter.start_date}..{date_filter.end_date} "
                     f"('{date_filter.expression}')"
@@ -336,6 +352,14 @@ class PlanComplianceValidator:
         if value is None:
             value = (match.group("text") or "").replace("''", "'")
         return column, value
+
+    @staticmethod
+    def _exclusive_end(end_date: str) -> str:
+        """end_date + 1 day, as it appears in a half-open '< end_date+1' bound."""
+        try:
+            return (_date.fromisoformat(end_date) + timedelta(days=1)).isoformat()
+        except ValueError:
+            return end_date
 
     def _contains_containment_predicate(self, sql: str, column: str, value: str) -> bool:
         """Accepts the composite-column containment form rendered by the

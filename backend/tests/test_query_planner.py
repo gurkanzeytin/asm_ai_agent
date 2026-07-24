@@ -244,6 +244,22 @@ class TestCompliance:
         assert any("date filter" in item for item in result.missing)
         assert any("join table randevular" in item for item in result.missing)
 
+    def test_dropped_upper_date_bound_detected(self, planner, tables):
+        """A multi-day range plan (start_date != end_date) with only the lower
+        bound present in the SQL must be flagged - the LLM silently dropping
+        just the upper bound previously passed compliance (the check used
+        `and` instead of `or`, only firing when BOTH bounds were absent,
+        2026-07-24)."""
+        plan = build(planner, "2026 Haziran ayındaki randevuları göster", tables)
+        assert plan.date_filters[0].start_date != plan.date_filters[0].end_date
+        sql = (
+            "SELECT randevu_tarihi FROM randevular "
+            f"WHERE randevu_tarihi >= '{plan.date_filters[0].start_date}';"
+        )
+        result = self.validator.check(sql, plan)
+        assert not result.compliant
+        assert any("date filter" in item for item in result.missing)
+
     def test_dropped_department_detected(self, planner, tables):
         plan = self._flagship_plan(planner, tables)
         sql = (
