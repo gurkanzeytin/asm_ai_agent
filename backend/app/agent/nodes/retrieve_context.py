@@ -47,6 +47,23 @@ class RetrieveContextNode(IAgentNode):
         try:
             db_context = await self.prompt_service.retrieve_schema_context(state.question)
             planning_question = state.raw_question or state.question
+            if state.answerability_input and state.answerability_input.pending_clarification:
+                # A pending-clarification reply ("Genel Cerrahi'yi kastettim")
+                # carries almost none of the original analytical content on
+                # its own - ContextResolver._resolve_pending_value_clarification
+                # already replayed the FULL original question into
+                # state.question (raw_question is just the disambiguating
+                # reply). Planning from raw_question here, as a normal terse
+                # follow-up correctly does to see only THIS turn's explicit
+                # signals, would build a near-empty plan from just the reply
+                # text and then silently inherit an unrelated metric from
+                # whatever plan was last SUCCESSFULLY persisted (an
+                # ASK_CLARIFICATION turn never updates session memory) -
+                # not from the turn that actually asked the question
+                # (2026-07-24, live multi-turn testing: answering a
+                # department-name clarification returned a completely
+                # different, two-turns-back question's metric).
+                planning_question = state.question
             planning_frame = None if state.context_follow_up_detected else state.semantic_frame
             query_plan = self._build_plan(planning_question, db_context, planning_frame)
             current_turn_has_date = bool(query_plan.date_filters) if query_plan else False
