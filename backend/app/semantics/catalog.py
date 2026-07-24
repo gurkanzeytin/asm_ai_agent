@@ -583,6 +583,26 @@ def match_dimensions(folded_question: str) -> list[str]:
     return selected
 
 
+def match_any_column_mention(folded_question: str) -> bool:
+    """Whether the question names ANY view column by its business name or a
+    synonym - unfiltered by groupable/pii/time-dimension (unlike
+    match_dimensions, which is scoped to what can legally be a SQL GROUP BY).
+
+    A broad domain-signal check for "does this question touch our schema at
+    all", not a source of SQL-construction dimensions - callers needing a
+    buildable GROUP BY column must keep using match_dimensions.
+    """
+    for spec in load_column_catalog().columns:
+        terms = [spec.business_name, *spec.synonyms]
+        if any(_term_in(folded_question, term) for term in terms):
+            return True
+    for metric in load_metric_catalog().metrics:
+        terms = [metric.name, *metric.synonyms]
+        if any(_term_in(folded_question, term) for term in terms):
+            return True
+    return False
+
+
 def match_pattern(folded_question: str, detected_date_ranges: int = 0) -> str | None:
     """Resolves the analysis pattern; specific patterns win over generic ones.
 

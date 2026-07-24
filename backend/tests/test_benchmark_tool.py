@@ -34,7 +34,7 @@ def _run(**overrides) -> QuestionRun:
         question_id=1,
         category="count",
         question="Kaç doktor var?",
-        generated_sql="SELECT COUNT(*) FROM doktorlar;",
+        generated_sql="SELECT COUNT(DISTINCT DoktorId) FROM dbo.vw_RandevuRaporu;",
         execution_success=True,
         rows_returned=1,
         analytics_generated=True,

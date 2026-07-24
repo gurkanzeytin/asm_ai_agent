@@ -236,3 +236,7 @@ frontend/node_modules/
 # Runtime schema cache (regenerates from the live database)
 backend/.schema_cache/
 evaluation/results/
+.tmp_pytest/
+.tmp_pytest_cache/
+backend/.tmp_pytest/
+backend/.tmp_pytest_cache/

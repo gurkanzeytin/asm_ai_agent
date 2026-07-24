@@ -79,6 +79,34 @@
       "result_type": "integer"
     },
     {
+      "id": "unique_doctor_count",
+      "name": "Tekil doktor sayısı",
+      "description": "Filtre koşullarına uyan farklı doktor sayısı (DoktorId üzerinden).",
+      "analysis_type": "distinct_count",
+      "required_columns": [
+        "DoktorId"
+      ],
+      "formula_type": "count_distinct",
+      "formula": "COUNT(DISTINCT DoktorId)",
+      "synonyms": [
+        "kac doktor",
+        "doktor sayisi",
+        "doktorlarin sayisi",
+        "farkli doktor",
+        "tekil doktor",
+        "kac farkli doktor",
+        "benzersiz doktor",
+        "kac hekim",
+        "hekim sayisi",
+        "kac uzman",
+        "toplam doktor"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL DoktorId sayılmaz",
+      "result_type": "integer"
+    },
+    {
       "id": "appointments_per_patient",
       "name": "Hasta başına randevu",
       "description": "Ortalama hasta başına randevu adedi.",

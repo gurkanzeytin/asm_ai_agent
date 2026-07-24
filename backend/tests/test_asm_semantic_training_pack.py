@@ -4,6 +4,8 @@ These tests lock common Turkish appointment-reporting phrases to the verified
 dbo.vw_RandevuRaporu view semantics. They are deterministic: no LLM, no DB.
 """
 
+from datetime import date
+
 import pytest
 
 from app.database_intelligence.models import ViewMetadata
@@ -15,6 +17,9 @@ from app.services.query_analyzer import QueryAnalyzer
 
 VIEW_NAME = "dbo.vw_RandevuRaporu"
 VIEW = ViewMetadata(name=VIEW_NAME, columns=[])
+# "bugün" resolves against the real system clock (QueryAnalyzer default) — the
+# expected literal must do the same, or the test breaks every midnight.
+TODAY = date.today().isoformat()
 
 EXPECTED_RANDEVU_RAPORU_COLUMNS = {
     "Id",
@@ -84,7 +89,7 @@ def test_today_appointment_count_uses_appointment_date_and_count():
 
     sql = sql_for("bugunku randevularin adedini soyle")
     assert "COUNT(*) AS appointment_count" in sql
-    assert "BaslangicTarihi >= '2026-07-23'" in sql
+    assert f"BaslangicTarihi >= '{TODAY}'" in sql
     assert "CreatedDate" not in sql
 
 
@@ -95,7 +100,7 @@ def test_created_today_appointment_count_uses_created_date():
     assert date_columns(plan) == {"CreatedDate"}
 
     sql = sql_for("bugun olusturulan randevu sayisi kac")
-    assert "CreatedDate >= '2026-07-23'" in sql
+    assert f"CreatedDate >= '{TODAY}'" in sql
     assert "BaslangicTarihi >=" not in sql
 
 
@@ -235,7 +240,7 @@ def test_created_today_last_n_list_uses_created_date_for_filter_and_order():
     assert date_columns(plan) == {"CreatedDate"}
 
     sql = sql_for("bugun olusturulan son 20 randevuyu getir")
-    assert "WHERE CreatedDate >= '2026-07-23'" in sql
+    assert f"WHERE CreatedDate >= '{TODAY}'" in sql
     assert "ORDER BY CreatedDate DESC" in sql
     assert "COUNT(" not in sql.upper()
 

@@ -15,7 +15,16 @@
         "hasta",
         "kisi",
         "kişi",
-        "patient"
+        "patient",
+        "cinsiyet",
+        "kadin",
+        "kadın",
+        "erkek",
+        "uyruk",
+        "ulke",
+        "yas grubu",
+        "yas dagilimi",
+        "dogum tarihi"
       ]
     },
     "Appointment": {

@@ -379,6 +379,38 @@ def test_ratio_question_produces_numerator_and_denominator(planner, analyzer):
     assert "SubeAdi" in plan.dimensions
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Kadın erkek oranını hesapla",
+        "Cinsiyet oranı nedir?",
+    ],
+)
+def test_gender_ratio_with_no_matched_metric_falls_back_to_distribution(
+    planner, analyzer, question
+):
+    """'X orani' text pattern-matches to analysis_type 'ratio' purely from the
+    word 'orani', independent of whether a specific ratio metric (numerator/
+    denominator) exists for it. There is no percent-of-total metric for a
+    two-category demographic split like gender - previously this left
+    plan.metrics empty (nothing to compute, unanswerable in practice) instead
+    of falling back to a groupable distribution over CinsiyetId (2026-07-24)."""
+    plan = plan_for(planner, analyzer, question)
+    assert plan.answerable
+    assert plan.analysis_type == "distribution"
+    assert plan.metrics
+    assert "CinsiyetId" in plan.dimensions
+
+
+def test_named_ratio_metric_is_unaffected_by_distribution_fallback(planner, analyzer):
+    """A phrase that DOES match a specific ratio metric keeps analysis_type
+    'ratio' with its numerator/denominator - only the empty-metric case
+    downgrades to distribution."""
+    plan = plan_for(planner, analyzer, "Gerçekleşme oranı nedir?")
+    assert plan.analysis_type == "ratio"
+    assert plan.numerator and plan.denominator
+
+
 def test_group_question_produces_dimension(planner, analyzer):
     plan = plan_for(planner, analyzer, "Bölümlere göre randevu sayılarını göster")
     assert "GenelRandevuBolumAdi" in plan.dimensions

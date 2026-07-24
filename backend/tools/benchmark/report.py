@@ -15,7 +15,8 @@ from tools.benchmark.metrics import (
 
 _CSV_FIELDS = [
     "model", "question_id", "category", "question", "repeat_index",
-    "outcome", "reason", "generated_sql", "execution_success", "rows_returned",
+    "outcome", "reason", "workflow_outcome",
+    "generated_sql", "execution_success", "rows_returned",
     "analytics_generated", "insight_generated", "report_generated",
     "total_ms", "sql_generation_ms", "analytics_ms", "insight_ms", "report_ms",
     "llm_calls", "llm_timeouts", "retry_count",
@@ -30,6 +31,7 @@ _FAILURE_COLUMNS = [
     (Reason.PIPELINE_FAILURE, "Pipeline Error"),
     (Reason.NO_RESULTS, "Empty Result"),
     (Reason.SQL_GENERATION_FAILED, "SQL Gen Failed"),
+    (Reason.UNEXPECTED_CLARIFICATION, "Unneeded Clarification"),
 ]
 
 _ACCURACY_CATEGORIES = [

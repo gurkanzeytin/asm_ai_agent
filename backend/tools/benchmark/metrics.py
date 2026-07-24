@@ -32,6 +32,8 @@ class Reason(StrEnum):
     NO_RESULTS = "no_results"
     NO_ANALYTICS = "no_analytics"
     PIPELINE_FAILURE = "pipeline_failure"
+    EXPECTED_OUT_OF_SCOPE = "expected_out_of_scope"
+    UNEXPECTED_CLARIFICATION = "unexpected_clarification"
 
 
 # Categories where "handled without crashing" is the success criterion.
@@ -64,6 +66,26 @@ def _fold(text: str) -> str:
     return text.replace("İ", "i").lower().translate(_FOLD)
 
 
+# Entities the runtime view can never answer (their hint tables are legacy
+# names absent from the single-view schema). A question naming one of these is
+# EXPECTED to degrade to out-of-scope guidance / a controlled limitation
+# instead of producing SQL.
+_OUT_OF_VIEW_NOUNS: tuple[str, ...] = tuple(
+    noun
+    for noun, tables in ENTITY_TABLE_HINTS.items()
+    if not any("vw_randevuraporu" in table for table in tables)
+)
+
+# Workflow outcomes that represent a controlled, graceful degradation
+# (AG-022) rather than a crash.
+_GRACEFUL_OUTCOMES = {"OUT_OF_SCOPE", "ASK_CLARIFICATION", "RETURN_HELP"}
+
+
+def _expects_out_of_scope(question: str) -> bool:
+    folded = _fold(question)
+    return any(noun in folded for noun in _OUT_OF_VIEW_NOUNS)
+
+
 @dataclass
 class QuestionRun:
     """Raw observation of one question executed against one model."""
@@ -73,6 +95,7 @@ class QuestionRun:
     category: str
     question: str
     repeat_index: int = 0
+    workflow_outcome: str | None = None
     generated_sql: str | None = None
     execution_success: bool = False
     rows_returned: int = 0
@@ -112,7 +135,21 @@ def classify(run: QuestionRun) -> tuple[Outcome, Reason]:
         return Outcome.FAILED, Reason.PIPELINE_FAILURE
     if run.llm_timeouts > 0 and not run.report_generated and not run.execution_success:
         return Outcome.FAILED, Reason.TIMEOUT
+
+    # AG-022: a question naming an entity the view cannot answer (rooms,
+    # prescriptions, insurance, billing) MUST degrade to controlled guidance.
+    # That controlled degradation is the correct behavior — full success.
+    if _expects_out_of_scope(run.question) and not run.generated_sql:
+        if run.workflow_outcome in _GRACEFUL_OUTCOMES:
+            return Outcome.SUCCESS, Reason.EXPECTED_OUT_OF_SCOPE
+        return Outcome.FAILED, Reason.SQL_GENERATION_FAILED
+
     if not run.generated_sql:
+        # An answerable question that produced no SQL: a clarification here is
+        # an unnecessary round-trip, not a crash — classify distinctly so the
+        # failure analysis separates it from hard SQL-generation failures.
+        if run.workflow_outcome == "ASK_CLARIFICATION":
+            return Outcome.PARTIAL, Reason.UNEXPECTED_CLARIFICATION
         return Outcome.FAILED, Reason.SQL_GENERATION_FAILED
     if not run.execution_success:
         return Outcome.FAILED, Reason.INVALID_SQL

@@ -73,6 +73,19 @@ _GENERIC_QUANTIFIERS = {
     "tum", "tüm", "butun", "bütün", "her", "genel", "geneli", "genelinde",
 }
 
+# Interrogative/demonstrative words (folded, matched as EXACT tokens — a
+# startswith root would swallow real values like "Nefroloji" via "ne"). These
+# are capitalized in sentence-initial position ("Kaç doktor var?", "Hangi
+# bölüm ...?") and must never be mistaken for a proper-noun value mention.
+_QUESTION_WORDS = {
+    "kac", "kacar", "kacinci", "hangi", "hangisi", "hangileri",
+    "ne", "neler", "nedir", "neyi", "neye",
+    "kim", "kimler", "kimin",
+    "nasil", "neden", "nicin", "niye",
+    "nerede", "nereye", "nereden", "nereli", "nere", "neresi",
+    "bu", "su", "o", "iste",
+}
+
 # AI-INTELLIGENCE-017 regression fix: bare domain/dimension nouns (folded
 # roots, matched via startswith) must NEVER become a candidate filter value,
 # no matter how they're capitalized or positioned. Without this guard, "Randevu
@@ -175,6 +188,20 @@ def resolve_value(field_name: str, original_text: str, candidates: list[str]) ->
     """
     normalized_input = normalize(original_text)
 
+    if not normalized_input:
+        # Punctuation-only / whitespace-only mentions can never ground; without
+        # this guard an empty input prefix-matches EVERY candidate below.
+        return ResolvedValue(
+            field=field_name,
+            original_text=original_text,
+            normalized_text=normalized_input,
+            matched_value=None,
+            match_type="no_match",
+            confidence=0.0,
+            grounded=False,
+            clarification_required=True,
+        )
+
     if field_name == "gender" and normalized_input in _GENDER_ALIASES:
         alias_code = _GENDER_ALIASES[normalized_input]
         if not candidates or alias_code in candidates:
@@ -215,7 +242,12 @@ def resolve_value(field_name: str, original_text: str, candidates: list[str]) ->
 
     normalized_map: dict[str, list[str]] = {}
     for candidate in candidates:
-        normalized_map.setdefault(normalize(candidate), []).append(candidate)
+        normalized_candidate = normalize(candidate)
+        if not normalized_candidate:
+            # An empty/dirty DB value ('', '  ', ',') must never become a
+            # grounded match — an empty norm prefix-matches every input.
+            continue
+        normalized_map.setdefault(normalized_candidate, []).append(candidate)
 
     normalized_exact = sorted(set(normalized_map.get(normalized_input, [])))
     if len(normalized_exact) == 1:
@@ -406,6 +438,8 @@ def extract_candidate_phrases(question: str) -> dict[str, list[str]]:
             folded_word = folded_tokens[j].strip(_STRIP_CHARS)
             if not original or not original[0].isupper():
                 break
+            if folded_word in _QUESTION_WORDS:
+                break
             if any(folded_word.startswith(root) for root in _NEVER_CANDIDATE_ROOTS):
                 break
             phrase_tokens.insert(0, original)
@@ -450,6 +484,62 @@ def extract_candidate_phrases(question: str) -> dict[str, list[str]]:
         results["gender"] = [shortest_alias]
 
     return results
+
+
+# Wording that marks an explicit two-value comparison ("X ile Y'yi
+# karşılaştır", "hangisi daha yoğun: X mi Y mi"). Folded substrings.
+_COMPARISON_CONTEXT_MARKERS: tuple[str, ...] = (
+    "karsilastir", "kiyasla", "daha", "hangisi", "hangi", "fark", "versus", " vs ",
+)
+
+_APOSTROPHE_SUFFIX = re.compile(r"['’`].*$")
+
+
+def extract_comparison_pair(question: str) -> tuple[str, str] | None:
+    """Finds an explicit "X ile Y" / "X mi Y mi" comparison pair of
+    proper-noun-like mentions. Pure text step — the caller must still ground
+    BOTH sides against real DB values before using them as filters; an
+    ungrounded pair is silently ignored (never a clarification)."""
+    folded_question = fold(question)
+    if not any(marker in folded_question for marker in _COMPARISON_CONTEXT_MARKERS):
+        return None
+
+    tokens = question.split()
+    cleaned = [
+        _APOSTROPHE_SUFFIX.sub("", token).strip(_STRIP_CHARS) for token in tokens
+    ]
+    folded_tokens = [fold(token) for token in cleaned]
+
+    def _is_candidate(index: int) -> bool:
+        word = cleaned[index]
+        return bool(
+            word
+            and word[0].isupper()
+            and folded_tokens[index] not in _QUESTION_WORDS
+            and not any(
+                folded_tokens[index].startswith(root) for root in _NEVER_CANDIDATE_ROOTS
+            )
+        )
+
+    # Pattern A: "<X> ile <Y>"
+    for index, folded_token in enumerate(folded_tokens):
+        if folded_token == "ile" and 0 < index < len(cleaned) - 1:
+            if _is_candidate(index - 1) and _is_candidate(index + 1):
+                return cleaned[index - 1], cleaned[index + 1]
+
+    # Pattern B: "<X> mi <Y> mi"
+    question_particles = [
+        index
+        for index, folded_token in enumerate(folded_tokens)
+        if folded_token in ("mi", "mu", "mi̇")
+    ]
+    if len(question_particles) >= 2:
+        first, second = question_particles[0], question_particles[1]
+        if first > 0 and second > first + 1:
+            if _is_candidate(first - 1) and _is_candidate(second - 1):
+                return cleaned[first - 1], cleaned[second - 1]
+
+    return None
 
 
 class ValueResolver:

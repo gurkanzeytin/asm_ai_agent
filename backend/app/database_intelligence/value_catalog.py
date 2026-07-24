@@ -39,6 +39,26 @@ FIELD_COLUMNS: dict[str, tuple[str, str]] = {
 _DISTINCT_LIMIT = 500  # low/medium cardinality safety cap
 _SEARCH_LIMIT = 10  # high cardinality bounded search cap
 
+# Columns whose stored values are comma-separated composites
+# ("Genel Cerrahi, Ameliyathane, "). Grounding must happen against the ATOMIC
+# elements — an equality filter on the raw composite value is meaningless.
+_COMPOSITE_FIELDS = {"department"}
+
+
+def _split_composite_values(values: list[str]) -> list[str]:
+    """Splits comma-separated composite values into deduplicated atomic parts,
+    preserving first-seen order and dropping empty fragments."""
+    seen: set[str] = set()
+    atomic: list[str] = []
+    for value in values:
+        for part in value.split(","):
+            cleaned = part.strip()
+            if not cleaned or cleaned in seen:
+                continue
+            seen.add(cleaned)
+            atomic.append(cleaned)
+    return atomic
+
 
 @dataclass
 class _CacheEntry:
@@ -67,6 +87,8 @@ class ValueCatalog:
         if cached is not None and (now - cached.fetched_at) <= self.cache_ttl:
             return cached.values
         values = await self._query_distinct(column)
+        if field_name in _COMPOSITE_FIELDS:
+            values = _split_composite_values(values)
         self._cache[field_name] = _CacheEntry(values=values, fetched_at=now)
         return values
 

@@ -19,7 +19,7 @@ _SQL_MARKER = re.compile(r"\b(sql|sorgu|sorgusunu|sorguyu)\b")
 _SQL_ONLY_MARKER = re.compile(
     r"\b(sadece|yalniz)\b.{0,30}\b(sql|sorgu|sorgusunu|sorguyu)\b"
     r"|\b(sql|sorgu|sorgusunu|sorguyu)\b.{0,40}\b"
-    r"(ver|yaz|uret|olustur|goster)\b"
+    r"(ver\w*|yaz\w*|uret\w*|olustur\w*|goster\w*)\b"
     r"|\bcalistirma\b"
 )
 _DATA_MARKER = re.compile(
@@ -34,6 +34,18 @@ _ANSWER_MARKER = re.compile(
     r"\b(yanitla|cevapla|yorum|yorumla|ozet|rapor|analiz|acikla|"
     r"degerlendir|ne anlama|sonucunu yorumla)\b"
 )
+# "X'i listeleyecek SQL sorgusu" - a future-tense participle (-ecek/-acak)
+# directly modifying "sql/sorgu" is a relative clause describing what the SQL
+# will DO once run, not an imperative to run/fetch data now. Without this,
+# "listeleyecek"/"getirecek" right before "sql sorgusu" wrongly reads as a
+# data/execution marker and demotes an SQL-only request ("...sorgusunu
+# oluşturur musun") down to "data" mode, silently executing and showing a
+# table the user never asked for.
+_PARTICIPLE_MODIFYING_SQL = re.compile(r"\b\w+(?:ecek|acak)\b(?=\s+(?:sql|sorgu\w*)\b)")
+
+
+def _strip_sql_describing_participle(folded: str) -> str:
+    return _PARTICIPLE_MODIFYING_SQL.sub("", folded)
 
 
 class OutputPolicy(BaseModel):

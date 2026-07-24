@@ -89,6 +89,7 @@ class PlanComplianceValidator:
         if plan.department_filter:
             if not any(
                 self._contains_filter_predicate(sql, column, plan.department_filter)
+                or self._contains_containment_predicate(sql, column, plan.department_filter)
                 for column in ("GenelRandevuBolumAdi", "bolum_adi")
             ):
                 missing.append(f"department filter '{plan.department_filter}'")
@@ -335,6 +336,20 @@ class PlanComplianceValidator:
         if value is None:
             value = (match.group("text") or "").replace("''", "'")
         return column, value
+
+    def _contains_containment_predicate(self, sql: str, column: str, value: str) -> bool:
+        """Accepts the composite-column containment form rendered by the
+        deterministic builder: ``',' + REPLACE(<col>, ', ', ',') + ',' LIKE
+        N'%,<value>,%'`` (and simpler ``<col> LIKE N'%<value>%'`` variants)."""
+        stripped = value.strip().strip(",").strip()
+        escaped_value = re.escape(stripped.replace("'", "''"))
+        return bool(
+            re.search(
+                rf"\b{re.escape(column)}\b.{{0,60}}?LIKE\s*N?'%[^']*{escaped_value}[^']*%'",
+                sql,
+                re.IGNORECASE | re.DOTALL,
+            )
+        )
 
     def _contains_filter_predicate(self, sql: str, column: str, value: str) -> bool:
         escaped_value = re.escape(value.replace("'", "''"))

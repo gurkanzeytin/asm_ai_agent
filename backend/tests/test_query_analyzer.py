@@ -66,6 +66,38 @@ def test_query_analyzer_temporal_variants(query, expected_start, expected_end):
 
 
 @pytest.mark.parametrize(
+    ("query", "expected_start", "expected_end"),
+    [
+        # "2025 Mayıs ayında" must yield ONE range anchored to 2025 — the bare
+        # "mayıs ayında" detector used to also fire with today's year, and the
+        # two ANDed ranges produced an always-empty SQL predicate.
+        ("2025 Mayıs ayında kaç randevu oldu?", date(2025, 5, 1), date(2025, 5, 31)),
+        ("Mayıs 2025 randevu sayısı", date(2025, 5, 1), date(2025, 5, 31)),
+    ],
+)
+def test_query_analyzer_year_qualified_month_single_range(query, expected_start, expected_end):
+    analyzer = QueryAnalyzer(today=date(2026, 7, 10))
+
+    analysis = analyzer.analyze(query)
+
+    assert len(analysis.detected_dates) == 1
+    assert analysis.detected_dates[0].start_date == expected_start
+    assert analysis.detected_dates[0].end_date == expected_end
+
+
+def test_query_analyzer_bare_month_deduplicates_diacritic_variants():
+    # _MONTHS holds both "mayıs" and "mayis"; a bare-month mention must not
+    # produce two identical ranges.
+    analyzer = QueryAnalyzer(today=date(2026, 7, 10))
+
+    analysis = analyzer.analyze("Mayıs ayında kaç randevu oldu?")
+
+    assert len(analysis.detected_dates) == 1
+    assert analysis.detected_dates[0].start_date == date(2026, 5, 1)
+    assert analysis.detected_dates[0].end_date == date(2026, 5, 31)
+
+
+@pytest.mark.parametrize(
     ("query", "expected_normalized", "expected_synonym"),
     [
         (

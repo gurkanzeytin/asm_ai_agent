@@ -900,6 +900,20 @@
       ],
       "reason": "Pasaport bilgisi bu veri görünümünde bulunmuyor.",
       "alternative": "Uyruk (Uyruk) bazında yabancı hasta analizi yapılabilir."
+    },
+    {
+      "terms": [
+        "oda",
+        "odalar",
+        "odalari",
+        "odasi",
+        "odayi",
+        "oda sayisi",
+        "bos oda",
+        "oda durumu"
+      ],
+      "reason": "Oda bilgisi bu veri görünümünde bulunmuyor.",
+      "alternative": "Bölüm (GenelRandevuBolumAdi) veya şube (SubeAdi) bazında randevu analizi yapılabilir."
     }
   ]
 }

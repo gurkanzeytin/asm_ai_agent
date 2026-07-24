@@ -141,14 +141,36 @@ def resolve_status_value(folded_question: str, view_name: str | None = None) -> 
     return None
 
 
+def status_column(view_name: str | None = None) -> str:
+    """The RandevuDurumu column name for this view (from the AppointmentStatus concept)."""
+    concepts = get_view_entry(view_name).get("concepts", {})
+    return concepts.get("AppointmentStatus", {}).get("column", "RandevuDurumu")
+
+
 def resolve_status_filter(folded_question: str, view_name: str | None = None) -> str | None:
     """Maps status wording (gerçekleşen, iptal, ...) to a RandevuDurumu filter value."""
     value = resolve_status_value(folded_question, view_name)
     if value is None:
         return None
-    concepts = get_view_entry(view_name).get("concepts", {})
-    status_column = concepts.get("AppointmentStatus", {}).get("column", "RandevuDurumu")
-    return f"{status_column} = '{value}'"
+    return f"{status_column(view_name)} = '{value}'"
+
+
+def resolve_negated_status_values(
+    folded_question: str, view_name: str | None = None
+) -> list[str] | None:
+    """Maps negation wording ('gerçekleşmeyen', 'tamamlanmayan', ...) to the
+    COMPLEMENT set of verified RandevuDurumu values (every real status except
+    the negated one) — never a literal SQL '<>' operator, so the existing
+    equality/IN filter rendering path (deterministic builder + compliance
+    validator) handles it with no new predicate machinery. The complement is
+    derived from this view's own `status_filters` values, so it can never
+    drift from (or reintroduce) an unverified status like 'İptal'."""
+    entry = get_view_entry(view_name)
+    for term, excluded_value in entry.get("negated_status_filters", {}).items():
+        if fold(term) in folded_question:
+            all_values = sorted(set(entry.get("status_filters", {}).values()))
+            return [value for value in all_values if value != excluded_value]
+    return None
 
 
 def concept_mapping_lines(view_name: str | None = None) -> list[str]:

@@ -54,6 +54,27 @@ class PeriodComparisonResult(BaseModel):
         )
 
 
+class EntityComparisonResult(BaseModel):
+    """Two-entity comparison contract ("Kardiyoloji ile Psikiyatri"): both
+    conditional counts must be present or the comparison presentation is not
+    rendered (mirrors PeriodComparisonResult's completeness rule)."""
+
+    current_entity_label: str | None = None
+    baseline_entity_label: str | None = None
+    comparison_total_count: float | None = None
+    current_entity_count: float | None = None
+    baseline_entity_count: float | None = None
+    absolute_change: float | None = None
+    percentage_change: float | None = None
+
+    def is_complete(self) -> bool:
+        return (
+            self.current_entity_count is not None
+            and self.baseline_entity_count is not None
+            and self.absolute_change is not None
+        )
+
+
 class CohortResult(BaseModel):
     """Full verified-status distribution of the cohort.
 
@@ -97,6 +118,10 @@ CONTRACT_ALIASES: dict[str, set[str]] = {
     # Labels are presentation extras; the numeric core is the contract.
     "PeriodComparisonResult": {
         "current_period_count", "baseline_period_count",
+        "absolute_change", "percentage_change",
+    },
+    "EntityComparisonResult": {
+        "current_entity_count", "baseline_entity_count",
         "absolute_change", "percentage_change",
     },
     "VarianceResult": set(VarianceResult.model_fields),
@@ -163,6 +188,7 @@ class TypedResultNormalizer:
             "variance_analysis": "VarianceResult",
             "period_comparison": "PeriodComparisonResult",
             "baseline_comparison": "PeriodComparisonResult",
+            "comparison": "EntityComparisonResult",
             "time_trend": "TrendResult",
             "ratio": "RatioResult",
             "percentage": "RatioResult",
@@ -185,6 +211,8 @@ class TypedResultNormalizer:
                 CohortResult(**row)
             elif schema_name == "PeriodComparisonResult":
                 PeriodComparisonResult(**row)
+            elif schema_name == "EntityComparisonResult":
+                EntityComparisonResult(**row)
             elif schema_name == "VarianceResult":
                 VarianceResult(**row)
         except Exception as error:

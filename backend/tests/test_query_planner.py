@@ -163,6 +163,7 @@ class TestQueryStyles:
         assert all(d.expression != "dun" for d in plan.date_filters)
 
 
+
 # ─────────────────────────────────────────────
 # Join path
 # ─────────────────────────────────────────────

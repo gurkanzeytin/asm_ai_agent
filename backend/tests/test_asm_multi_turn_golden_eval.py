@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -34,7 +34,10 @@ class _PromptService:
 
 
 def _load_scenarios() -> list[dict]:
-    raw = json.loads(DATASET_PATH.read_text(encoding="utf-8"))
+    # "bugün" resolves against the real system clock in the planner; the golden
+    # dataset carries a {today} placeholder instead of a frozen date.
+    text = DATASET_PATH.read_text(encoding="utf-8")
+    raw = json.loads(text.replace("{today}", date.today().isoformat()))
     assert raw["view"] == VIEW_NAME
     return raw["scenarios"]
 

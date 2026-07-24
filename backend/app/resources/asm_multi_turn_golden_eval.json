@@ -9,19 +9,19 @@
       "turns": [
         {
           "question": "Bugunku randevu sayisini subelere gore goster",
-          "expected": {"follow_up": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "date_column": "BaslangicTarihi", "date_start": "2026-07-23", "date_end": "2026-07-23", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {"follow_up": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "date_column": "BaslangicTarihi", "date_start": "{today}", "date_end": "{today}", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
         },
         {
           "question": "Sadece bekleyenleri goster",
-          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "date_column": "BaslangicTarihi", "date_start": "2026-07-23", "date_end": "2026-07-23", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": null, "visible_sections": []}
+          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "date_column": "BaslangicTarihi", "date_start": "{today}", "date_end": "{today}", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": null, "visible_sections": []}
         },
         {
           "question": "Bunu grafik yap",
-          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "date_column": "BaslangicTarihi", "date_start": "2026-07-23", "date_end": "2026-07-23", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": "visualization", "visible_sections": ["chart"]}
+          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "date_column": "BaslangicTarihi", "date_start": "{today}", "date_end": "{today}", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": "visualization", "visible_sections": ["chart"]}
         },
         {
           "question": "SQL ini ver",
-          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "date_column": "BaslangicTarihi", "date_start": "2026-07-23", "date_end": "2026-07-23", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": "sql", "visible_sections": ["sql"]}
+          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "date_column": "BaslangicTarihi", "date_start": "{today}", "date_end": "{today}", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": "sql", "visible_sections": ["sql"]}
         }
       ]
     },
@@ -115,11 +115,11 @@
         },
         {
           "question": "En yuksek 10 doktoru goster",
-          "expected": {"follow_up": true, "analysis_type": "duration_analysis", "metrics": ["appointment_duration_average"], "dimensions": ["GenelRandevuKaynakAdi"], "limit": 10, "ranking": "DESC", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {"follow_up": true, "analysis_type": "ranking", "metrics": ["appointment_duration_average"], "dimensions": ["GenelRandevuKaynakAdi"], "limit": 10, "ranking": "DESC", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
         },
         {
           "question": "Bunu tablo olarak getir",
-          "expected": {"follow_up": true, "analysis_type": "duration_analysis", "metrics": ["appointment_duration_average"], "dimensions": ["GenelRandevuKaynakAdi"], "limit": 10, "ranking": "DESC", "extra_include": [], "extra_exclude": [], "response_mode": "data", "visible_sections": ["table"]}
+          "expected": {"follow_up": true, "analysis_type": "ranking", "metrics": ["appointment_duration_average"], "dimensions": ["GenelRandevuKaynakAdi"], "limit": 10, "ranking": "DESC", "extra_include": [], "extra_exclude": [], "response_mode": "data", "visible_sections": ["table"]}
         }
       ]
     },
@@ -129,15 +129,15 @@
       "turns": [
         {
           "question": "Bugun olusturulan randevu sayisini randevuyu verenlere gore goster",
-          "expected": {"follow_up": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["RandevuyuVeren"], "date_column": "CreatedDate", "date_start": "2026-07-23", "date_end": "2026-07-23", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {"follow_up": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["RandevuyuVeren"], "date_column": "CreatedDate", "date_start": "{today}", "date_end": "{today}", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
         },
         {
           "question": "Sadece bekleyenler",
-          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["RandevuyuVeren"], "date_column": "CreatedDate", "date_start": "2026-07-23", "date_end": "2026-07-23", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": null, "visible_sections": []}
+          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["RandevuyuVeren"], "date_column": "CreatedDate", "date_start": "{today}", "date_end": "{today}", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": null, "visible_sections": []}
         },
         {
           "question": "Bunun grafigini ciz",
-          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["RandevuyuVeren"], "date_column": "CreatedDate", "date_start": "2026-07-23", "date_end": "2026-07-23", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": "visualization", "visible_sections": ["chart"]}
+          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["RandevuyuVeren"], "date_column": "CreatedDate", "date_start": "{today}", "date_end": "{today}", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": "visualization", "visible_sections": ["chart"]}
         }
       ]
     },
@@ -192,6 +192,20 @@
         {
           "question": "Sadece SQL ver",
           "expected": {"follow_up": true, "analysis_type": "cross_analysis", "metrics": ["appointment_count"], "dimensions": ["CinsiyetId", "Uyruk"], "extra_include": [], "extra_exclude": [], "response_mode": "sql", "visible_sections": ["sql"]}
+        }
+      ]
+    },
+    {
+      "id": "MT-011",
+      "title": "Bare-month follow-up inherits the explicit year from the previous turn",
+      "turns": [
+        {
+          "question": "2025 Mayis ayinda Kardiyoloji bolumunde kac randevu oldu?",
+          "expected": {"follow_up": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["GenelRandevuBolumAdi"], "date_column": "BaslangicTarihi", "date_start": "2025-05-01", "date_end": "2025-05-31", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "Peki Haziran ayinda?",
+          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["GenelRandevuBolumAdi"], "date_column": "BaslangicTarihi", "date_start": "2025-06-01", "date_end": "2025-06-30", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
         }
       ]
     }

@@ -83,6 +83,7 @@ async def run_question(
         return run
 
     run.total_ms = (time.perf_counter() - start) * 1000
+    run.workflow_outcome = result.outcome
     run.generated_sql = result.generated_sql
     run.errors = list(result.errors or [])
     if result.query_result is not None:

@@ -304,7 +304,11 @@ def from_raw_text(question: str, department: str | None = None) -> AnalyticalSig
     so this stays the single source of department detection.
     """
     from app.semantics import catalog
-    from app.semantics.view_mapping import fold, resolve_status_filter
+    from app.semantics.view_mapping import (
+        fold,
+        resolve_negated_status_values,
+        resolve_status_filter,
+    )
 
     folded = fold(question)
 
@@ -334,6 +338,15 @@ def from_raw_text(question: str, department: str | None = None) -> AnalyticalSig
 
     status_predicate = resolve_status_filter(folded)
     status_value = _extract_status_value(status_predicate) if status_predicate else None
+    status_filters = [status_value] if status_value else []
+    if not status_filters:
+        # A bare negation ("gerçekleşmeyenler ?") carries no entity/date/metric
+        # of its own — populating status_filters here is what makes this
+        # non-empty, so ContextResolver recognizes it as a genuine follow-up
+        # instead of routing it to OUT_OF_SCOPE.
+        negated_values = resolve_negated_status_values(folded)
+        if negated_values:
+            status_filters = list(negated_values)
 
     return AnalyticalSignals(
         dimensions=dimensions,
@@ -342,7 +355,7 @@ def from_raw_text(question: str, department: str | None = None) -> AnalyticalSig
         limit=limit,
         time_grain=time_grain,
         comparison_targets=comparison_targets,
-        status_filters=[status_value] if status_value else [],
+        status_filters=status_filters,
         department_filters=[department] if department else [],
     )
 
@@ -623,6 +636,67 @@ def merge_query_plans(
             if value is not None:
                 updates[field_name] = value
         ratio_metric_replaced = current.analysis_type == "ratio"
+
+    # This turn's OWN status filter (positive or negated) can directly
+    # contradict a RETAINED conditional metric's embedded status condition
+    # ("gerçekleşen randevu sayısı" -> completed_appointment_count/Gerçekleşti,
+    # then "gerçekleşmeyenler ?" filters to the complement) — without this,
+    # the retained SUM(CASE WHEN RandevuDurumu='Gerçekleşti'...) formula
+    # silently combines with the new WHERE to compute a nonsensical zero.
+    # Only fires when THIS turn didn't already state its own metric
+    # (`"metrics" not in updates`) and actually introduced a status filter.
+    if "metrics" not in updates and turn_status_values:
+        contradicted = any(
+            (value := catalog.metric_status_value(metric_id)) is not None
+            and value not in turn_status_values
+            for metric_id in retained.metrics
+        )
+        if contradicted:
+            updates["metrics"] = ["appointment_count"]
+            updates["planned_metrics"] = []
+            updates["numerator"] = None
+            updates["denominator"] = None
+            # The retained aggregation formula is the contradicted metric's own
+            # SUM(CASE ...) — stale once the metric itself is reset; without
+            # this, PlanComplianceValidator demands that dead formula's SUM(...)
+            # in SQL that now only computes COUNT(*).
+            updates["aggregation"] = "COUNT(*)"
+
+    # The doctor->DoktorId column flip (_normalize) is premised on an
+    # appointment_count doctor COUNT. When the merged calculation keeps a
+    # non-count inherited metric (e.g. AVG duration), that premise is stale:
+    # the retained descriptive doctor column stays authoritative — unless the
+    # user explicitly asked for the id-level breakdown this turn.
+    merged_metrics = updates.get("metrics", list(retained.metrics))
+    merged_dimensions = updates.get("dimensions")
+    explicit_id_breakdown = any(
+        marker in folded for marker in ("bazinda", "bazli", "kirilim", "doktor id")
+    )
+    if (
+        merged_dimensions
+        and "DoktorId" in merged_dimensions
+        and "GenelRandevuKaynakAdi" in retained.dimensions
+        and "appointment_count" not in merged_metrics
+        and not explicit_id_breakdown
+    ):
+        restored = list(
+            dict.fromkeys(
+                "GenelRandevuKaynakAdi" if column == "DoktorId" else column
+                for column in merged_dimensions
+            )
+        )
+        updates["dimensions"] = restored
+        planned_by_column = {item.column: item for item in retained.planned_dimensions}
+        updates["planned_dimensions"] = [
+            planned_by_column[column] for column in restored if column in planned_by_column
+        ]
+        if "projection" in updates:
+            updates["projection"] = list(
+                dict.fromkeys(
+                    "GenelRandevuKaynakAdi" if column == "DoktorId" else column
+                    for column in updates["projection"]
+                )
+            )
 
     if current.ranking is not None:
         updates["ranking"] = current.ranking

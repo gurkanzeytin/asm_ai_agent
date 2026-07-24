@@ -90,6 +90,10 @@ class TemplateReportRenderer:
             query_result.rows
         ) == 1:
             return self._render_comparison(query_result.rows[0])
+        if {"current_entity_count", "baseline_entity_count"} <= columns and len(
+            query_result.rows
+        ) == 1:
+            return self._render_entity_comparison(query_result.rows[0])
         if "rate_point_change" in columns and len(query_result.rows) >= 1:
             return self._render_anomaly(query_result)
         return None
@@ -166,6 +170,50 @@ class TemplateReportRenderer:
                 f"- **{format_percent(percentage)}** — {label_for('percentage_change')}"
             )
         return TemplateRenderResult("Dönem Karşılaştırması", "\n".join(lines), "comparison")
+
+    def _render_entity_comparison(self, row: dict[str, Any]) -> TemplateRenderResult:
+        current = row.get("current_entity_count")
+        baseline = row.get("baseline_entity_count")
+        # Contract guard (comparison-contract rule): both conditional counts
+        # must exist, or the comparison presentation would mislead.
+        if not (isinstance(current, Number) and isinstance(baseline, Number)):
+            return TemplateRenderResult(
+                "Karşılaştırma Yapılamadı",
+                COMPARISON_CONTRACT_FALLBACK,
+                "comparison_fallback",
+            )
+        current_label = str(row.get("current_entity_label") or "Birinci grup")
+        baseline_label = str(row.get("baseline_entity_label") or "İkinci grup")
+        difference = float(current) - float(baseline)
+        # No-forced-winner rule: a tie is stated as a tie.
+        if difference > 0:
+            verdict = f"{current_label} daha yoğun"
+        elif difference < 0:
+            verdict = f"{baseline_label} daha yoğun"
+        else:
+            verdict = "iki grup eşit yoğunlukta"
+        summary = (
+            f"{current_label} için {format_number(current)} randevu, "
+            f"{baseline_label} için {format_number(baseline)} randevu kaydedildi; "
+            f"{verdict}."
+        )
+        lines = [
+            "# Karşılaştırma",
+            "",
+            summary,
+            "",
+            "## Temel Göstergeler",
+            "",
+            f"- **{format_number(current)}** — {current_label}",
+            f"- **{format_number(baseline)}** — {baseline_label}",
+            f"- **{format_number(abs(difference))}** — Fark",
+        ]
+        percentage = row.get("percentage_change")
+        if isinstance(percentage, Number):
+            lines.append(
+                f"- **{format_percent(percentage)}** — {label_for('percentage_change')}"
+            )
+        return TemplateRenderResult("Karşılaştırma", "\n".join(lines), "entity_comparison")
 
     def _render_anomaly(self, query_result: QueryResult) -> TemplateRenderResult:
         rows = [

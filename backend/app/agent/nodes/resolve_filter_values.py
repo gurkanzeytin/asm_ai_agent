@@ -10,6 +10,7 @@ from app.planning.value_resolver import (
     build_clarification_headline,
     build_clarification_message,
     extract_candidate_phrases,
+    extract_comparison_pair,
 )
 
 logger = logging.getLogger(__name__)
@@ -124,6 +125,51 @@ class ResolveFilterValuesNode(IAgentNode):
                     question=build_clarification_headline(resolved),
                     options=resolved.alternatives or [],
                 )
+
+        # Explicit two-value comparison ("Kardiyoloji ile Psikiyatri'yi
+        # karşılaştır"): both sides must ground on the SAME field; anything
+        # less is silently ignored — a guessed pair must never trigger a
+        # clarification or an invented filter.
+        pair = extract_comparison_pair(plan.question)
+        if pair is not None:
+            for field_name in ("department", "branch"):
+                if field_name in forced_overrides:
+                    continue
+                existing = resolved_filters.get(field_name)
+                if existing is not None and existing.grounded and len(existing.values) >= 2:
+                    continue
+                left = await self.resolver.resolve(field_name, pair[0])
+                right = await self.resolver.resolve(field_name, pair[1])
+                if not (
+                    left.grounded
+                    and right.grounded
+                    and left.matched_value
+                    and right.matched_value
+                ):
+                    continue
+                values = list(dict.fromkeys([left.matched_value, right.matched_value]))
+                resolved_filters[field_name] = ResolvedFilterPlan(
+                    field=field_name,
+                    values=values,
+                    source="grounded_value_resolver",
+                    confidence=min(left.confidence, right.confidence),
+                    grounded=True,
+                    match_type="comparison_pair",
+                    original_text=f"{pair[0]} / {pair[1]}",
+                    clarification_required=False,
+                )
+                if field_name == "branch":
+                    branch_filters = values
+                # The question IS a two-entity comparison: align the plan so
+                # the deterministic builder's entity-comparison path applies
+                # (one conditional-count row, no GROUP BY over composite text).
+                pair_plan_updates = {
+                    "analysis_type": "comparison",
+                    "dimensions": [],
+                    "planned_dimensions": [],
+                }
+                plan = plan.model_copy(update=pair_plan_updates)
+                break
 
         plan = plan.model_copy(
             update={"resolved_filters": resolved_filters, "branch_filters": branch_filters}

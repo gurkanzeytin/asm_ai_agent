@@ -4,6 +4,7 @@ import re
 from pydantic import BaseModel, Field
 
 from app.context.extractor import ContextExtractor
+from app.semantics import catalog
 from app.services.query_analyzer import QueryAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -160,6 +161,12 @@ class AnswerabilityGuard:
         has_dated_aggregate = bool(analysis.detected_dates) and bool(
             analysis.detected_operations
         )
+        # A question naming ANY known view column/metric by its business name
+        # or synonym is in-scope even with no recognized entity noun ("hasta",
+        # "randevu", ...) and no date+operation pair — e.g. "Kadın erkek
+        # oranını hesapla" names CinsiyetId but never says "hasta". Catches
+        # every column in column_intelligence.json, not just hand-picked ones.
+        has_catalog_signal = catalog.match_any_column_mention(folded_question)
 
         if has_resolved_domain_context:
             verdict, reason = True, "resolved_context_detected"
@@ -167,6 +174,8 @@ class AnswerabilityGuard:
             verdict, reason = True, "domain_entity_detected"
         elif has_dated_aggregate:
             verdict, reason = True, "dated_aggregate_detected"
+        elif has_catalog_signal:
+            verdict, reason = True, "catalog_column_mentioned"
         else:
             verdict, reason = False, "no_domain_signal"
 

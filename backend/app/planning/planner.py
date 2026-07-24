@@ -42,6 +42,19 @@ _DEPARTMENT_TABLE = "bolumler"
 # entity is mentioned explicitly, appointment volume is the implied fact.
 _VOLUME_RANKING_MARKERS = ("yogun", "en cok randevu", "en fazla randevu")
 
+# Generic superlative wording ("en yüksek 10 bölüm") — a ranking request, never
+# a raw record list, even though it carries both an order and a limit.
+_GENERIC_RANKING_MARKERS = ("en yuksek", "en iyi", "en kotu", "en basarili")
+
+# Distinct-count metrics whose counted concept can ALSO match a grouping
+# dimension from the same bare noun (both DoktorId and the descriptive source
+# column mean "doctor"). Used to drop the self-referential dimension on pure
+# "kaç X var" questions.
+_SELF_COUNT_DIMENSIONS: dict[str, set[str]] = {
+    "unique_doctor_count": {"GenelRandevuKaynakAdi", "DoktorId"},
+    "unique_patient_count": {"HastaId"},
+}
+
 _NEGATION_PATTERN = re.compile(r"\b(olmayan|bulunmayan|almayan)\w*\b|\bhic\b")
 
 # Generic organization-wide scope phrases ("tüm aile sağlığı merkezleri", "bütün
@@ -205,6 +218,21 @@ class QueryPlanner:
                 extra_filters = extra_filters + [status_filter]
             status_value = view_mapping.resolve_status_value(folded, view_name)
 
+            # Status negation ("gerçekleşmeyenler", "tamamlanmayan"): renders as
+            # an IN-list over the complement statuses — the SAME equality/IN
+            # rendering path already used for a positive status filter, never a
+            # new '<>' predicate. Mutually exclusive with the positive match
+            # above (a question naming both would be contradictory).
+            if not status_filter:
+                negated_status_values = view_mapping.resolve_negated_status_values(
+                    folded, view_name
+                )
+                if negated_status_values:
+                    negated_column = view_mapping.status_column(view_name)
+                    extra_filters = extra_filters + [
+                        f"{negated_column} = '{value}'" for value in negated_status_values
+                    ]
+
             intelligence = self._resolve_intelligence(
                 folded, analysis, projection, aggregation, ranking, status_value
             )
@@ -308,6 +336,22 @@ class QueryPlanner:
                 projection = list(intelligence["dimensions"])
             elif intelligence["projection"]:
                 projection = intelligence["projection"]
+            elif (
+                intelligence["dimensions"]
+                and intelligence["metrics"]
+                and projection
+                and projection[0] not in intelligence["dimensions"]
+            ):
+                # A grouped aggregate can only project its GROUP BY columns; a
+                # leftover concept display column from the bare noun mention
+                # ("Bölümlerin doktor sayıları" -> 'doktor' display column)
+                # would fail compliance against the deterministic SQL.
+                projection = list(intelligence["dimensions"])
+            if intelligence.get("scalar_distinct_count"):
+                # "Kaç doktor var?" answers with one scalar — the display
+                # column detected from the bare noun mention must not linger
+                # as a projection the compliance validator would then demand.
+                projection = []
 
             periods = self._comparison_periods(
                 analysis,
@@ -494,6 +538,16 @@ class QueryPlanner:
                     metrics = candidates
         date_range_count = len(analysis.detected_dates)
         pattern = catalog.match_pattern(folded, date_range_count)
+
+        # "X orani" text alone pattern-matches to "ratio" even when no specific
+        # ratio metric (numerator/denominator) exists for it - e.g. "kadin
+        # erkek orani" has no percent-of-total metric defined, unlike
+        # "gerceklesme orani". Without a matched metric, "ratio" has nothing to
+        # compute; fall back to a grouped distribution over the resolved
+        # dimension instead of emitting an unanswerable empty-metric plan.
+        if pattern == "ratio" and not metrics and dimensions:
+            pattern = "distribution"
+
         granularity = catalog.match_granularity(folded)
         comparisons = catalog.detect_period_comparison(folded, date_range_count)
 
@@ -576,6 +630,27 @@ class QueryPlanner:
             if primary.fixed_dimension and primary.fixed_dimension not in dimensions:
                 dimensions = dimensions + [primary.fixed_dimension]
 
+        # A pure "kaç X var" distinct count counts the SAME concept whose bare
+        # noun mention would otherwise become a grouping dimension ("Kaç doktor
+        # var?" -> 'doktor' also matched GenelRandevuKaynakAdi). Without
+        # explicit grouping wording the dimension is an artifact of the
+        # mention, not a requested breakdown — drop it so the question answers
+        # with a single scalar instead of hundreds of per-group rows.
+        scalar_distinct_count = False
+        if (
+            primary is not None
+            and primary.formula_type == "count_distinct"
+            and not any(
+                marker in folded
+                for marker in ("gore", "bazinda", "bazli", "kirilim", "dagilim")
+            )
+        ):
+            self_columns = set(primary.required_columns) | _SELF_COUNT_DIMENSIONS.get(
+                primary.id, set()
+            )
+            dimensions = [d for d in dimensions if d not in self_columns]
+            scalar_distinct_count = not dimensions
+
         # The final metric catalog definition is the sole source of truth for
         # aggregation: whenever a primary metric with a formula was matched,
         # its formula supersedes any earlier generic aggregation guess —
@@ -609,6 +684,10 @@ class QueryPlanner:
         return {
             "metrics": metrics,
             "dimensions": dimensions,
+            # Scalar distinct count ("Kaç doktor var?"): the answer is one
+            # number; any concept display column detected from the bare noun
+            # must not survive as a projection either.
+            "scalar_distinct_count": scalar_distinct_count,
             "analysis_type": pattern,
             "numerator": numerator,
             "denominator": denominator,
@@ -649,7 +728,11 @@ class QueryPlanner:
             return False
         if any(operation in analysis.detected_operations for operation in ("COUNT", "SUM", "AVG")):
             return False
-        ranking_markers = (*_VOLUME_RANKING_MARKERS, *_ASCENDING_MARKERS)
+        ranking_markers = (
+            *_VOLUME_RANKING_MARKERS,
+            *_ASCENDING_MARKERS,
+            *_GENERIC_RANKING_MARKERS,
+        )
         if any(marker in folded_question for marker in ranking_markers):
             return False
         if analysis.detected_order and analysis.detected_limit:
@@ -1028,7 +1111,14 @@ def format_plan_for_prompt(plan: QueryPlan) -> str:
             values = ", ".join(f"'{value}'" for value in resolved.values)
             lines.append(f"- Filter: {column} IN ({values})")
     if plan.department_filter:
-        lines.append(f"- Filter: department name = '{plan.department_filter}'")
+        # GenelRandevuBolumAdi holds comma-separated composites ("Genel
+        # Cerrahi, Ameliyathane, ") — equality on the raw value never matches.
+        lines.append(
+            "- Filter: department (GenelRandevuBolumAdi is comma-separated; use "
+            "delimiter-bounded containment): "
+            f"',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' "
+            f"LIKE N'%,{plan.department_filter},%'"
+        )
     for extra in plan.extra_filters:
         lines.append(f"- Filter: {extra}")
     if plan.aggregation:

@@ -161,6 +161,14 @@
       "beklemede": "Beklemede",
       "giris yapilmis": "Giriş Yapılmış",
       "islem surmekte": "İşlem Sürmekte"
+    },
+    "negated_status_filters": {
+      "gerceklesmeyenlerin": "Gerçekleşti",
+      "gerceklesmeyenler": "Gerçekleşti",
+      "gerceklesmeyen": "Gerçekleşti",
+      "gerceklesmemis": "Gerçekleşti",
+      "tamamlanmayanlar": "Gerçekleşti",
+      "tamamlanmayan": "Gerçekleşti"
     }
   }
 }

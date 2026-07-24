@@ -39,6 +39,8 @@ METRIC_LABELS_TR: dict[str, str] = {
     "percentage_change": "Yüzdesel Değişim",
     "rate_point_change": "Oran Farkı",
     "unique_patient_count": "Tekil Hasta Sayısı",
+    "unique_doctor_count": "Tekil Doktor Sayısı",
+    "comparison_total_count": "Karşılaştırma Toplamı",
     "group_count": "Grup Sayısı",
     "total_appointments": "Toplam Randevu",
     "average_appointments": "Ortalama Randevu",

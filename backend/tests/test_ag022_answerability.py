@@ -80,6 +80,55 @@ class TestAnswerabilityGuard:
     @pytest.mark.parametrize(
         "question",
         [
+            "Kadın erkek oranını hesapla",
+            "Cinsiyet oranı nedir?",
+            "Kadın erkek sayısını göster",
+            "Kaç kadın kaç erkek hasta var?",
+        ],
+    )
+    def test_gender_only_questions_are_answerable(self, question):
+        """Gender words alone (no explicit 'hasta'/'randevu' noun) used to have
+        zero domain signal and route to out-of-scope, even though CinsiyetId is
+        an in-view demographic column (2026-07-24)."""
+        assert self.guard.assess(question).answerable
+
+    @pytest.mark.parametrize(
+        "question",
+        [
+            "Süre dağılımı nasıl?",
+            "Tip dağılımını göster",
+            "Kategori dağılımı nedir?",
+            "Kaydedilen sayısı kaç?",
+            "İşlem durumu dağılımını göster",
+            "Kabul tarihine göre dağılım",
+            "Bitiş saatlerine göre dağılım",
+            "Kayıt no bazında dağılım",
+        ],
+    )
+    def test_bare_column_mentions_are_answerable(self, question):
+        """Any of the 24 view columns (column_intelligence.json), named by its
+        own synonym alone with no 'hasta'/'randevu' entity noun, must be
+        in-scope — the user must be able to ask about every column in the
+        table, not just the ones with an explicit entity word (2026-07-24).
+        Covered via catalog.match_any_column_mention, not a hand-picked list."""
+        assert self.guard.assess(question).answerable
+
+    @pytest.mark.parametrize(
+        "question",
+        [
+            "Bugün hava nasıl olacak?",
+            "Bitcoin fiyatı ne kadar?",
+            "asdf qwerty lorem ipsum",
+        ],
+    )
+    def test_catalog_signal_does_not_widen_out_of_scope_questions(self, question):
+        """The broad catalog-mention check must not make genuinely unrelated
+        questions answerable — guards against overly loose term matching."""
+        assert not self.guard.assess(question).answerable
+
+    @pytest.mark.parametrize(
+        "question",
+        [
             "Bugün hava nasıl olacak?",
             "Bitcoin fiyatı ne kadar?",
             "Bana bir şiir yazar mısın?",
@@ -271,6 +320,53 @@ class TestOutOfScopeNode:
         assert "salt-okunur" in markdown
         assert "üretemem" in markdown
         assert "COUNT(*)" not in markdown
+
+    @pytest.mark.asyncio
+    async def test_context_loss_shows_short_message_not_capability_dump(self):
+        """A bare follow-up that failed to link to a VALID prior conversational
+        context ("gerçekleşmeyenler ?" right after a working analytical turn)
+        must not read as 'the system doesn't understand appointments' — the
+        real problem is narrower (lost the thread of THIS turn)."""
+        from app.services.answerability import AnswerabilityInput
+
+        node = GenerateOutOfScopeNode()
+        state = await node.execute(
+            AgentState(
+                question="gerçekleşmeyenler ?",
+                answerability_input=AnswerabilityInput(
+                    raw_question="gerçekleşmeyenler ?",
+                    resolved_question="gerçekleşmeyenler ?",
+                    has_valid_prior_context=True,
+                ),
+            )
+        )
+        assert state.outcome == AgentOutcome.OUT_OF_SCOPE.value
+        markdown = state.generated_report.markdown
+        assert "Bağlantı Kurulamadı" in markdown
+        assert "Örnek sorular" not in markdown
+        assert "Ölçümler" not in markdown
+
+    @pytest.mark.asyncio
+    async def test_no_prior_context_still_shows_full_capability_dump(self):
+        """A genuinely unrelated question ('Bitcoin fiyatı?') with no prior
+        conversational context must keep the full capability guidance —
+        that's the useful case for a truly lost user."""
+        from app.services.answerability import AnswerabilityInput
+
+        node = GenerateOutOfScopeNode()
+        state = await node.execute(
+            AgentState(
+                question="Bitcoin fiyatı?",
+                answerability_input=AnswerabilityInput(
+                    raw_question="Bitcoin fiyatı?",
+                    resolved_question="Bitcoin fiyatı?",
+                    has_valid_prior_context=False,
+                ),
+            )
+        )
+        markdown = state.generated_report.markdown
+        assert "Örnek sorular" in markdown
+        assert "Bağlantı Kurulamadı" not in markdown
 
 
 # ─────────────────────────────────────────────

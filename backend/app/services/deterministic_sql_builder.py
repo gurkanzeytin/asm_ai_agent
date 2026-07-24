@@ -41,6 +41,7 @@ SUPPORTED_ANALYSIS_TYPES = {
     "list",
     "adaptive_time_comparison",
     "percentage_change",
+    "comparison",
 }
 
 VIEW = "dbo.vw_RandevuRaporu"
@@ -55,6 +56,10 @@ VERIFIED_STATUS_VALUES = {
     "waiting": "Beklemede",
 }
 DATE_COLUMN = "BaslangicTarihi"
+# GenelRandevuBolumAdi stores comma-separated composites ("Genel Cerrahi,
+# Ameliyathane, "); equality on the raw value never matches a single
+# department, so its predicates are rendered as delimiter-bounded containment.
+DEPARTMENT_COLUMN = "GenelRandevuBolumAdi"
 FILTER_COLUMNS = {
     *(column for column, _tier in FIELD_COLUMNS.values()),
     "DoktorId",
@@ -109,6 +114,8 @@ class DeterministicSQLBuilder:
             "percentage_change",
         }:
             return self._period_comparison(plan, adaptive_retry=adaptive_retry)
+        if analysis_type == "comparison":
+            return self._entity_comparison(plan)
         if analysis_type == "anomaly_comparison":
             return self._anomaly(plan, adaptive_retry=adaptive_retry)
         if analysis_type == "variance_analysis":
@@ -300,6 +307,84 @@ class DeterministicSQLBuilder:
             sql=sql, result_schema="PeriodComparisonResult", expected_aliases=aliases
         )
 
+    def _entity_comparison(self, plan: QueryPlan) -> DeterministicSQL | UnsupportedPlan:
+        """Two-entity comparison ("Kardiyoloji ile Psikiyatri'yi karşılaştır"):
+        one conditional-count row per grounded pair value. Only ever built from
+        a grounded resolved pair (AI-INTELLIGENCE-016 comparison_pair) — a
+        comparison plan without one falls through to the LLM path."""
+        pair = self._grounded_pair(plan)
+        if pair is None:
+            return UnsupportedPlan(
+                "comparison plan without a grounded two-value entity pair"
+            )
+        field_name, values = pair
+        current_value, baseline_value = values[0], values[1]
+        current_condition = self._entity_condition(field_name, current_value)
+        baseline_condition = self._entity_condition(field_name, baseline_value)
+        current_expr = f"SUM(CASE WHEN {current_condition} THEN 1 ELSE 0 END)"
+        baseline_expr = f"SUM(CASE WHEN {baseline_condition} THEN 1 ELSE 0 END)"
+        current_label = current_value.replace("'", "''")
+        baseline_label = baseline_value.replace("'", "''")
+
+        # The pair conditions live in the CASE expressions; the WHERE keeps the
+        # remaining plan constraints (dates, status, ...) plus an either-entity
+        # restriction so COUNT(*) means "rows in this comparison".
+        pruned = self._without_pair_filters(plan, field_name)
+        where = self._where(pruned)
+        either = f"({current_condition} OR {baseline_condition})"
+        where = (
+            f"{where.rstrip()} AND {either}\n" if where else f"WHERE {either}\n"
+        )
+
+        select = (
+            f"N'{current_label}' AS current_entity_label, "
+            f"N'{baseline_label}' AS baseline_entity_label, "
+            f"COUNT(*) AS comparison_total_count, "
+            f"{current_expr} AS current_entity_count, "
+            f"{baseline_expr} AS baseline_entity_count, "
+            f"({current_expr}) - ({baseline_expr}) AS absolute_change, "
+            f"100.0 * (({current_expr}) - ({baseline_expr})) / NULLIF(({baseline_expr}), 0) AS percentage_change"
+        )
+        sql = f"SELECT {select}\nFROM {VIEW}\n{where};"
+        aliases = [
+            "current_entity_label",
+            "baseline_entity_label",
+            "comparison_total_count",
+            "current_entity_count",
+            "baseline_entity_count",
+            "absolute_change",
+            "percentage_change",
+        ]
+        return DeterministicSQL(
+            sql=sql, result_schema="EntityComparisonResult", expected_aliases=aliases
+        )
+
+    def _grounded_pair(self, plan: QueryPlan) -> tuple[str, list[str]] | None:
+        for field_name in ("department", "branch"):
+            resolved = plan.resolved_filters.get(field_name)
+            if resolved is not None and resolved.grounded and len(resolved.values) >= 2:
+                return field_name, list(resolved.values[:2])
+        return None
+
+    def _entity_condition(self, field_name: str, value: str) -> str:
+        if field_name == "department":
+            cleaned = value.strip().strip(",").strip()
+            normalized_column = f"',' + REPLACE({DEPARTMENT_COLUMN}, ', ', ',') + ','"
+            return f"{normalized_column} LIKE {self._unicode_literal(f'%,{cleaned},%')}"
+        column, _tier = FIELD_COLUMNS.get(field_name, (None, None))
+        return f"{column} = {self._unicode_literal(value)}"
+
+    def _without_pair_filters(self, plan: QueryPlan, field_name: str) -> QueryPlan:
+        resolved = {
+            key: value for key, value in plan.resolved_filters.items() if key != field_name
+        }
+        updates: dict = {"resolved_filters": resolved}
+        if field_name == "department":
+            updates["department_filter"] = None
+        if field_name == "branch":
+            updates["branch_filters"] = []
+        return plan.model_copy(update=updates)
+
     def _anomaly(
         self, plan: QueryPlan, *, adaptive_retry: bool
     ) -> DeterministicSQL | UnsupportedPlan:
@@ -485,10 +570,18 @@ class DeterministicSQLBuilder:
         carry the same grounded constraint.
         """
         values_by_column: dict[str, list[str]] = {}
+        department_values: list[str] = []
         residual_filters: list[str] = []
 
-        def add(column: str, literal: str) -> None:
+        def add(column: str, literal: str, raw_text: str | None = None) -> None:
             if column not in FILTER_COLUMNS:
+                return
+            if column == DEPARTMENT_COLUMN and raw_text is not None:
+                # Composite column: collect the raw atomic value; rendered as a
+                # containment predicate below, never as =/IN on the raw string.
+                cleaned = raw_text.strip().strip(",").strip()
+                if cleaned and cleaned not in department_values:
+                    department_values.append(cleaned)
                 return
             values = values_by_column.setdefault(column, [])
             if literal not in values:
@@ -497,7 +590,11 @@ class DeterministicSQLBuilder:
         for value in plan.branch_filters:
             add("SubeAdi", self._unicode_literal(value))
         if plan.department_filter:
-            add("GenelRandevuBolumAdi", self._unicode_literal(plan.department_filter))
+            add(
+                DEPARTMENT_COLUMN,
+                self._unicode_literal(plan.department_filter),
+                raw_text=plan.department_filter,
+            )
 
         for field_name, resolved in plan.resolved_filters.items():
             if not resolved.grounded or not resolved.values:
@@ -506,13 +603,13 @@ class DeterministicSQLBuilder:
             if column is None:
                 continue
             for value in resolved.values:
-                add(column, self._unicode_literal(value))
+                add(column, self._unicode_literal(value), raw_text=value)
 
         for extra in plan.extra_filters:
             parsed = self._parse_simple_filter(extra)
             if parsed is not None:
                 column, literal = parsed
-                add(column, literal)
+                add(column, literal, raw_text=self._literal_text(literal))
             elif self._safe_filter(extra):
                 # Preserve legacy non-structured constraints (for example the
                 # existing negation planner hint). They are not duplicated with
@@ -525,7 +622,30 @@ class DeterministicSQLBuilder:
                 rendered.append(f"{column} = {literals[0]}")
             else:
                 rendered.append(f"{column} IN ({', '.join(literals)})")
+        if department_values:
+            rendered.append(self._department_containment(department_values))
         return [*rendered, *residual_filters]
+
+    def _department_containment(self, values: list[str]) -> str:
+        """Delimiter-bounded containment predicate over the composite department
+        column: ',Kardiyoloji,' matches the atomic element exactly, so
+        'Kardiyoloji' never matches 'Çocuk Kardiyolojisi'."""
+        normalized_column = f"',' + REPLACE({DEPARTMENT_COLUMN}, ', ', ',') + ','"
+        predicates = [
+            f"{normalized_column} LIKE {self._unicode_literal(f'%,{value},%')}"
+            for value in values
+        ]
+        if len(predicates) == 1:
+            return predicates[0]
+        return "(" + " OR ".join(predicates) + ")"
+
+    @staticmethod
+    def _literal_text(literal: str) -> str | None:
+        """Extracts the raw text from an N'...'/'...' literal; None for numbers."""
+        match = re.fullmatch(r"N?'(?P<text>(?:''|[^'])*)'", literal)
+        if match is None:
+            return None
+        return match.group("text").replace("''", "'")
 
     def _parse_simple_filter(self, expression: str) -> tuple[str, str] | None:
         match = _SIMPLE_FILTER.fullmatch(expression)

@@ -17,6 +17,25 @@ _EXAMPLE_QUESTIONS = (
 _UNSAFE_WRITE_SIGNAL_PREFIX = "unsafe_write_intent:"
 
 
+def _context_loss_markdown() -> str:
+    """Shown instead of the full capability dump when a valid conversational
+    context exists but this turn's wording didn't link to it (e.g. a bare
+    follow-up phrase the NLU couldn't anchor). The user just had a working
+    conversation — dumping the entire capability list here reads as a wrong
+    diagnosis ("the system doesn't understand appointments") when the real
+    problem is narrower ("it lost the thread of THIS specific follow-up)."""
+    return "\n".join(
+        [
+            "# Önceki Soruyla Bağlantı Kurulamadı",
+            "",
+            "Bu soruyu önceki mesajınızla ilişkilendiremedim.",
+            "",
+            "Hangi konuyu (randevu, doktor, bölüm, şube...) veya hangi filtreyi "
+            "kastettiğinizi biraz daha açık belirtebilir misiniz?",
+        ]
+    )
+
+
 def _unsafe_write_markdown() -> str:
     return "\n".join(
         [
@@ -107,13 +126,26 @@ class GenerateOutOfScopeNode(IAgentNode):
                 }
             )
 
-        report_dto = GeneratedReport(
-            title="Veri Kapsamı Dışında",
-            markdown=_build_capability_markdown(),
-            provider="static",
-            model="out_of_scope_node",
-            latency_ms=0.0,
+        has_valid_prior_context = bool(
+            state.answerability_input is not None
+            and state.answerability_input.has_valid_prior_context
         )
+        if has_valid_prior_context:
+            report_dto = GeneratedReport(
+                title="Bağlam Bulunamadı",
+                markdown=_context_loss_markdown(),
+                provider="static",
+                model="out_of_scope_context_loss",
+                latency_ms=0.0,
+            )
+        else:
+            report_dto = GeneratedReport(
+                title="Veri Kapsamı Dışında",
+                markdown=_build_capability_markdown(),
+                provider="static",
+                model="out_of_scope_node",
+                latency_ms=0.0,
+            )
 
         duration = (time.perf_counter() - start_time) * 1000
         logger.info(

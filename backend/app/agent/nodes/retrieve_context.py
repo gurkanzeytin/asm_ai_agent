@@ -49,6 +49,7 @@ class RetrieveContextNode(IAgentNode):
             planning_question = state.raw_question or state.question
             planning_frame = None if state.context_follow_up_detected else state.semantic_frame
             query_plan = self._build_plan(planning_question, db_context, planning_frame)
+            current_turn_has_date = bool(query_plan.date_filters) if query_plan else False
             if query_plan is not None:
                 query_plan = merge_query_plans(
                     current=query_plan,
@@ -82,6 +83,25 @@ class RetrieveContextNode(IAgentNode):
                             raw_question=planning_question,
                             follow_up_detected=state.context_follow_up_detected,
                         )
+                    )
+
+            # A follow-up plans from the raw text ("Peki Temmuz ayında?") so the
+            # merge only sees this turn's explicit signals — but a bare month
+            # there carries no year and defaults to today's. The context
+            # resolver already re-anchored the year inside the resolved
+            # question ("2025 temmuz ..."), so its date span is authoritative.
+            # Only applies when this turn itself mentions a date; otherwise the
+            # merge-inherited filter (incl. its column choice) must survive.
+            if (
+                query_plan is not None
+                and current_turn_has_date
+                and state.context_follow_up_detected
+                and state.question != planning_question
+            ):
+                resolved_plan = self._build_plan(state.question, db_context, None)
+                if resolved_plan is not None and resolved_plan.date_filters:
+                    query_plan = query_plan.model_copy(
+                        update={"date_filters": list(resolved_plan.date_filters)}
                     )
 
             logger.info("RetrieveContextNode completed successfully.")

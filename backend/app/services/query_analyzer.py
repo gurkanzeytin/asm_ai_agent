@@ -630,9 +630,20 @@ class QueryAnalyzer:
             start = self._shift_months(today, years * 24)
             ranges.append(self._date_range(match.group(0), start, end, "year"))
 
+        bare_months_seen: set[int] = set()
         for month_name, month in _MONTHS.items():
-            if re.search(rf"\b{self._strip_diacritics(month_name)}\s+ayinda\b", query_ascii):
+            if month in bare_months_seen:
+                continue
+            for match in re.finditer(
+                rf"\b{self._strip_diacritics(month_name)}\s+ayinda\b", query_ascii
+            ):
+                if self._overlaps_any(
+                    match.span(), explicit_date_spans + month_year_spans
+                ):
+                    continue
+                bare_months_seen.add(month)
                 ranges.append(self._month_range(f"{month_name} ayinda", today.year, month))
+                break
 
         # Full calendar years, including Turkish case/possessive forms used by
         # short follow-ups (``2024 yılının``, ``2024 yılı``, ``2024 için``,

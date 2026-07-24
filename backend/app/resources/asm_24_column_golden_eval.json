@@ -49,8 +49,8 @@
       "id": "ASM24-007",
       "question": "Kac farkli hasta randevu almis?",
       "covered_columns": ["HastaId"],
-      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "distinct_count", "metrics": ["unique_patient_count"], "dimensions": ["HastaId"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
-      "sql": {"must_include": ["COUNT(DISTINCT HastaId)"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+      "expected": {"answerable": true, "clarification_required": false, "analysis_type": "distinct_count", "metrics": ["unique_patient_count"], "dimensions": [], "response_mode": null, "visible_sections": [], "sql_should_build": true},
+      "sql": {"must_include": ["COUNT(DISTINCT HastaId)"], "must_not_include": ["HastaAdi", "HastaSoyadi", "GROUP BY"]}
     },
     {
       "id": "ASM24-008",
