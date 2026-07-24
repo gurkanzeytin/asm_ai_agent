@@ -417,6 +417,22 @@ def test_gender_ratio_with_no_matched_metric_falls_back_to_distribution(
     assert "CinsiyetId" in plan.dimensions
 
 
+def test_ratio_with_no_dimension_falls_back_to_count(planner, analyzer):
+    """A '<value>in payi/orani' phrasing with no grouping dimension resolved
+    (e.g. a named channel/value rather than 'X'e gore') used to reach the SQL
+    builder as analysis_type 'ratio' with only the generic appointment_count
+    fallback metric and no numerator/denominator - PlanComplianceValidator
+    then rejected the SQL for missing a NULLIF division-by-zero guard that
+    was never generated, producing SAFE_ERROR (2026-07-24 live multi-turn
+    testing: "Online randevularin toplam icindeki payi nedir"). With no
+    dimension to group by either, this must degrade to a plain scalar count
+    instead of distribution."""
+    plan = plan_for(planner, analyzer, "Online randevuların toplam içindeki payı nedir")
+    assert plan.analysis_type == "count"
+    assert plan.metrics == ["appointment_count"]
+    assert plan.dimensions == []
+
+
 def test_named_ratio_metric_is_unaffected_by_distribution_fallback(planner, analyzer):
     """A phrase that DOES match a specific ratio metric keeps analysis_type
     'ratio' with its numerator/denominator - only the empty-metric case

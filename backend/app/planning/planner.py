@@ -599,14 +599,35 @@ class QueryPlanner:
         ):
             dimensions = ["CinsiyetId"]
 
-        # "X orani" text alone pattern-matches to "ratio" even when no specific
-        # ratio metric (numerator/denominator) exists for it - e.g. "kadin
-        # erkek orani" has no percent-of-total metric defined, unlike
-        # "gerceklesme orani". Without a matched metric, "ratio" has nothing to
-        # compute; fall back to a grouped distribution over the resolved
-        # dimension instead of emitting an unanswerable empty-metric plan.
-        if pattern == "ratio" and not metrics and dimensions:
-            pattern = "distribution"
+        # "X orani"/"payi" text alone pattern-matches to "ratio" even when no
+        # specific ratio metric (numerator/denominator) exists for it - e.g.
+        # "kadin erkek orani" has no percent-of-total metric defined, unlike
+        # "gerceklesme orani" (which matches a real numerator/denominator
+        # metric and is left untouched below). Without a real ratio metric,
+        # "ratio" has nothing to divide; fall back to a grouped distribution
+        # over the resolved dimension, or a plain count when no dimension
+        # resolved either, instead of emitting a ratio plan the SQL builder
+        # cannot satisfy.
+        #
+        # `metrics == ["appointment_count"]` (rather than "any matched
+        # metric") is the deliberate signal here: appointment_count is the
+        # generic volume fallback with no real ratio behind it, so this also
+        # catches a channel-share question ("online randevularin payi
+        # nedir") that matches only that fallback and reaches
+        # PlanComplianceValidator with no NULLIF in the generated SQL ->
+        # SAFE_ERROR (found via live multi-turn testing, 2026-07-24). A
+        # question that instead matches a real, non-generic metric (e.g.
+        # "kadin ve erkek hastalarin oranini goster" -> unique_patient_count)
+        # must keep "ratio" even without a catalog numerator/denominator,
+        # because app.context.analytical_signals._normalize_query_plan
+        # attaches a female_to_male_ratio derived_calculation for that exact
+        # shape further down the pipeline, keyed on `plan.analysis_type ==
+        # "ratio"` - downgrading it here would make that enrichment's own
+        # precondition never fire. A true share-of-total computation for an
+        # arbitrary named value (the channel-share case) is a separate,
+        # larger feature - not yet implemented.
+        if pattern == "ratio" and (not metrics or metrics == ["appointment_count"]):
+            pattern = "distribution" if dimensions else "count"
 
         granularity = catalog.match_granularity(folded)
         comparisons = catalog.detect_period_comparison(folded, date_range_count)
