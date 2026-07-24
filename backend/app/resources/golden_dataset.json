@@ -821,7 +821,7 @@
       "question": "Kaç farklı doktora randevu verilmiş?",
       "analysis_type": "distinct_count",
       "metrics": [
-        "appointment_count"
+        "unique_doctor_count"
       ],
       "dimensions": [],
       "required_columns": [

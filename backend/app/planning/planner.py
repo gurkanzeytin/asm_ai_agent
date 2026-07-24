@@ -788,7 +788,10 @@ class QueryPlanner:
             return False
         if analysis.detected_order and analysis.detected_limit:
             return True
-        if any(marker in folded_question for marker in ("gore", "bazinda", "dagilim", "oran")):
+        if any(
+            marker in folded_question
+            for marker in ("gore", "bazinda", "dagilim", "oran", "kirilim")
+        ):
             return False
         if any(
             marker in folded_question

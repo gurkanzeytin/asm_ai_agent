@@ -672,7 +672,8 @@
         "gelmeme orani",
         "no show orani",
         "gelmeyenlerin orani",
-        "yuzde kaci gelmedi"
+        "yuzde kaci gelmedi",
+        "yuzde kacina gelinmedi"
       ],
       "compatible_dimensions_group": "standard",
       "default_time_column": "BaslangicTarihi",
