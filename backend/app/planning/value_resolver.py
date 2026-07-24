@@ -541,13 +541,39 @@ def extract_comparison_pair(question: str) -> tuple[str, str] | None:
             )
         )
 
-    # Pattern A: "<X> ile <Y>"
+    def _phrase_back(end_index: int) -> str | None:
+        """Walks backward from end_index, collecting a multi-word proper-noun
+        phrase ("Kadın Doğum", "Genel Cerrahi") instead of a single token —
+        without this, a two-word entity name is silently truncated to its
+        last word only, which then fails to ground and drops the whole
+        comparison (2026-07-24, found via live multi-turn testing: "Ortopedi
+        ile Kadın Doğum'u karşılaştır" degraded to a plain OR'd department
+        filter instead of an entity comparison)."""
+        phrase: list[str] = []
+        j = end_index
+        while j >= 0 and len(phrase) < _MAX_PHRASE_TOKENS and _is_candidate(j):
+            phrase.insert(0, cleaned[j])
+            j -= 1
+        return " ".join(phrase) if phrase else None
+
+    def _phrase_forward(start_index: int) -> str | None:
+        """Mirror of `_phrase_back` for the right-hand side of "ile"."""
+        phrase: list[str] = []
+        j = start_index
+        while j < len(cleaned) and len(phrase) < _MAX_PHRASE_TOKENS and _is_candidate(j):
+            phrase.append(cleaned[j])
+            j += 1
+        return " ".join(phrase) if phrase else None
+
+    # Pattern A: "<X...> ile <Y...>"
     for index, folded_token in enumerate(folded_tokens):
         if folded_token == "ile" and 0 < index < len(cleaned) - 1:
-            if _is_candidate(index - 1) and _is_candidate(index + 1):
-                return cleaned[index - 1], cleaned[index + 1]
+            left = _phrase_back(index - 1)
+            right = _phrase_forward(index + 1)
+            if left and right:
+                return left, right
 
-    # Pattern B: "<X> mi <Y> mi"
+    # Pattern B: "<X...> mi <Y...> mi"
     question_particles = [
         index
         for index, folded_token in enumerate(folded_tokens)
@@ -556,8 +582,10 @@ def extract_comparison_pair(question: str) -> tuple[str, str] | None:
     if len(question_particles) >= 2:
         first, second = question_particles[0], question_particles[1]
         if first > 0 and second > first + 1:
-            if _is_candidate(first - 1) and _is_candidate(second - 1):
-                return cleaned[first - 1], cleaned[second - 1]
+            left = _phrase_back(first - 1)
+            right = _phrase_back(second - 1)
+            if left and right:
+                return left, right
 
     return None
 

@@ -104,6 +104,35 @@ class TestComparisonPair:
     def test_lowercase_mentions_are_ignored(self):
         assert extract_comparison_pair("dün ile bugünü karşılaştır") is None
 
+    def test_ile_pattern_multi_word_right_side(self):
+        # 2026-07-24 live bug: the right side used to be truncated to a single
+        # token ("Kadın"), which then failed to ground against the real
+        # two-word department "Kadın Doğum" and silently dropped the whole
+        # comparison.
+        pair = extract_comparison_pair("Ortopedi ile Kadın Doğum'u karşılaştır.")
+        assert pair == ("Ortopedi", "Kadın Doğum")
+
+    def test_ile_pattern_multi_word_left_and_right(self):
+        pair = extract_comparison_pair(
+            "Kardiyoloji ile Çocuk Kardiyolojisi'ni randevu sayısı bakımından karşılaştır"
+        )
+        assert pair == ("Kardiyoloji", "Çocuk Kardiyolojisi")
+
+    def test_ile_pattern_stops_at_department_cue_word(self):
+        # The multi-word walk must not swallow a trailing cue noun like
+        # "Bölümü" — "bolum" is a _NEVER_CANDIDATE_ROOTS entry precisely so it
+        # never gets treated as part of the entity name itself.
+        pair = extract_comparison_pair(
+            "Kardiyoloji ile Psikiyatri Bölümü'nü karşılaştır."
+        )
+        assert pair == ("Kardiyoloji", "Psikiyatri")
+
+    def test_mi_pattern_multi_word(self):
+        pair = extract_comparison_pair(
+            "Hangisi daha yoğun: Ortopedi mi Kadın Doğum mu?"
+        )
+        assert pair == ("Ortopedi", "Kadın Doğum")
+
 
 # ── deterministic builder: containment predicate ────────────────────────────
 
