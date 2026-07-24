@@ -69,7 +69,11 @@ export function buildChartData(
   if (!xKey || !yKey) return [];
   const points = validPoints(rows, xKey, yKey);
 
-  if (type === "line") return sortLinePoints(points).slice(0, MAX_LINE_ITEMS);
+  // Keep the MOST RECENT points, not the earliest - `sortLinePoints` returns
+  // ascending order, so `slice(0, N)` would silently drop the newest,
+  // decision-relevant end of a long trend (e.g. a full year of daily counts
+  // truncated to just its first ~40 days) and keep only ancient history.
+  if (type === "line") return sortLinePoints(points).slice(-MAX_LINE_ITEMS);
 
   const aggregated = aggregate(points);
   if (type === "bar") {

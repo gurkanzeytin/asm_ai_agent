@@ -41,6 +41,25 @@ describe("SQL grafik veri hazırlama", () => {
     ]);
   });
 
+  it("line grafikte 40'tan fazla noktada EN GÜNCEL noktaları tutar, en eskileri değil", () => {
+    // A full year of daily counts (365 points) must keep the tail end (most
+    // recent, decision-relevant days), not silently truncate to just the
+    // first ~40 days of the year (2026-07-24 regression: slice(0, N) after
+    // an ascending sort kept the OLDEST points instead of the newest).
+    const rows = Array.from({ length: 60 }, (_, index) => {
+      const date = new Date(Date.UTC(2026, 0, 1 + index));
+      return { gun: date.toISOString().slice(0, 10), randevu: index };
+    });
+
+    const result = buildChartData(rows, "gun", "randevu", "line");
+
+    expect(result).toHaveLength(40);
+    // The kept window must be the tail (highest values, since `randevu`
+    // increases monotonically with the date index) - not the head.
+    expect(result[0].value).toBe(20);
+    expect(result.at(-1)?.value).toBe(59);
+  });
+
   it("pie grafikte pozitif dilimleri tutar ve kalanları Diğer altında toplar", () => {
     const rows = Array.from({ length: 10 }, (_, index) => ({
       kategori: `K${index + 1}`,
