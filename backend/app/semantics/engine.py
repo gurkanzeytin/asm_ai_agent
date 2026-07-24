@@ -3,7 +3,7 @@ import time
 
 from app.application_models.query_analysis import QueryAnalysis
 from app.context.extractor import ContextExtractor
-from app.semantics import ontology
+from app.semantics import catalog, ontology
 from app.semantics.models import (
     SemanticAmbiguity,
     SemanticConstraint,
@@ -224,10 +224,18 @@ class SemanticUnderstandingEngine:
         if any(marker in search_text for marker in _HELP_MARKERS):
             return "general_help"
 
+        # Kept in sync with AnswerabilityGuard's actual out-of-scope gate
+        # (app/services/answerability.py) - that guard is the real decision
+        # point, but this classification is logged as "Question Type" right
+        # alongside it, and a bare column mention ("kadın erkek oranı") with
+        # no entity noun would otherwise log "out_of_scope" for a question
+        # the pipeline goes on to answer, which is confusing when debugging
+        # from these logs (2026-07-24).
         has_domain_signal = bool(
             analysis.entities
             or department
             or (analysis.detected_dates and analysis.detected_operations)
+            or catalog.match_any_column_mention(search_text)
         )
         if not has_domain_signal and not signals.pronouns:
             return "out_of_scope"

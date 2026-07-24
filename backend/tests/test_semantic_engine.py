@@ -142,6 +142,14 @@ class TestQuestionTypes:
         assert frame.question_type == "out_of_scope"
         assert frame.confidence <= 0.4
 
+    def test_bare_column_mention_is_not_out_of_scope(self, engine):
+        """Kept in sync with AnswerabilityGuard (2026-07-24): a question
+        naming a view column/metric with no entity noun ("hasta"/"randevu")
+        must not be classified out_of_scope here either, or the logged
+        Question Type contradicts the pipeline actually answering it."""
+        frame = engine.understand("Kadın erkek oranını hesapla")
+        assert frame.question_type != "out_of_scope"
+
     def test_general_help(self, engine):
         frame = engine.understand("Bana yardım eder misin, neler yapabilirsin?")
         assert frame.question_type == "general_help"
