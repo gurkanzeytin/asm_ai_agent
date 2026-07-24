@@ -379,6 +379,21 @@ def test_ratio_question_produces_numerator_and_denominator(planner, analyzer):
     assert "SubeAdi" in plan.dimensions
 
 
+def test_scalar_status_count_with_department_has_no_stale_projection(planner, analyzer):
+    """'Kardiyoloji bölümünde kaç tanesi gerçekleşti?' is a single scalar
+    count (one row, no GROUP BY) - the bare 'bölüm' mention used to leave a
+    GenelRandevuBolumAdi display-concept column in plan.projection even
+    though the deterministic SQL never selects it (nothing to GROUP BY it
+    against), so PlanComplianceValidator rejected the SQL as missing that
+    projection column and the whole answer silently failed
+    ("Yanıt Oluşturulamadı", 2026-07-24 real UI bug report)."""
+    plan = plan_for(planner, analyzer, "Kardiyoloji bölümünde kaç tanesi gerçekleşti?")
+    assert plan.department_filter == "Kardiyoloji"
+    assert plan.metrics == ["completed_appointment_count"]
+    assert plan.dimensions == []
+    assert plan.projection == []
+
+
 @pytest.mark.parametrize(
     "question",
     [

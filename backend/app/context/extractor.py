@@ -66,7 +66,13 @@ _DATE_PATTERNS = [
     (r"\bbugun\w*\b", "bugun"),
     (r"\bdun\b", "dun"),
     (r"\byarin\b", "yarin"),
-    (rf"\b(?:{_MONTH_NAMES})\s+ayinda\b", None),
+    # Any Turkish grammatical case of "ay" (month) following the month name -
+    # locative "ocak ayında" (in January), bare/nominal "ocak ayı" (the
+    # month of January), genitive "ocak ayının", etc. Previously only the
+    # locative "ayında" form was recognized, so a bare follow-up like "Peki
+    # 2025 ocak ayı?" was invisible to date detection entirely and fell
+    # through to OUT_OF_SCOPE (2026-07-24, real UI bug report).
+    (rf"\b(?:{_MONTH_NAMES})\s+ay\w*\b", None),
     # Calendar-year expressions used both in complete questions and short
     # elliptical follow-ups.  Punctuation/apostrophes have already been
     # replaced with spaces by ``_fold``.

@@ -26,11 +26,12 @@ CONFIDENCE_DATE_INHERIT = 0.90
 CONFIDENCE_DEPARTMENT_INHERIT = 0.85
 CONFIDENCE_THRESHOLD = 0.80
 
-# A bare month name ("haziran ayinda") carries no year of its own - only
-# matched when the WHOLE expression is exactly this shape, never a relative
-# span like "son 3 ayinda" ("last 3 months", which also contains "ayinda"
-# but must stay relative to today, not get a fixed year prepended).
-_BARE_MONTH_EXPRESSION = re.compile(rf"^(?:{_MONTH_NAMES})\s+ayinda$")
+# A bare month name ("haziran ayinda", "haziran ayi") carries no year of its
+# own - only matched when the WHOLE expression is exactly this shape, never
+# a relative span like "son 3 ayinda" ("last 3 months", which also contains
+# "ayinda" but must stay relative to today, not get a fixed year prepended;
+# safe here since that phrase starts with "son", never a month name).
+_BARE_MONTH_EXPRESSION = re.compile(rf"^(?:{_MONTH_NAMES})\s+ay\w*$")
 _YEAR_TOKEN = re.compile(r"\b(19|20)\d{2}\b")
 
 _PLURAL_REFERENTS = {
@@ -87,6 +88,14 @@ _OUTPUT_ACTION_FOLLOWUP_MARKERS = (
     "grafik yap",
     "grafik ciz",
     "grafige cevir",
+    # "Bunu grafikte göster" ("show THIS as a chart") - a presentation-only
+    # follow-up on the previous result, same family as "grafik yap"/"grafiğe
+    # çevir" above but a distinct verb ("göster" vs "yap"/"çevir") that
+    # wasn't covered; previously had no matching marker AND no pronoun
+    # signal for bare "bunu", so it fell all the way through to
+    # OUT_OF_SCOPE (2026-07-24, real UI bug report).
+    "grafikte goster",
+    "grafik olarak goster",
     "sql olarak ver",
     "sql ini ver",
     "sqlini ver",

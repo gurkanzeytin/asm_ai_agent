@@ -80,6 +80,23 @@ def test_bare_month_followup_inherits_year_from_year_only_previous_turn():
     assert resolution.resolved_question.count("2025") == 1
 
 
+def test_bare_month_ayi_form_is_recognized_not_just_ayinda():
+    """'Peki 2025 ocak ayı?' (nominal 'ayı', not locative 'ayında') was
+    entirely invisible to date detection - `_DATE_PATTERNS`' month regex
+    only matched the "ayında" suffix, so this follow-up carried no
+    date_expression at all, was never classified as date_only_followup, and
+    fell straight through to OUT_OF_SCOPE despite naming an explicit month
+    and year (2026-07-24 real UI bug report, found live after a gender-ratio
+    question). Fixed by generalizing the month suffix to any "ay\\w*" case."""
+    context = _context()
+    resolution = ContextResolver().resolve("Peki 2025 ocak ayı?", context)
+
+    assert resolution.follow_up_detected is True
+    assert resolution.clarification_needed is False
+    assert "ocak" in resolution.resolved_question
+    assert "randevu surelerinin" in resolution.resolved_question
+
+
 def test_year_fragment_without_context_requests_clarification_not_out_of_scope():
     resolution = ContextResolver().resolve(
         "2024 yılının?", ConversationContext(session_id="new-session")

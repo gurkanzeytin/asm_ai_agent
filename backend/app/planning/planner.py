@@ -359,10 +359,19 @@ class QueryPlanner:
                 # ("Bölümlerin doktor sayıları" -> 'doktor' display column)
                 # would fail compliance against the deterministic SQL.
                 projection = list(intelligence["dimensions"])
-            if intelligence.get("scalar_distinct_count"):
-                # "Kaç doktor var?" answers with one scalar — the display
-                # column detected from the bare noun mention must not linger
-                # as a projection the compliance validator would then demand.
+            if intelligence.get("scalar_distinct_count") or (
+                intelligence["metrics"] and not intelligence["dimensions"]
+            ):
+                # Any true scalar answer (a metric with no GROUP BY dimension
+                # — "Kaç doktor var?", but just as much a status-conditional
+                # count like "Kardiyoloji bölümünde kaç tanesi gerçekleşti?")
+                # answers with one row. The display column detected from the
+                # bare noun mention ("bölüm" -> GenelRandevuBolumAdi) must not
+                # linger as a projection: the deterministic SQL never selects
+                # it (there is no GROUP BY to select it alongside), so
+                # PlanComplianceValidator demanding it as a "missing
+                # projection column" silently killed the whole answer
+                # (2026-07-24, real UI bug report).
                 projection = []
 
             periods = self._comparison_periods(

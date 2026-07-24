@@ -165,6 +165,56 @@ class TestPronounResolution:
 
 
 # ─────────────────────────────────────────────
+# Output-action follow-ups ("Bunu tabloya çevir", "Bunu grafikte göster")
+# ─────────────────────────────────────────────
+
+
+class TestOutputActionFollowup:
+    def test_grafikte_goster_is_a_followup_not_out_of_scope(self, manager):
+        """'Bunu grafikte göster' has no dedicated pronoun pattern for bare
+        "bunu" (unlike "bunlardan"/"o bölüm") and previously matched no
+        output-action marker either ("grafik yap"/"grafiğe çevir" were
+        covered, "grafikte göster" was not) - it fell through with zero
+        follow-up signal and was answered OUT_OF_SCOPE (2026-07-24 real UI
+        bug report)."""
+        from app.context.models import ConversationContext
+
+        from app.context.resolver import ContextResolver
+
+        context = ConversationContext(
+            session_id="s1",
+            department="Kardiyoloji",
+            entity_types=["Appointment"],
+            metrics=["completed_appointment_count"],
+            analysis_type="count",
+            last_question="Kardiyoloji bölümünde kaç tanesi gerçekleşti?",
+            query_plan_snapshot={"dimensions": [], "metrics": ["completed_appointment_count"]},
+        )
+        result = ContextResolver(ContextExtractor()).resolve("Bunu grafikte göster", context)
+        assert result.follow_up_detected is True
+        assert "output_action_followup" in result.follow_up_signals
+
+    def test_bunu_tabloya_cevir_still_inherits_the_whole_plan(self, manager):
+        """Regression guard: fixing 'bunu grafikte göster' above must not
+        break the already-tested 'bunu <output marker>' phrasings (MT-002
+        golden scenario) that rely on the SAME output_action_followup path."""
+        from app.context.models import ConversationContext
+        from app.context.resolver import ContextResolver
+
+        context = ConversationContext(
+            session_id="s1",
+            metrics=["no_show_rate"],
+            dimensions=["DoktorId"],
+            analysis_type="ratio",
+            last_question="O zaman gelmeyenleri oran olarak göster",
+            query_plan_snapshot={"dimensions": ["DoktorId"], "metrics": ["no_show_rate"]},
+        )
+        result = ContextResolver(ContextExtractor()).resolve("Bunu tabloya çevir", context)
+        assert result.follow_up_detected is True
+        assert "output_action_followup" in result.follow_up_signals
+
+
+# ─────────────────────────────────────────────
 # Comparison / trend continuation
 # ─────────────────────────────────────────────
 
