@@ -61,13 +61,14 @@ def determine_requested_response_mode(question: str) -> ResponseMode | None:
     folded = _fold(question)
     if _VISUAL_MARKER.search(folded):
         return "visualization"
-    has_data_marker = bool(_DATA_MARKER.search(folded))
+    intent_probe = _strip_sql_describing_participle(folded)
+    has_data_marker = bool(_DATA_MARKER.search(intent_probe))
     if _SQL_ONLY_MARKER.search(folded) and not (
-        has_data_marker or _EXECUTION_MARKER.search(folded)
+        has_data_marker or _EXECUTION_MARKER.search(intent_probe)
     ):
         return "sql"
     if has_data_marker or (
-        _SQL_MARKER.search(folded) and _EXECUTION_MARKER.search(folded)
+        _SQL_MARKER.search(folded) and _EXECUTION_MARKER.search(intent_probe)
     ):
         return "data"
     return None
@@ -76,13 +77,14 @@ def determine_requested_response_mode(question: str) -> ResponseMode | None:
 def determine_requested_visible_sections(question: str) -> list[str]:
     """Infers the exact artifact families explicitly requested by the user."""
     folded = _fold(question)
+    intent_probe = _strip_sql_describing_participle(folded)
     wants_visual = bool(_VISUAL_MARKER.search(folded))
     wants_sql = bool(_SQL_MARKER.search(folded)) and (
         bool(_SQL_ONLY_MARKER.search(folded))
         or any(term in folded for term in ("sql ver", "sql yaz", "sql olustur", "sorgu ver"))
     )
-    wants_data = bool(_DATA_MARKER.search(folded)) or (
-        bool(_SQL_MARKER.search(folded)) and bool(_EXECUTION_MARKER.search(folded))
+    wants_data = bool(_DATA_MARKER.search(intent_probe)) or (
+        bool(_SQL_MARKER.search(folded)) and bool(_EXECUTION_MARKER.search(intent_probe))
     )
     wants_answer = bool(_ANSWER_MARKER.search(folded))
 

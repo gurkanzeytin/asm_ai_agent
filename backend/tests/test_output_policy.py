@@ -77,6 +77,26 @@ def test_turkish_chart_suffix_is_detected_from_real_ui_text():
     assert policy.visible_sections == ["chart"]
 
 
+def test_future_participle_describing_sql_does_not_demote_to_data():
+    """'2025 ocak randevularını listeleyecek sql sorgusunu oluşturur musun'
+    (real UI bug report, 2026-07-24): 'listeleyecek' describes what the SQL
+    will do once run - a relative clause, not a command to run it now. Must
+    stay SQL-only, not silently execute and show a table."""
+    question = "2025 ocak randevularını listeleyecek sql sorgusunu oluşturur musun"
+    assert determine_requested_response_mode(question) == "sql"
+    assert determine_requested_visible_sections(question) == ["sql"]
+
+    policy = determine_output_policy(
+        question=question,
+        outcome="EXECUTE_SQL",
+        generated_sql="SELECT 1;",
+        query_result=_result(),
+        analytics=None,
+    )
+    assert policy.response_mode == "sql"
+    assert policy.visible_sections == ["sql"]
+
+
 def test_mixed_sql_and_data_question_shows_only_requested_artifacts():
     policy = determine_output_policy(
         question="SQL sorgusunu yaz ve çalıştırıp tabloyu getir",
