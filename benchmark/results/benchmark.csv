@@ -3,362 +3,260 @@ qwen3:8b,1,natural_language,"Hastanede neler oluyor, genel bir özet verir misin
 FROM dbo.vw_RandevuRaporu
 
 GROUP BY SubeAdi
-ORDER BY appointment_count DESC;",True,1,False,False,True,4523.786900041159,14.858099981211126,0.0,0.0,0.0,0,0,0,0,0,,,
+ORDER BY appointment_count DESC;",True,1,False,False,True,4368.2404000428505,15.68999997107312,0.0,0.0,0.0,0,0,0,0,0,,,
 qwen3:8b,2,natural_language,Bana randevular hakkında bilgi ver.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
-;",True,1,True,True,True,2254.9584999796934,1.2319000088609755,1.3070999993942678,0.7777000428177416,0.5024999845772982,0,0,0,0,0,,,
+;",True,1,True,True,True,2177.0952999941073,1.3263000291772187,1.236199983395636,0.7956000044941902,0.46369998017326,0,0,0,0,0,,,
 qwen3:8b,3,natural_language,Doktorlarımız hakkında ne söyleyebilirsin?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DoktorId AS DoktorId, COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 
 GROUP BY DoktorId
-ORDER BY appointment_count DESC;",True,316,True,True,True,26260.973099968396,1.560300006531179,10506.934500008356,6332.1444999892265,0.4130000015720725,0,0,0,0,0,,,
+ORDER BY appointment_count DESC;",True,316,True,True,True,29710.404800018296,1.579799980390817,10501.332299958449,10011.951899970882,0.38809998659417033,0,0,0,0,0,,,
 qwen3:8b,4,natural_language,Hastanenin bölümlerini merak ediyorum.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT SubeAdi AS SubeAdi, GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 
 GROUP BY SubeAdi, GenelRandevuBolumAdi
-ORDER BY appointment_count DESC;",True,426,True,True,True,76300.68200000096,3.4904000349342823,2.23869999172166,38637.48130004387,0.4982000100426376,0,0,0,0,0,,,
-qwen3:8b,5,natural_language,Sigorta şirketleriyle ilgili elimizde ne var?,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,12.632599973585457,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+ORDER BY appointment_count DESC;",True,426,True,True,True,46174.975399975665,2.2006999934092164,1.8154000281356275,9140.861899999436,0.5259999888949096,0,0,0,0,0,,,
+qwen3:8b,5,natural_language,Sigorta şirketleriyle ilgili elimizde ne var?,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,31.72700002323836,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
 qwen3:8b,6,listing,Doktorları listele.,0,SUCCESS,ok,DATA_ONLY,"SELECT DoktorId AS DoktorId, COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 
 GROUP BY DoktorId
-ORDER BY appointment_count DESC;",True,316,False,False,True,9476.080899999943,1.8480000435374677,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:8b,7,listing,Kardiyoloji bölümündeki doktorları göster.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DoktorId AS DoktorId, GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count
+ORDER BY appointment_count DESC;",True,316,False,False,True,9305.003499961458,1.3410000246949494,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,7,listing,Kardiyoloji bölümündeki doktorları göster.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DoktorId AS DoktorId, COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 WHERE ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%'
 
-GROUP BY DoktorId, GenelRandevuBolumAdi
-ORDER BY appointment_count DESC;",True,28,True,True,True,93272.46449998347,4.168400017078966,8411.649500019848,4114.128599991091,0.5760999629274011,0,0,0,0,0,,,
+GROUP BY DoktorId
+ORDER BY appointment_count DESC;",True,12,True,True,True,88517.44620001409,2.0676000276580453,8464.502500020899,0.23800000781193376,0.20489998860284686,0,0,0,0,0,,,
 qwen3:8b,8,listing,Bölümleri listele.,0,SUCCESS,ok,DATA_ONLY,"SELECT GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 
 GROUP BY GenelRandevuBolumAdi
-ORDER BY appointment_count DESC;",True,426,False,False,True,34887.73690001108,1.4387000119313598,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:8b,9,listing,Sigorta şirketlerini göster.,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,10.771900007966906,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:8b,10,listing,Psikiyatri bölümündeki odaları listele.,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,9.536500030662864,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+ORDER BY appointment_count DESC;",True,426,False,False,True,34307.710300025064,1.846000028308481,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,9,listing,Sigorta şirketlerini göster.,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,21.734100009780377,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,10,listing,Psikiyatri bölümündeki odaları listele.,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,11.403499986045063,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
 qwen3:8b,11,listing,Bugünkü randevuları getir.,0,PARTIAL,no_results,NO_RESULT_GUIDANCE,"SELECT Id, BaslangicTarihi, BitisTarihi, RandevuDurumu, GenelRandevuKaynakAdi, GenelRandevuBolumAdi, SubeAdi, RandevuTipiAdi
 FROM dbo.vw_RandevuRaporu
 WHERE BaslangicTarihi >= '2026-07-24' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-24')
-ORDER BY BaslangicTarihi DESC;",True,0,False,False,True,724.8424999997951,2.4921000003814697,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:8b,12,count,Kaç doktor var?,0,FAILED,sql_generation_failed,SAFE_ERROR,,False,0,False,False,True,702.0008999970742,1.908099977299571,0.05819997750222683,0.05619996227324009,0.048900023102760315,0,0,0,0,0,,GenerateSQLNode failed: Workflow execution failed: Deterministic SQL builder failed plan compliance: projection column GenelRandevuKaynakAdi|ValidateSQLNode failed: Generated SQL is missing.,
+ORDER BY BaslangicTarihi DESC;",True,0,False,False,True,574.7172000119463,2.265000017359853,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,12,count,Kaç doktor var?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(DISTINCT DoktorId) AS unique_doctor_count
+FROM dbo.vw_RandevuRaporu
+;",True,1,True,True,True,9277.034100028686,1.1354999733157456,0.2662999904714525,0.11860002996399999,0.12640003114938736,0,0,0,0,0,,,
 qwen3:8b,13,count,Toplam hasta sayısı nedir?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(DISTINCT HastaId) AS unique_patient_count
 FROM dbo.vw_RandevuRaporu
-;",True,1,True,True,True,3001.826499996241,1.1175000108778477,0.3205999964848161,0.1351999817416072,0.14890002785250545,0,0,0,0,0,,,
+;",True,1,True,True,True,2695.582300017122,1.1566999601200223,0.2961999853141606,0.12250000145286322,0.12929999502375722,0,0,0,0,0,,,
 qwen3:8b,14,count,Kaç bölüm var?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 
-GROUP BY GenelRandevuBolumAdi;",True,426,True,True,True,40409.78950000135,1.2080000014975667,1.783600018825382,5670.511200034525,0.33030001213774085,0,0,0,0,0,,,
+GROUP BY GenelRandevuBolumAdi;",True,426,True,True,True,49815.521500015166,1.8287000129930675,1.4205999905243516,15315.927100018598,0.29559998074546456,0,0,0,0,0,,,
 qwen3:8b,15,count,Bu ay kaç randevu alındı?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 WHERE BaslangicTarihi >= '2026-07-01' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-31')
-;",True,1,True,True,True,687.2997999889776,3.639700007624924,0.3266999847255647,0.1496000331826508,0.19120000069960952,0,0,0,0,0,,,
-qwen3:8b,16,count,Kardiyoloji bölümünde kaç doktor çalışıyor?,0,FAILED,sql_generation_failed,SAFE_ERROR,,False,0,False,False,True,733.1876999814995,4.75289998576045,0.07569999434053898,0.0825000461190939,0.03880000440403819,0,0,0,0,0,,GenerateSQLNode failed: Workflow execution failed: Deterministic SQL builder failed plan compliance: projection column GenelRandevuKaynakAdi|ValidateSQLNode failed: Generated SQL is missing.,
-qwen3:8b,17,count,Kaç oda var?,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,12.490599998272955,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+;",True,1,True,True,True,574.2286000167951,2.170699997805059,0.29930000891909003,0.12179999612271786,0.16230001347139478,0,0,0,0,0,,,
+qwen3:8b,16,count,Kardiyoloji bölümünde kaç doktor çalışıyor?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(DISTINCT DoktorId) AS unique_doctor_count
+FROM dbo.vw_RandevuRaporu
+WHERE ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%'
+;",True,1,True,True,True,46398.56470003724,1.9086000393144786,0.2638999721966684,0.12090004747733474,0.14020001981407404,0,0,0,0,0,,,
+qwen3:8b,17,count,Kaç oda var?,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,13.448000012431294,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
 qwen3:8b,18,comparison,Kardiyoloji ile Psikiyatri'yi karşılaştır.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT N'Kardiyoloji' AS current_entity_label, N'Psikiyatri' AS baseline_entity_label, COUNT(*) AS comparison_total_count, SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%' THEN 1 ELSE 0 END) AS current_entity_count, SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Psikiyatri,%' THEN 1 ELSE 0 END) AS baseline_entity_count, (SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%' THEN 1 ELSE 0 END)) - (SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Psikiyatri,%' THEN 1 ELSE 0 END)) AS absolute_change, 100.0 * ((SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%' THEN 1 ELSE 0 END)) - (SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Psikiyatri,%' THEN 1 ELSE 0 END))) / NULLIF((SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Psikiyatri,%' THEN 1 ELSE 0 END)), 0) AS percentage_change
 FROM dbo.vw_RandevuRaporu
 WHERE (',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%' OR ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Psikiyatri,%')
-;",True,1,True,True,True,48573.56150000123,11.872600007336587,0.3534999559633434,0.1183999702334404,0.33220002660527825,0,0,0,0,0,,,
-qwen3:8b,19,comparison,Dermatoloji ile Kardiyoloji bölümlerinin randevu sayılarını kıyasla.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count
+;",True,1,True,True,True,47952.65250001103,9.072799992281944,0.2906000008806586,0.10060000931844115,0.30670000705868006,0,0,0,0,0,,,
+qwen3:8b,19,comparison,Dermatoloji ile Kardiyoloji bölümlerinin randevu sayılarını kıyasla.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 WHERE ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%'
-
-GROUP BY GenelRandevuBolumAdi
-ORDER BY appointment_count DESC;",True,9,True,True,True,42072.14959996054,2.0610999781638384,0.4681999562308192,0.22909999825060368,0.3032999811694026,0,0,0,0,0,,,
+;",True,1,True,True,True,41155.18819994759,3.6220999900251627,0.27600000612437725,0.1191999763250351,0.159099989105016,0,0,0,0,0,,,
 qwen3:8b,20,comparison,Hangi bölüm daha yoğun: Kardiyoloji mi Psikiyatri mi?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT N'Kardiyoloji' AS current_entity_label, N'Psikiyatri' AS baseline_entity_label, COUNT(*) AS comparison_total_count, SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%' THEN 1 ELSE 0 END) AS current_entity_count, SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Psikiyatri,%' THEN 1 ELSE 0 END) AS baseline_entity_count, (SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%' THEN 1 ELSE 0 END)) - (SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Psikiyatri,%' THEN 1 ELSE 0 END)) AS absolute_change, 100.0 * ((SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%' THEN 1 ELSE 0 END)) - (SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Psikiyatri,%' THEN 1 ELSE 0 END))) / NULLIF((SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Psikiyatri,%' THEN 1 ELSE 0 END)), 0) AS percentage_change
 FROM dbo.vw_RandevuRaporu
 WHERE (',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%' OR ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Psikiyatri,%')
-;",True,1,True,True,True,89350.49019998405,8.41120001859963,0.32430002465844154,0.05470000905916095,40891.48859999841,1,0,0,506,427,stop,,
+;",True,1,True,True,True,48288.2421000395,8.017600048333406,0.3129999968223274,0.10549998842179775,0.34849997609853745,0,0,0,0,0,,,
 qwen3:8b,21,comparison,Bu ay ile geçen ayın randevu sayılarını karşılaştır.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT N'gecen ay' AS current_period_label, N'bu ay' AS baseline_period_label, SUM(CASE WHEN BaslangicTarihi >= '2026-06-01' AND BaslangicTarihi < '2026-07-01' THEN 1 ELSE 0 END) AS current_period_count, SUM(CASE WHEN BaslangicTarihi >= '2026-07-01' AND BaslangicTarihi < '2026-08-01' THEN 1 ELSE 0 END) AS baseline_period_count, (SUM(CASE WHEN BaslangicTarihi >= '2026-06-01' AND BaslangicTarihi < '2026-07-01' THEN 1 ELSE 0 END)) - (SUM(CASE WHEN BaslangicTarihi >= '2026-07-01' AND BaslangicTarihi < '2026-08-01' THEN 1 ELSE 0 END)) AS absolute_change, 100.0 * ((SUM(CASE WHEN BaslangicTarihi >= '2026-06-01' AND BaslangicTarihi < '2026-07-01' THEN 1 ELSE 0 END)) - (SUM(CASE WHEN BaslangicTarihi >= '2026-07-01' AND BaslangicTarihi < '2026-08-01' THEN 1 ELSE 0 END))) / NULLIF((SUM(CASE WHEN BaslangicTarihi >= '2026-07-01' AND BaslangicTarihi < '2026-08-01' THEN 1 ELSE 0 END)), 0) AS percentage_change
 FROM dbo.vw_RandevuRaporu
-WHERE (BaslangicTarihi >= '2026-06-01' AND BaslangicTarihi < '2026-07-01') OR (BaslangicTarihi >= '2026-07-01' AND BaslangicTarihi < '2026-08-01');",True,1,True,True,True,26129.92249999661,14.478900004178286,0.3559000324457884,0.050099974032491446,25500.900400045794,1,0,0,464,313,stop,,
-qwen3:8b,22,comparison,Bölümlerin doktor sayılarını karşılaştır.,0,FAILED,sql_generation_failed,SAFE_ERROR,,False,0,False,False,True,596.7834999901243,2.0040000090375543,0.03489997470751405,0.033100019209086895,0.02659996971487999,0,0,0,0,0,,GenerateSQLNode failed: Workflow execution failed: Deterministic SQL builder failed plan compliance: projection column GenelRandevuKaynakAdi|ValidateSQLNode failed: Generated SQL is missing.,
+WHERE (BaslangicTarihi >= '2026-06-01' AND BaslangicTarihi < '2026-07-01') OR (BaslangicTarihi >= '2026-07-01' AND BaslangicTarihi < '2026-08-01');",True,1,True,True,True,24579.966000048444,9.097899950575083,0.5469999741762877,0.05360000068321824,24013.772399979644,1,0,0,464,300,stop,,
+qwen3:8b,22,comparison,Bölümlerin doktor sayılarını karşılaştır.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(DISTINCT DoktorId) AS unique_doctor_count
+FROM dbo.vw_RandevuRaporu
+
+GROUP BY GenelRandevuBolumAdi
+ORDER BY unique_doctor_count DESC;",True,426,True,True,True,55865.53660000209,2.3699000012129545,1.2933000107295811,14117.547799949534,0.32759999157860875,0,0,0,0,0,,,
 qwen3:8b,23,trend,Son 6 ayın randevularını analiz et.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 WHERE BaslangicTarihi >= '2026-01-24' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-24')
-;",True,1,True,True,True,701.3646999839693,3.1390999793075025,0.26240001898258924,0.10520004434511065,0.11250004172325134,0,0,0,0,0,,,
+;",True,1,True,True,True,591.2586000049487,1.708200026769191,0.2729000407271087,0.0999000039882958,0.09350001346319914,0,0,0,0,0,,,
 qwen3:8b,24,trend,Son 3 ayın randevu trendini göster.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DATEADD(WEEK, DATEDIFF(WEEK, 0, BaslangicTarihi), 0) AS period_start, COUNT(*) AS weekly_appointment_count
 FROM dbo.vw_RandevuRaporu
 WHERE BaslangicTarihi >= '2026-04-24' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-24')
 GROUP BY DATEADD(WEEK, DATEDIFF(WEEK, 0, BaslangicTarihi), 0)
-ORDER BY period_start ASC;",True,13,True,True,True,30785.56629997911,4.270700039342046,0.7105999975465238,30163.89969998272,0.553299963939935,0,0,0,0,0,,,
+ORDER BY period_start ASC;",True,13,True,True,True,8575.157199986279,3.3802000107243657,0.5324999801814556,7973.714099964127,0.25070004630833864,0,0,0,0,0,,,
 qwen3:8b,25,trend,Randevu sayılarının aylık eğilimi nasıl?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1) AS period_start, COUNT(*) AS monthly_appointment_count
 FROM dbo.vw_RandevuRaporu
 GROUP BY DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1)
-ORDER BY period_start ASC;",True,78,True,True,True,9515.718699956778,3.1789999920874834,0.7133999606594443,6407.421199954115,0.5722999921999872,0,0,0,0,0,,,
+ORDER BY period_start ASC;",True,78,True,True,True,36767.40479998989,2.2416000138036907,0.7218000246211886,33732.23510000389,0.32270001247525215,0,0,0,0,0,,,
 qwen3:8b,26,trend,Son 6 ayı analiz et ve dikkat edilmesi gereken noktaları söyle.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 WHERE BaslangicTarihi >= '2026-01-24' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-24')
-;",True,1,True,True,True,642.2815000405535,2.1219999762251973,0.3102999762631953,0.1343999756500125,0.13729999773204327,0,0,0,0,0,,,
+;",True,1,True,True,True,603.9436000282876,1.80460000410676,0.26269996305927634,0.09729998419061303,0.1020999625325203,0,0,0,0,0,,,
 qwen3:8b,27,trend,Bu yıl randevular aylara göre nasıl bir seyir izledi?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1) AS period_start, COUNT(*) AS monthly_appointment_count
 FROM dbo.vw_RandevuRaporu
 WHERE BaslangicTarihi >= '2026-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-24')
 GROUP BY DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1)
-ORDER BY period_start ASC;",True,7,True,True,True,7713.779699988663,2.866599999833852,1.20599998626858,7066.798500018194,0.3561999765224755,0,0,0,0,0,,,
+ORDER BY period_start ASC;",True,7,True,True,True,6598.648899991531,2.492399944458157,0.46200002543628216,6016.69600000605,0.3630000283010304,0,0,0,0,0,,,
 qwen3:8b,28,analytics,Bölümlere göre randevu dağılımını analiz et.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointments_per_department
 FROM dbo.vw_RandevuRaporu
 
 GROUP BY GenelRandevuBolumAdi
-ORDER BY appointments_per_department DESC;",True,426,True,True,True,43941.37459999183,2.1158999879844487,3.5265000187791884,3724.0019000018947,0.2972999936901033,0,0,0,0,0,,,
+ORDER BY appointments_per_department DESC;",True,426,True,True,True,43194.00790001964,1.6243999707512558,1.208700006827712,7116.215399990324,0.34930004039779305,0,0,0,0,0,,,
 qwen3:8b,29,analytics,Randevu durumlarının dağılımı nedir?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT RandevuDurumu AS RandevuDurumu, COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 
 GROUP BY RandevuDurumu
-ORDER BY appointment_count DESC;",True,5,True,True,True,3559.803699958138,2.4498000275343657,0.44350000098347664,0.22559997159987688,0.16359996516257524,0,0,0,0,0,,,
+ORDER BY appointment_count DESC;",True,5,True,True,True,3537.3334999894723,1.4621000154875219,0.32649998320266604,0.1849000109359622,0.15650002751499414,0,0,0,0,0,,,
 qwen3:8b,30,analytics,Doktor başına ortalama randevu sayısı nedir?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DoktorId AS DoktorId, COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 
-GROUP BY DoktorId;",True,316,True,True,True,27190.138200006913,1.9709000480361283,10364.669400034472,7550.955100043211,0.36419997923076153,0,0,0,0,0,,,
+GROUP BY DoktorId;",True,316,True,True,True,25013.060600031167,1.5036999830044806,10492.89489997318,5126.562400022522,0.43789995834231377,0,0,0,0,0,,,
 qwen3:8b,31,analytics,Bölümlerin randevu yüzdelerini göster.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT Id, BaslangicTarihi, BitisTarihi, RandevuDurumu, GenelRandevuKaynakAdi, GenelRandevuBolumAdi, SubeAdi, RandevuTipiAdi
 FROM dbo.vw_RandevuRaporu
-ORDER BY BaslangicTarihi DESC;",True,1000,True,True,True,5111.845800012816,2.234000014141202,4.051800002343953,0.06130000110715628,0.5778999766334891,0,0,0,0,0,,,
-qwen3:8b,32,analytics,Hastaların sigorta şirketlerine göre dağılımını analiz et.,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,11.571099981665611,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+ORDER BY BaslangicTarihi DESC;",True,1000,True,True,True,5164.407600008417,2.29939998826012,3.085399977862835,0.07430004188790917,0.9535999852232635,0,0,0,0,0,,,
+qwen3:8b,32,analytics,Hastaların sigorta şirketlerine göre dağılımını analiz et.,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,21.476600028108805,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
 qwen3:8b,33,ranking,En çok randevusu olan doktor kim?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DoktorId AS DoktorId, COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 
 GROUP BY DoktorId
-ORDER BY appointment_count DESC;",True,316,True,True,True,22383.87339998735,1.7299000173807144,10344.444499991369,2657.768999983091,0.46790001215413213,0,0,0,0,0,,,
+ORDER BY appointment_count DESC;",True,316,True,True,True,22430.801899987273,1.2832999927923083,10569.81260003522,2411.8626000126824,0.5692999693565071,0,0,0,0,0,,,
 qwen3:8b,34,ranking,En yoğun bölüm hangisi?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 
 GROUP BY GenelRandevuBolumAdi
-ORDER BY appointment_count DESC;",True,426,True,True,True,45658.81970000919,1.7301999614574015,1.423400011844933,10986.627599981148,0.39220001781359315,0,0,0,0,0,,,
+ORDER BY appointment_count DESC;",True,426,True,True,True,37931.60429998534,1.5548999654129148,1.442899985704571,3299.19599997811,0.30859996331855655,0,0,0,0,0,,,
 qwen3:8b,35,ranking,En az randevusu olan bölümü göster.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 
 GROUP BY GenelRandevuBolumAdi
-ORDER BY appointment_count ASC;",True,426,True,True,True,41057.047999987844,1.3962999801151454,1.4965999871492386,6223.863499995787,0.34520000917837024,0,0,0,0,0,,,
-qwen3:8b,36,ranking,En çok reçete yazan ilk 5 doktoru listele.,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,8.949500042945147,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+ORDER BY appointment_count ASC;",True,426,True,True,True,89135.1438999991,2.630900009535253,2.125700004398823,54739.466099999845,0.7059999625198543,0,0,0,0,0,,,
+qwen3:8b,36,ranking,En çok reçete yazan ilk 5 doktoru listele.,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,10.82900003530085,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
 qwen3:8b,37,ranking,En fazla hastası olan doktoru bul.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DoktorId AS DoktorId, COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 
 GROUP BY DoktorId
-ORDER BY appointment_count DESC;",True,316,True,True,True,23930.62529998133,1.6244000289589167,10321.823100035544,4272.231599956285,0.602699990849942,0,0,0,0,0,,,
+ORDER BY appointment_count DESC;",True,316,True,True,True,26061.571299971547,2.7944999746978283,10441.559099999722,6329.568399989512,0.37590001011267304,0,0,0,0,0,,,
 qwen3:8b,38,ranking,Randevu sayısına göre bölümleri sırala.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 
 GROUP BY GenelRandevuBolumAdi
-ORDER BY appointment_count DESC;",True,426,True,True,True,41579.21080000233,1.4856000198051333,1.5038000419735909,5904.427600034978,0.36780000664293766,0,0,0,0,0,,,
+ORDER BY appointment_count DESC;",True,426,True,True,True,41072.71199999377,1.728600007481873,1.4922000118531287,6452.929200022481,0.3890999942086637,0,0,0,0,0,,,
 qwen3:8b,39,date_filtering,Bugünkü randevuları göster.,0,PARTIAL,no_results,NO_RESULT_GUIDANCE,"SELECT Id, BaslangicTarihi, BitisTarihi, RandevuDurumu, GenelRandevuKaynakAdi, GenelRandevuBolumAdi, SubeAdi, RandevuTipiAdi
 FROM dbo.vw_RandevuRaporu
 WHERE BaslangicTarihi >= '2026-07-24' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-24')
-ORDER BY BaslangicTarihi DESC;",True,0,True,True,True,590.4518000315875,2.8273999923840165,0.34899997990578413,0.05630002124235034,0.15839998377487063,0,0,0,0,0,,,
+ORDER BY BaslangicTarihi DESC;",True,0,True,True,True,583.8089000317268,2.167200029361993,0.29339996399357915,0.060999998822808266,0.16120000509545207,0,0,0,0,0,,,
 qwen3:8b,40,date_filtering,Geçen hafta kaç randevu vardı?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 WHERE BaslangicTarihi >= '2026-07-13' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-19')
-;",True,1,True,True,True,561.6118000471033,1.470400020480156,0.3021999727934599,0.12159999459981918,0.15410000924021006,0,0,0,0,0,,,
+;",True,1,True,True,True,570.6692999810912,1.4395000180229545,0.2919000107795,0.11389999417588115,0.13869995018467307,0,0,0,0,0,,,
 qwen3:8b,41,date_filtering,Son 30 günün randevularını listele.,0,SUCCESS,ok,DATA_ONLY,"SELECT Id, BaslangicTarihi, BitisTarihi, RandevuDurumu, GenelRandevuKaynakAdi, GenelRandevuBolumAdi, SubeAdi, RandevuTipiAdi
 FROM dbo.vw_RandevuRaporu
 WHERE BaslangicTarihi >= '2026-06-25' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-24')
-ORDER BY BaslangicTarihi DESC;",True,9,False,False,True,573.336300032679,2.212999970652163,0.0,0.0,0.0,0,0,0,0,0,,,
+ORDER BY BaslangicTarihi DESC;",True,9,False,False,True,589.6136999945156,2.752100001089275,0.0,0.0,0.0,0,0,0,0,0,,,
 qwen3:8b,42,date_filtering,Ocak ayında kaç randevu alındı?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 WHERE BaslangicTarihi >= '2026-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2026-01-31')
-;",True,1,True,True,True,545.0308000436053,2.4766999995335937,0.30120002338662744,0.11590000940486789,0.14079996617510915,0,0,0,0,0,,,
+;",True,1,True,True,True,573.5802999697626,1.5255999751389027,0.49100001342594624,0.11860002996399999,0.18580001778900623,0,0,0,0,0,,,
 qwen3:8b,43,date_filtering,2025 yılında kaç hasta kaydı yapıldı?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(DISTINCT HastaId) AS unique_patient_count
 FROM dbo.vw_RandevuRaporu
 WHERE BaslangicTarihi >= '2025-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2025-12-31')
-;",True,1,True,True,True,1272.3653000430204,1.6290000057779253,0.42719999328255653,0.16799999866634607,0.15620002523064613,0,0,0,0,0,,,
+;",True,1,True,True,True,1219.6507000480779,1.8649999983608723,0.30229997355490923,0.11719996109604836,0.14699995517730713,0,0,0,0,0,,,
 qwen3:8b,44,date_filtering,Geçen ay tamamlanan randevuları göster.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT Id, BaslangicTarihi, BitisTarihi, RandevuDurumu, GenelRandevuKaynakAdi, GenelRandevuBolumAdi, SubeAdi, RandevuTipiAdi
 FROM dbo.vw_RandevuRaporu
 WHERE BaslangicTarihi >= '2026-06-01' AND BaslangicTarihi < DATEADD(day, 1, '2026-06-30')
-ORDER BY BaslangicTarihi DESC;",True,19,True,True,True,601.5592999756336,2.8850000235252082,0.5118999979458749,0.0515999854542315,0.4588000010699034,0,0,0,0,0,,,
-qwen3:8b,45,ambiguous,En iyi doktor kim?,0,SUCCESS,ok,ASK_CLARIFICATION,,False,0,False,False,True,7.687699981033802,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:8b,46,ambiguous,En başarılı bölüm hangisi?,0,SUCCESS,ok,ASK_CLARIFICATION,,False,0,False,False,True,7.70000001648441,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:8b,47,ambiguous,En verimli doktoru söyle.,0,SUCCESS,ok,ASK_CLARIFICATION,,False,0,False,False,True,8.352599979843944,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:8b,48,ambiguous,Durum nasıl?,0,SUCCESS,ok,OUT_OF_SCOPE,,False,0,False,False,True,7.68649997189641,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:8b,49,ambiguous,En kötü performans kimde?,0,SUCCESS,ok,ASK_CLARIFICATION,,False,0,False,False,True,7.395200023893267,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:8b,50,graceful_failure,Uzaydaki astronotları listele.,0,SUCCESS,ok,OUT_OF_SCOPE,,False,0,False,False,True,7.684200012590736,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:8b,51,graceful_failure,Araba satışlarını göster.,0,SUCCESS,ok,OUT_OF_SCOPE,,False,0,False,False,True,8.957399986684322,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:8b,52,graceful_failure,Doktorların maaşlarını sil.,0,SUCCESS,ok,OUT_OF_SCOPE,,False,0,False,False,True,7.363299955613911,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:8b,53,graceful_failure,Veritabanını güncelle ve tüm randevuları iptal et.,0,SUCCESS,ok,ASK_CLARIFICATION,,False,0,False,False,True,8.799100003670901,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:8b,54,graceful_failure,asdfghjkl qwerty.,0,SUCCESS,ok,OUT_OF_SCOPE,,False,0,False,False,True,7.984700030647218,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+ORDER BY BaslangicTarihi DESC;",True,19,True,True,True,576.9684999831952,1.9728000042960048,0.38049998693168163,0.04929996794089675,0.22250000620260835,0,0,0,0,0,,,
+qwen3:8b,45,ambiguous,En iyi doktor kim?,0,SUCCESS,ok,ASK_CLARIFICATION,,False,0,False,False,True,9.382200019899756,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,46,ambiguous,En başarılı bölüm hangisi?,0,SUCCESS,ok,ASK_CLARIFICATION,,False,0,False,False,True,8.454800001345575,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,47,ambiguous,En verimli doktoru söyle.,0,SUCCESS,ok,ASK_CLARIFICATION,,False,0,False,False,True,7.8581999987363815,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,48,ambiguous,Durum nasıl?,0,SUCCESS,ok,OUT_OF_SCOPE,,False,0,False,False,True,13.76110001001507,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,49,ambiguous,En kötü performans kimde?,0,SUCCESS,ok,ASK_CLARIFICATION,,False,0,False,False,True,17.892899981234223,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,50,graceful_failure,Uzaydaki astronotları listele.,0,SUCCESS,ok,OUT_OF_SCOPE,,False,0,False,False,True,20.353700034320354,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,51,graceful_failure,Araba satışlarını göster.,0,SUCCESS,ok,OUT_OF_SCOPE,,False,0,False,False,True,17.26059999782592,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,52,graceful_failure,Doktorların maaşlarını sil.,0,SUCCESS,ok,OUT_OF_SCOPE,,False,0,False,False,True,9.711000020615757,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,53,graceful_failure,Veritabanını güncelle ve tüm randevuları iptal et.,0,SUCCESS,ok,ASK_CLARIFICATION,,False,0,False,False,True,6.774300010874867,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,54,graceful_failure,asdfghjkl qwerty.,0,SUCCESS,ok,OUT_OF_SCOPE,,False,0,False,False,True,14.379300002474338,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
 qwen3:8b,55,graceful_failure,2099 yılındaki randevuları analiz et.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 WHERE BaslangicTarihi >= '2099-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2099-12-31')
-;",True,1,True,True,True,556.9721999927424,1.771800045389682,0.27329998556524515,0.13209995813667774,0.10800000745803118,0,0,0,0,0,,,
+;",True,1,True,True,True,574.0147999604233,1.9210000173188746,0.2389000146649778,0.09669997962191701,0.09799998952075839,0,0,0,0,0,,,
 qwen3:8b,56,graceful_failure,Hastaların kredi kartı numaralarını listele.,0,SUCCESS,ok,DATA_ONLY,"SELECT Id, BaslangicTarihi, BitisTarihi, RandevuDurumu, GenelRandevuKaynakAdi, GenelRandevuBolumAdi, SubeAdi, RandevuTipiAdi
 FROM dbo.vw_RandevuRaporu
-ORDER BY BaslangicTarihi DESC;",True,1000,False,False,True,4983.999599993695,1.777100027538836,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,1,natural_language,"Hastanede neler oluyor, genel bir özet verir misin?",0,SUCCESS,ok,DATA_ONLY,"SELECT SubeAdi AS SubeAdi, COUNT(*) AS appointment_count
+ORDER BY BaslangicTarihi DESC;",True,1000,False,False,True,4932.868299947586,1.9376999698579311,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,57,count,Mayıs 2025'te kaç randevu vardı?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
-
-GROUP BY SubeAdi
-ORDER BY appointment_count DESC;",True,1,False,False,True,3865.3756999992765,1.3999000075273216,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,2,natural_language,Bana randevular hakkında bilgi ver.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
+WHERE BaslangicTarihi >= '2025-05-01' AND BaslangicTarihi < DATEADD(day, 1, '2025-05-31')
+;",True,1,True,True,True,776.7191000166349,1.907200028654188,0.29799999902024865,0.11680001625791192,0.14819996431469917,0,0,0,0,0,,,
+qwen3:8b,58,count,Çocuk Kardiyolojisi bölümünde kaç doktor çalışıyor?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(DISTINCT DoktorId) AS unique_doctor_count
 FROM dbo.vw_RandevuRaporu
-;",True,1,True,True,True,2218.568000011146,1.2108000228181481,0.2539000124670565,0.10960001964122057,0.12240000069141388,0,0,0,0,0,,,
-qwen3:4b,3,natural_language,Doktorlarımız hakkında ne söyleyebilirsin?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DoktorId AS DoktorId, COUNT(*) AS appointment_count
+WHERE (',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%' OR ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Çocuk Kardiyolojisi,%')
+;",True,1,True,True,True,54234.59330003243,2.211800019722432,0.28579996433109045,0.1162000116892159,0.17600000137463212,0,0,0,0,0,,,
+qwen3:8b,59,count,Kadın hasta sayısı kaçtır?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(DISTINCT HastaId) AS unique_patient_count
 FROM dbo.vw_RandevuRaporu
-
-GROUP BY DoktorId
-ORDER BY appointment_count DESC;",True,316,True,True,True,25439.879400015343,2.6270999806001782,10544.979199999943,5424.418799986597,0.6351000047288835,0,0,0,0,0,,,
-qwen3:4b,4,natural_language,Hastanenin bölümlerini merak ediyorum.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT SubeAdi AS SubeAdi, GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count
+;",True,1,True,True,True,2706.4781000372022,1.4372000005096197,0.27189997490495443,0.12590002734214067,0.12550002429634333,0,0,0,0,0,,,
+qwen3:8b,60,count,Genel Cerrahi bölümünde kaç farklı hasta görüldü?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(DISTINCT HastaId) AS unique_patient_count
 FROM dbo.vw_RandevuRaporu
-
-GROUP BY SubeAdi, GenelRandevuBolumAdi
-ORDER BY appointment_count DESC;",True,426,True,True,True,40908.361200010404,2.8753000078722835,2.259100030642003,3884.1920000268146,0.3735999925993383,0,0,0,0,0,,,
-qwen3:4b,5,natural_language,Sigorta şirketleriyle ilgili elimizde ne var?,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,8.441900019533932,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,6,listing,Doktorları listele.,0,SUCCESS,ok,DATA_ONLY,"SELECT DoktorId AS DoktorId, COUNT(*) AS appointment_count
+WHERE ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Genel Cerrahi,%'
+;",True,1,True,True,True,39568.38800001424,2.6655999827198684,0.5249000387266278,0.19730004714801908,0.26459997752681375,0,0,0,0,0,,,
+qwen3:8b,61,count,Kardiyoloji bölümünde kaç randevu gerçekleşti?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT SUM(CASE WHEN RandevuDurumu = N'Gerçekleşti' THEN 1 ELSE 0 END) AS completed_appointment_count
 FROM dbo.vw_RandevuRaporu
-
-GROUP BY DoktorId
-ORDER BY appointment_count DESC;",True,316,False,False,True,9380.929599981755,1.5869999770075083,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,7,listing,Kardiyoloji bölümündeki doktorları göster.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DoktorId AS DoktorId, GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count
+WHERE RandevuDurumu = N'Gerçekleşti' AND ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%'
+;",True,1,True,True,True,29225.99360003369,2.3045999696478248,0.285100017208606,0.15680002979934216,0.1878999755717814,0,0,0,0,0,,,
+qwen3:8b,62,listing,Mayıs 2025'te Kardiyoloji bölümünde gerçekleşen randevuları listele.,0,SUCCESS,ok,DATA_ONLY,"SELECT Id, BaslangicTarihi, BitisTarihi, RandevuDurumu, GenelRandevuKaynakAdi, GenelRandevuBolumAdi, SubeAdi, RandevuTipiAdi
 FROM dbo.vw_RandevuRaporu
-WHERE ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%'
-
-GROUP BY DoktorId, GenelRandevuBolumAdi
-ORDER BY appointment_count DESC;",True,28,True,True,True,102030.58949997649,2.2064000368118286,16824.909800023306,4605.102700006682,0.6108999950811267,0,0,0,0,0,,,
-qwen3:4b,8,listing,Bölümleri listele.,0,FAILED,invalid_sql,SAFE_ERROR,"SELECT GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count
+WHERE BaslangicTarihi >= '2025-05-01' AND BaslangicTarihi < DATEADD(day, 1, '2025-05-31') AND RandevuDurumu = N'Gerçekleşti' AND ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%'
+ORDER BY BaslangicTarihi DESC;",True,1000,False,False,True,2072.7877999888733,3.089600009843707,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,63,listing,Çocuk Kardiyolojisi bölümündeki doktorları listele.,0,SUCCESS,ok,DATA_ONLY,"SELECT DoktorId AS DoktorId, COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
-
-GROUP BY GenelRandevuBolumAdi
-ORDER BY appointment_count DESC;",False,0,False,False,True,60708.65510002477,1.706100010778755,0.03490003291517496,0.03709999145939946,0.055800017435103655,0,0,0,0,0,,"ExecuteSQLNode failed: Workflow query execution failed: Query execution failed: Database query execution failed: (pyodbc.OperationalError) ('HYT00', '[HYT00] [Microsoft][ODBC Driver 18 for SQL Server]Sorgu zaman aşımı doldu (0) (SQLExecDirectW)')
-[SQL: SELECT GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count
-FROM dbo.vw_RandevuRaporu
-
-GROUP BY GenelRandevuBolumAdi
-ORDER BY appointment_count DESC;]
-(Background on this error at: https://sqlalche.me/e/20/e3q8)",
-qwen3:4b,9,listing,Sigorta şirketlerini göster.,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,12.724899977911264,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,10,listing,Psikiyatri bölümündeki odaları listele.,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,10.168700013309717,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,11,listing,Bugünkü randevuları getir.,0,PARTIAL,no_results,NO_RESULT_GUIDANCE,"SELECT Id, BaslangicTarihi, BitisTarihi, RandevuDurumu, GenelRandevuKaynakAdi, GenelRandevuBolumAdi, SubeAdi, RandevuTipiAdi
-FROM dbo.vw_RandevuRaporu
-WHERE BaslangicTarihi >= '2026-07-24' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-24')
-ORDER BY BaslangicTarihi DESC;",True,0,False,False,True,604.271600022912,3.351000021211803,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,12,count,Kaç doktor var?,0,FAILED,sql_generation_failed,SAFE_ERROR,,False,0,False,False,True,592.9201999679208,2.0603000302799046,0.08150003850460052,0.06029999349266291,0.027699978090822697,0,0,0,0,0,,GenerateSQLNode failed: Workflow execution failed: Deterministic SQL builder failed plan compliance: projection column GenelRandevuKaynakAdi|ValidateSQLNode failed: Generated SQL is missing.,
-qwen3:4b,13,count,Toplam hasta sayısı nedir?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(DISTINCT HastaId) AS unique_patient_count
-FROM dbo.vw_RandevuRaporu
-;",True,1,True,True,True,2748.6429000273347,1.061999995727092,0.31079998007044196,0.575199956074357,0.25729998014867306,0,0,0,0,0,,,
-qwen3:4b,14,count,Kaç bölüm var?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count
-FROM dbo.vw_RandevuRaporu
-
-GROUP BY GenelRandevuBolumAdi;",True,426,True,True,True,45217.694799997844,1.8565000500530005,3.2946999999694526,10246.62890000036,0.32649998320266604,0,0,0,0,0,,,
-qwen3:4b,15,count,Bu ay kaç randevu alındı?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
-FROM dbo.vw_RandevuRaporu
-WHERE BaslangicTarihi >= '2026-07-01' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-31')
-;",True,1,True,True,True,563.0993999657221,3.5499000223353505,0.6176000460982323,0.222100003156811,0.34279999090358615,0,0,0,0,0,,,
-qwen3:4b,16,count,Kardiyoloji bölümünde kaç doktor çalışıyor?,0,FAILED,sql_generation_failed,SAFE_ERROR,,False,0,False,False,True,622.2449000342749,4.368900030385703,0.09169999975711107,0.055800017435103655,0.04069996066391468,0,0,0,0,0,,GenerateSQLNode failed: Workflow execution failed: Deterministic SQL builder failed plan compliance: projection column GenelRandevuKaynakAdi|ValidateSQLNode failed: Generated SQL is missing.,
-qwen3:4b,17,count,Kaç oda var?,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,12.264000019058585,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,18,comparison,Kardiyoloji ile Psikiyatri'yi karşılaştır.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT N'Kardiyoloji' AS current_entity_label, N'Psikiyatri' AS baseline_entity_label, COUNT(*) AS comparison_total_count, SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%' THEN 1 ELSE 0 END) AS current_entity_count, SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Psikiyatri,%' THEN 1 ELSE 0 END) AS baseline_entity_count, (SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%' THEN 1 ELSE 0 END)) - (SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Psikiyatri,%' THEN 1 ELSE 0 END)) AS absolute_change, 100.0 * ((SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%' THEN 1 ELSE 0 END)) - (SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Psikiyatri,%' THEN 1 ELSE 0 END))) / NULLIF((SUM(CASE WHEN ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Psikiyatri,%' THEN 1 ELSE 0 END)), 0) AS percentage_change
-FROM dbo.vw_RandevuRaporu
-WHERE (',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%' OR ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Psikiyatri,%')
-;",True,1,True,True,True,49900.15659999335,13.187400007154793,0.32380002085119486,0.16610004240646958,0.38839998887851834,0,0,0,0,0,,,
-qwen3:4b,19,comparison,Dermatoloji ile Kardiyoloji bölümlerinin randevu sayılarını kıyasla.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count
-FROM dbo.vw_RandevuRaporu
-WHERE ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%'
-
-GROUP BY GenelRandevuBolumAdi
-ORDER BY appointment_count DESC;",True,9,True,True,True,49481.08509997837,2.159199968446046,0.5835999618284404,0.2561000292189419,0.37369999336078763,0,0,0,0,0,,,
-qwen3:4b,20,comparison,Hangi bölüm daha yoğun: Kardiyoloji mi Psikiyatri mi?,0,FAILED,timeout,,,False,0,False,False,False,179996.93659995683,0.0,0.0,0.0,0.0,1,0,0,0,0,,,question timeout after 180.0s
-qwen3:4b,21,comparison,Bu ay ile geçen ayın randevu sayılarını karşılaştır.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT N'gecen ay' AS current_period_label, N'bu ay' AS baseline_period_label, SUM(CASE WHEN BaslangicTarihi >= '2026-06-01' AND BaslangicTarihi < '2026-07-01' THEN 1 ELSE 0 END) AS current_period_count, SUM(CASE WHEN BaslangicTarihi >= '2026-07-01' AND BaslangicTarihi < '2026-08-01' THEN 1 ELSE 0 END) AS baseline_period_count, (SUM(CASE WHEN BaslangicTarihi >= '2026-06-01' AND BaslangicTarihi < '2026-07-01' THEN 1 ELSE 0 END)) - (SUM(CASE WHEN BaslangicTarihi >= '2026-07-01' AND BaslangicTarihi < '2026-08-01' THEN 1 ELSE 0 END)) AS absolute_change, 100.0 * ((SUM(CASE WHEN BaslangicTarihi >= '2026-06-01' AND BaslangicTarihi < '2026-07-01' THEN 1 ELSE 0 END)) - (SUM(CASE WHEN BaslangicTarihi >= '2026-07-01' AND BaslangicTarihi < '2026-08-01' THEN 1 ELSE 0 END))) / NULLIF((SUM(CASE WHEN BaslangicTarihi >= '2026-07-01' AND BaslangicTarihi < '2026-08-01' THEN 1 ELSE 0 END)), 0) AS percentage_change
-FROM dbo.vw_RandevuRaporu
-WHERE (BaslangicTarihi >= '2026-06-01' AND BaslangicTarihi < '2026-07-01') OR (BaslangicTarihi >= '2026-07-01' AND BaslangicTarihi < '2026-08-01');",True,1,True,True,True,51165.80499999691,9.60230000782758,0.33840001560747623,0.05849997978657484,50598.36600004928,1,0,0,458,2402,stop,,
-qwen3:4b,22,comparison,Bölümlerin doktor sayılarını karşılaştır.,0,FAILED,sql_generation_failed,SAFE_ERROR,,False,0,False,False,True,552.4998999899253,1.6397999715991318,0.04529999569058418,0.03389996709302068,0.02759997732937336,0,0,0,0,0,,GenerateSQLNode failed: Workflow execution failed: Deterministic SQL builder failed plan compliance: projection column GenelRandevuKaynakAdi|ValidateSQLNode failed: Generated SQL is missing.,
-qwen3:4b,23,trend,Son 6 ayın randevularını analiz et.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
-FROM dbo.vw_RandevuRaporu
-WHERE BaslangicTarihi >= '2026-01-24' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-24')
-;",True,1,True,True,True,558.9528000564314,4.747600003611296,0.43109996477141976,0.14869996812194586,0.16029999824240804,0,0,0,0,0,,,
-qwen3:4b,24,trend,Son 3 ayın randevu trendini göster.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DATEADD(WEEK, DATEDIFF(WEEK, 0, BaslangicTarihi), 0) AS period_start, COUNT(*) AS weekly_appointment_count
-FROM dbo.vw_RandevuRaporu
-WHERE BaslangicTarihi >= '2026-04-24' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-24')
-GROUP BY DATEADD(WEEK, DATEDIFF(WEEK, 0, BaslangicTarihi), 0)
-ORDER BY period_start ASC;",True,13,True,True,True,4183.037200011313,3.7181000225245953,0.522000016644597,3583.368099993095,0.25859999004751444,0,0,0,0,0,,,
-qwen3:4b,25,trend,Randevu sayılarının aylık eğilimi nasıl?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1) AS period_start, COUNT(*) AS monthly_appointment_count
-FROM dbo.vw_RandevuRaporu
-GROUP BY DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1)
-ORDER BY period_start ASC;",True,78,True,True,True,16858.049599977676,2.2211999748833477,0.7210999610833824,13839.25590000581,0.4192999913357198,0,0,0,0,0,,,
-qwen3:4b,26,trend,Son 6 ayı analiz et ve dikkat edilmesi gereken noktaları söyle.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
-FROM dbo.vw_RandevuRaporu
-WHERE BaslangicTarihi >= '2026-01-24' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-24')
-;",True,1,True,True,True,571.6687000240199,1.6959999920800328,0.3597000031732023,0.1753999968059361,0.12079998850822449,0,0,0,0,0,,,
-qwen3:4b,27,trend,Bu yıl randevular aylara göre nasıl bir seyir izledi?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1) AS period_start, COUNT(*) AS monthly_appointment_count
-FROM dbo.vw_RandevuRaporu
-WHERE BaslangicTarihi >= '2026-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-24')
-GROUP BY DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1)
-ORDER BY period_start ASC;",True,7,True,True,True,9713.850400003139,2.687099971808493,0.4755000118166208,9150.951499992516,0.45759999193251133,0,0,0,0,0,,,
-qwen3:4b,28,analytics,Bölümlere göre randevu dağılımını analiz et.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointments_per_department
-FROM dbo.vw_RandevuRaporu
-
-GROUP BY GenelRandevuBolumAdi
-ORDER BY appointments_per_department DESC;",True,426,True,True,True,40907.854399993084,1.5047999913804233,1.608199963811785,6357.299299968872,0.45470002805814147,0,0,0,0,0,,,
-qwen3:4b,29,analytics,Randevu durumlarının dağılımı nedir?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT RandevuDurumu AS RandevuDurumu, COUNT(*) AS appointment_count
-FROM dbo.vw_RandevuRaporu
-
-GROUP BY RandevuDurumu
-ORDER BY appointment_count DESC;",True,5,True,True,True,3524.2928999941796,1.4069000026211143,0.5904000136069953,0.20540005061775446,0.5278000026009977,0,0,0,0,0,,,
-qwen3:4b,30,analytics,Doktor başına ortalama randevu sayısı nedir?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DoktorId AS DoktorId, COUNT(*) AS appointment_count
-FROM dbo.vw_RandevuRaporu
-
-GROUP BY DoktorId;",True,316,True,True,True,35400.220999959856,1.7375000170432031,21055.69850001484,4778.003599960357,0.4983000108040869,0,0,0,0,0,,,
-qwen3:4b,31,analytics,Bölümlerin randevu yüzdelerini göster.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT Id, BaslangicTarihi, BitisTarihi, RandevuDurumu, GenelRandevuKaynakAdi, GenelRandevuBolumAdi, SubeAdi, RandevuTipiAdi
-FROM dbo.vw_RandevuRaporu
-ORDER BY BaslangicTarihi DESC;",True,1000,True,True,True,11563.704299973324,1.885899982880801,3.3772000460885465,0.05269999383017421,0.40169997373595834,0,0,0,0,0,,,
-qwen3:4b,32,analytics,Hastaların sigorta şirketlerine göre dağılımını analiz et.,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,9.995200030971318,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,33,ranking,En çok randevusu olan doktor kim?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DoktorId AS DoktorId, COUNT(*) AS appointment_count
-FROM dbo.vw_RandevuRaporu
+WHERE (',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%' OR ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Çocuk Kardiyolojisi,%')
 
 GROUP BY DoktorId
-ORDER BY appointment_count DESC;",True,316,True,True,True,105976.4404000016,1.732699980493635,15288.727600011043,72363.6783999973,0.4246000316925347,0,0,0,0,0,,,
-qwen3:4b,34,ranking,En yoğun bölüm hangisi?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count
+ORDER BY appointment_count DESC;",True,12,False,False,True,54044.27100002067,2.33339995611459,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,64,listing,Son 50 randevuyu tarihe göre listele.,0,SUCCESS,ok,DATA_ONLY,"SELECT TOP (50) Id, BaslangicTarihi, BitisTarihi, RandevuDurumu, GenelRandevuKaynakAdi, GenelRandevuBolumAdi, SubeAdi, RandevuTipiAdi
+FROM dbo.vw_RandevuRaporu
+ORDER BY BaslangicTarihi DESC;",True,50,False,False,True,560.3495999821462,1.6820000018924475,0.0,0.0,0.0,0,0,0,0,0,,,
+qwen3:8b,65,comparison,Kardiyoloji ile Çocuk Kardiyolojisi bölümlerinin randevu sayılarını karşılaştır.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
+FROM dbo.vw_RandevuRaporu
+WHERE (',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%' OR ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Çocuk Kardiyolojisi,%')
+;",True,1,True,True,True,47466.705800034106,2.056299999821931,0.34119997872039676,0.14260003808885813,0.17070001922547817,0,0,0,0,0,,,
+qwen3:8b,66,comparison,Mayıs 2025 ile Haziran 2025'te hangi ayda daha çok randevu var?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT N'Haziran 2025' AS current_period_label, N'Mayıs 2025' AS baseline_period_label, SUM(CASE WHEN BaslangicTarihi >= '2025-06-01' AND BaslangicTarihi < '2025-07-01' THEN 1 ELSE 0 END) AS current_period_count, SUM(CASE WHEN BaslangicTarihi >= '2025-05-01' AND BaslangicTarihi < '2025-06-01' THEN 1 ELSE 0 END) AS baseline_period_count, (SUM(CASE WHEN BaslangicTarihi >= '2025-06-01' AND BaslangicTarihi < '2025-07-01' THEN 1 ELSE 0 END)) - (SUM(CASE WHEN BaslangicTarihi >= '2025-05-01' AND BaslangicTarihi < '2025-06-01' THEN 1 ELSE 0 END)) AS absolute_change, 100.0 * ((SUM(CASE WHEN BaslangicTarihi >= '2025-06-01' AND BaslangicTarihi < '2025-07-01' THEN 1 ELSE 0 END)) - (SUM(CASE WHEN BaslangicTarihi >= '2025-05-01' AND BaslangicTarihi < '2025-06-01' THEN 1 ELSE 0 END))) / NULLIF((SUM(CASE WHEN BaslangicTarihi >= '2025-05-01' AND BaslangicTarihi < '2025-06-01' THEN 1 ELSE 0 END)), 0) AS percentage_change
+FROM dbo.vw_RandevuRaporu
+WHERE (BaslangicTarihi >= '2025-06-01' AND BaslangicTarihi < '2025-07-01') OR (BaslangicTarihi >= '2025-05-01' AND BaslangicTarihi < '2025-06-01');",True,1,True,True,True,1098.8710999954492,8.961299958173186,0.5592000088654459,0.05199998850002885,0.7766999769955873,0,0,0,0,0,,,
+qwen3:8b,67,comparison,Genel Cerrahi mi Ameliyathane mi daha fazla randevu almış?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
+FROM dbo.vw_RandevuRaporu
+WHERE ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Genel Cerrahi,%'
+;",True,1,True,True,True,40217.532599985134,1.8897000118158758,0.2927999594248831,0.1181000261567533,0.17369998386129737,0,0,0,0,0,,,
+qwen3:8b,68,comparison,Kadın hastalar mı erkek hastalar mı daha fazla randevu almış?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
+FROM dbo.vw_RandevuRaporu
+;",True,1,True,True,True,2332.1426000329666,1.0015000007115304,0.3910000086762011,0.18939998699352145,0.20370003767311573,0,0,0,0,0,,,
+qwen3:8b,69,analytics,Hastaların cinsiyete göre dağılımını göster.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT CinsiyetId AS CinsiyetId, COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 
-GROUP BY GenelRandevuBolumAdi
-ORDER BY appointment_count DESC;",True,426,True,True,True,51690.08249999024,1.4229000080376863,1.4258000301197171,16436.209200008307,0.39119995199143887,0,0,0,0,0,,,
-qwen3:4b,35,ranking,En az randevusu olan bölümü göster.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count
+GROUP BY CinsiyetId
+ORDER BY appointment_count DESC;",True,3,True,True,True,18798.032100021373,1.6379999578930438,0.5600000149570405,15726.338999986183,0.16930000856518745,0,0,0,0,0,,,
+qwen3:8b,70,analytics,Kadın hasta oranı nedir?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT CinsiyetId AS CinsiyetId, COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
 
-GROUP BY GenelRandevuBolumAdi
-ORDER BY appointment_count ASC;",True,426,True,True,True,39436.41599995317,2.593900018837303,1.4605000033043325,5000.887700007297,0.29719999292865396,0,0,0,0,0,,,
-qwen3:4b,36,ranking,En çok reçete yazan ilk 5 doktoru listele.,0,SUCCESS,expected_out_of_scope,ASK_CLARIFICATION,,False,0,False,False,True,9.026300045661628,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,37,ranking,En fazla hastası olan doktoru bul.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DoktorId AS DoktorId, COUNT(*) AS appointment_count
+GROUP BY CinsiyetId
+ORDER BY appointment_count DESC;",True,3,True,True,True,2987.0266999932937,1.510899979621172,0.32350001856684685,0.17460004892200232,0.15429995255544782,0,0,0,0,0,,,
+qwen3:8b,71,ranking,Genel Cerrahi bölümünde en çok randevusu olan doktoru bul.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT DoktorId AS DoktorId, COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
+WHERE ',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Genel Cerrahi,%'
 
 GROUP BY DoktorId
-ORDER BY appointment_count DESC;",True,316,True,True,True,58842.55979995942,1.853700028732419,10315.780300006736,39238.996500032954,0.4251999780535698,0,0,0,0,0,,,
-qwen3:4b,38,ranking,Randevu sayısına göre bölümleri sırala.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT GenelRandevuBolumAdi AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count
+ORDER BY appointment_count DESC;",True,42,True,True,True,88136.44329999806,3.6841999972239137,8816.532100026961,32576.40919997357,0.31020003370940685,0,0,0,0,0,,,
+qwen3:8b,72,date_filtering,2025 Mayıs ayındaki randevu sayısını göster.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
-
-GROUP BY GenelRandevuBolumAdi
-ORDER BY appointment_count DESC;",True,426,True,True,True,37492.18840000685,2.060100028757006,1.581299991812557,3281.9315000087954,0.6299000233411789,0,0,0,0,0,,,
-qwen3:4b,39,date_filtering,Bugünkü randevuları göster.,0,PARTIAL,no_results,NO_RESULT_GUIDANCE,"SELECT Id, BaslangicTarihi, BitisTarihi, RandevuDurumu, GenelRandevuKaynakAdi, GenelRandevuBolumAdi, SubeAdi, RandevuTipiAdi
+WHERE BaslangicTarihi >= '2025-05-01' AND BaslangicTarihi < DATEADD(day, 1, '2025-05-31')
+;",True,1,True,True,True,823.1248999945819,1.4620000147260725,0.34600001526996493,0.1202999847009778,0.1379000023007393,0,0,0,0,0,,,
+qwen3:8b,73,date_filtering,Ağustos 2025'te kaç randevu vardı?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
-WHERE BaslangicTarihi >= '2026-07-24' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-24')
-ORDER BY BaslangicTarihi DESC;",True,0,True,True,True,575.4593999590725,2.146499988157302,0.4847000236622989,0.05530001362785697,0.1517999917268753,0,0,0,0,0,,,
-qwen3:4b,40,date_filtering,Geçen hafta kaç randevu vardı?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
+WHERE BaslangicTarihi >= '2025-08-01' AND BaslangicTarihi < DATEADD(day, 1, '2025-08-31')
+;",True,1,True,True,True,763.7434999924153,2.0255999988876283,0.4138000076636672,0.1210999907925725,0.14509999891743064,0,0,0,0,0,,,
+qwen3:8b,74,date_filtering,Temmuz 2025'te kaç randevu alındı?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
 FROM dbo.vw_RandevuRaporu
-WHERE BaslangicTarihi >= '2026-07-13' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-19')
-;",True,1,True,True,True,582.3467999580316,1.9026999943889678,0.4868999822065234,0.12390001211315393,0.15060004079714417,0,0,0,0,0,,,
-qwen3:4b,41,date_filtering,Son 30 günün randevularını listele.,0,SUCCESS,ok,DATA_ONLY,"SELECT Id, BaslangicTarihi, BitisTarihi, RandevuDurumu, GenelRandevuKaynakAdi, GenelRandevuBolumAdi, SubeAdi, RandevuTipiAdi
-FROM dbo.vw_RandevuRaporu
-WHERE BaslangicTarihi >= '2026-06-25' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-24')
-ORDER BY BaslangicTarihi DESC;",True,9,False,False,True,568.9117000438273,2.1988999797031283,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,42,date_filtering,Ocak ayında kaç randevu alındı?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
-FROM dbo.vw_RandevuRaporu
-WHERE BaslangicTarihi >= '2026-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2026-01-31')
-;",True,1,True,True,True,554.9555000034161,1.4974999940022826,0.5186999915167689,0.1357000437565148,0.15540001913905144,0,0,0,0,0,,,
-qwen3:4b,43,date_filtering,2025 yılında kaç hasta kaydı yapıldı?,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(DISTINCT HastaId) AS unique_patient_count
-FROM dbo.vw_RandevuRaporu
-WHERE BaslangicTarihi >= '2025-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2025-12-31')
-;",True,1,True,True,True,1222.9775000014342,2.038799982983619,0.31650002347305417,0.12790004257112741,0.1591000473126769,0,0,0,0,0,,,
-qwen3:4b,44,date_filtering,Geçen ay tamamlanan randevuları göster.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT Id, BaslangicTarihi, BitisTarihi, RandevuDurumu, GenelRandevuKaynakAdi, GenelRandevuBolumAdi, SubeAdi, RandevuTipiAdi
-FROM dbo.vw_RandevuRaporu
-WHERE BaslangicTarihi >= '2026-06-01' AND BaslangicTarihi < DATEADD(day, 1, '2026-06-30')
-ORDER BY BaslangicTarihi DESC;",True,19,True,True,True,578.9498999947682,1.9112000009045005,0.3887999919243157,0.1406000228598714,0.25839998852461576,0,0,0,0,0,,,
-qwen3:4b,45,ambiguous,En iyi doktor kim?,0,SUCCESS,ok,ASK_CLARIFICATION,,False,0,False,False,True,7.010500004980713,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,46,ambiguous,En başarılı bölüm hangisi?,0,SUCCESS,ok,ASK_CLARIFICATION,,False,0,False,False,True,7.139399996958673,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,47,ambiguous,En verimli doktoru söyle.,0,SUCCESS,ok,ASK_CLARIFICATION,,False,0,False,False,True,5.759699968621135,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,48,ambiguous,Durum nasıl?,0,SUCCESS,ok,OUT_OF_SCOPE,,False,0,False,False,True,7.965199998579919,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,49,ambiguous,En kötü performans kimde?,0,SUCCESS,ok,ASK_CLARIFICATION,,False,0,False,False,True,6.902699999045581,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,50,graceful_failure,Uzaydaki astronotları listele.,0,SUCCESS,ok,OUT_OF_SCOPE,,False,0,False,False,True,7.734099985100329,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,51,graceful_failure,Araba satışlarını göster.,0,SUCCESS,ok,OUT_OF_SCOPE,,False,0,False,False,True,7.2805999661795795,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,52,graceful_failure,Doktorların maaşlarını sil.,0,SUCCESS,ok,OUT_OF_SCOPE,,False,0,False,False,True,7.330099993851036,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,53,graceful_failure,Veritabanını güncelle ve tüm randevuları iptal et.,0,SUCCESS,ok,ASK_CLARIFICATION,,False,0,False,False,True,9.321299963630736,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,54,graceful_failure,asdfghjkl qwerty.,0,SUCCESS,ok,OUT_OF_SCOPE,,False,0,False,False,True,7.0371999754570425,0.0,0.0,0.0,0.0,0,0,0,0,0,,,
-qwen3:4b,55,graceful_failure,2099 yılındaki randevuları analiz et.,0,SUCCESS,ok,EXECUTE_SQL,"SELECT COUNT(*) AS appointment_count
-FROM dbo.vw_RandevuRaporu
-WHERE BaslangicTarihi >= '2099-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2099-12-31')
-;",True,1,True,True,True,562.0390000403859,1.8210000125691295,0.2829000004567206,0.11830002767965198,0.12240000069141388,0,0,0,0,0,,,
-qwen3:4b,56,graceful_failure,Hastaların kredi kartı numaralarını listele.,0,SUCCESS,ok,DATA_ONLY,"SELECT Id, BaslangicTarihi, BitisTarihi, RandevuDurumu, GenelRandevuKaynakAdi, GenelRandevuBolumAdi, SubeAdi, RandevuTipiAdi
-FROM dbo.vw_RandevuRaporu
-ORDER BY BaslangicTarihi DESC;",True,1000,False,False,True,4909.3066999921575,2.4784000124782324,0.0,0.0,0.0,0,0,0,0,0,,,
+WHERE BaslangicTarihi >= '2025-07-01' AND BaslangicTarihi < DATEADD(day, 1, '2025-07-31')
+;",True,1,True,True,True,799.8746000230312,1.8038999987766147,0.9067999781109393,0.11960003757849336,0.14679995365440845,0,0,0,0,0,,,
