@@ -201,11 +201,11 @@
       "turns": [
         {
           "question": "2025 Mayis ayinda Kardiyoloji bolumunde kac randevu oldu?",
-          "expected": {"follow_up": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["GenelRandevuBolumAdi"], "date_column": "BaslangicTarihi", "date_start": "2025-05-01", "date_end": "2025-05-31", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {"follow_up": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": [], "date_column": "BaslangicTarihi", "date_start": "2025-05-01", "date_end": "2025-05-31", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
         },
         {
           "question": "Peki Haziran ayinda?",
-          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["GenelRandevuBolumAdi"], "date_column": "BaslangicTarihi", "date_start": "2025-06-01", "date_end": "2025-06-30", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": [], "date_column": "BaslangicTarihi", "date_start": "2025-06-01", "date_end": "2025-06-30", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
         }
       ]
     },

@@ -57,6 +57,11 @@ _SELF_COUNT_DIMENSIONS: dict[str, set[str]] = {
 
 _NEGATION_PATTERN = re.compile(r"\b(olmayan|bulunmayan|almayan)\w*\b|\bhic\b")
 
+# Bare single-sided gender reference ("kadin hasta orani") - distinct from the
+# two-word "kadin erkek orani" phrasing already covered by the CinsiyetId
+# dimension synonym list.
+_BARE_GENDER_TERM_PATTERN = re.compile(r"\b(kadin|erkek)\b")
+
 # Generic organization-wide scope phrases ("tüm aile sağlığı merkezleri", "bütün
 # şubeler", "kurum genelinde", ...). These NEVER name a real branch value —
 # they mean "no branch filter, every record in scope" — and must never be
@@ -234,7 +239,14 @@ class QueryPlanner:
                     ]
 
             intelligence = self._resolve_intelligence(
-                folded, analysis, projection, aggregation, ranking, status_value
+                folded,
+                analysis,
+                projection,
+                aggregation,
+                ranking,
+                status_value,
+                department_filter=signals.department,
+                department_column=view_mapping.concept_column("Department", view_name),
             )
             if raw_list_request:
                 list_projection = self._view_list_projection(view_name)
@@ -507,6 +519,8 @@ class QueryPlanner:
         aggregation: str | None,
         ranking: str | None,
         status_value: str | None = None,
+        department_filter: str | None = None,
+        department_column: str | None = None,
     ) -> dict:
         """Catalog-driven analytical resolution (Agent Intelligence Foundation).
 
@@ -517,6 +531,25 @@ class QueryPlanner:
         answerable, reason, alternative = catalog.check_answerability(folded)
         metrics = catalog.match_metrics(folded)
         dimensions = catalog.match_dimensions(folded)
+
+        # A named department ("Genel Cerrahi bölümünde ...") already pins
+        # GenelRandevuBolumAdi to one value via department_filter; the bare
+        # "bölüm(ünde)" mention that grounded it also independently matches
+        # the department dimension synonym list, which would add it back as
+        # a GROUP BY column too — collapsing to a single degenerate group
+        # (department is already single-valued) and misclassifying the
+        # analysis as a breakdown (e.g. cross_analysis/distinct_count with a
+        # useless dimension) instead of a scalar/plain metric answer. Only a
+        # genuine grouping marker ("bölüme göre/bazında") should keep it.
+        if (
+            department_filter
+            and department_column
+            and department_column in dimensions
+            and not any(
+                marker in folded for marker in ("gore", "bazinda", "bazli", "kirilim", "dagilim")
+            )
+        ):
+            dimensions = [d for d in dimensions if d != department_column]
 
         # Measure-phrase fallback: a status concept was independently resolved
         # (view_mapping.resolve_status_filter) and the utterance carries a
@@ -538,6 +571,24 @@ class QueryPlanner:
                     metrics = candidates
         date_range_count = len(analysis.detected_dates)
         pattern = catalog.match_pattern(folded, date_range_count)
+
+        # A single bare gender word ("kadin hasta orani nedir") asks for a
+        # one-sided share, not a two-sided "kadin erkek orani" comparison, so
+        # it never hits the CinsiyetId dimension synonym list (which requires
+        # both words) and resolves NO dimension at all - unlike the two-word
+        # case, the fallback below (which needs a resolved dimension) can
+        # never fire for it. Ground it onto CinsiyetId directly so it shares
+        # that fallback instead of producing an empty, uncomputable plan.
+        # "kadin dogum" is excluded: it's the "Kadın Doğum" department name,
+        # not a demographic reference.
+        if (
+            pattern == "ratio"
+            and not metrics
+            and not dimensions
+            and _BARE_GENDER_TERM_PATTERN.search(folded)
+            and "kadin dogum" not in folded
+        ):
+            dimensions = ["CinsiyetId"]
 
         # "X orani" text alone pattern-matches to "ratio" even when no specific
         # ratio metric (numerator/denominator) exists for it - e.g. "kadin
