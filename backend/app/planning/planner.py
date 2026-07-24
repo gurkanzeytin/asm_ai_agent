@@ -380,6 +380,24 @@ class QueryPlanner:
                 intelligence["analysis_type"],
             )
 
+            # A bare "ilk/son N" number elsewhere in the question (e.g. "ilk 6
+            # ayının ... trendini özetle" - intended as "first 6 months",
+            # a date-range qualifier) is detected generically as a row-count
+            # LIMIT by the query analyzer regardless of what it's modifying.
+            # The deterministic time-series builder has no TOP(N) support at
+            # all (a trend answers with every bucket in the resolved date
+            # range, not "the first N rows"), so PlanComplianceValidator's
+            # generic "plan.limit needs a matching TOP" check rejects the
+            # SQL outright -> SAFE_ERROR (2026-07-24, live multi-turn
+            # testing: "2025'in ilk 6 ayının randevu trendini özetle").
+            # Correctly narrowing the date range itself to the first N
+            # months is a separate, deeper fix in query_analyzer - not yet
+            # implemented; dropping the limit here at least answers with the
+            # full resolved date range instead of failing outright.
+            resolved_limit = analysis.detected_limit
+            if resolved_limit and intelligence["analysis_type"] == "time_trend":
+                resolved_limit = None
+
             plan = QueryPlan(
                 question=question,
                 output_entity=output_entity,
@@ -395,7 +413,7 @@ class QueryPlanner:
                 extra_filters=extra_filters,
                 aggregation=aggregation,
                 ranking=ranking,
-                limit=analysis.detected_limit,
+                limit=resolved_limit,
                 order=order,
                 analysis_type=signals_type,
                 join_path=join_path,

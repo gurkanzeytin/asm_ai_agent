@@ -90,6 +90,28 @@ def test_trend_plan_includes_date_column_via_date_filters():
     assert plan.date_filters[0].column == "BaslangicTarihi"
 
 
+def test_trend_with_leading_number_drops_row_limit_and_builds_sql():
+    """"ilk 6 ayinin ... trendini ozetle" ("the trend of the first 6 months")
+    - the bare "ilk 6" is detected generically as a row-count LIMIT by the
+    query analyzer regardless of what it modifies. The deterministic
+    time-series builder has no TOP(N) support (a trend answers with every
+    bucket in the resolved date range), so PlanComplianceValidator's generic
+    "plan.limit needs a matching TOP" check rejected the SQL outright ->
+    SAFE_ERROR (2026-07-24, live multi-turn testing). Narrowing the date
+    range itself to the first N months is a separate fix - not covered
+    here; this only asserts the crash is gone."""
+    question = "2025'in ilk 6 ayının randevu trendini özetle"
+    _, plan = _build_plan(question)
+
+    assert plan.analysis_type == "time_trend"
+    assert plan.limit is None
+
+    result = DeterministicSQLBuilder().build(plan)
+    assert hasattr(result, "sql"), getattr(result, "reason", None)
+    compliance = PlanComplianceValidator().check(result.sql, plan, result.expected_aliases)
+    assert compliance.compliant, compliance.missing
+
+
 def test_deterministic_sql_for_monthly_trend_is_valid_tsql_with_group_and_order():
     _, plan = _build_plan(_TREND_QUESTION)
     result = DeterministicSQLBuilder().build(plan)
