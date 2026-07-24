@@ -73,6 +73,18 @@ _GENERIC_QUANTIFIERS = {
     "tum", "tüm", "butun", "bütün", "her", "genel", "geneli", "genelinde",
 }
 
+# "genel" is almost always the generic-scope word above ("genel olarak",
+# "tüm şubeler genelinde") - but it is also the literal first word of a real
+# department name, "Genel Cerrahi" (General Surgery). Blocking it
+# unconditionally truncated "Genel Cerrahi bölümünde ..." down to the bare
+# fragment "Cerrahi", which then matched several unrelated *Cerrahi*
+# departments (Çocuk Cerrahisi, Göğüs Cerrahisi, ...) as equally-scored
+# candidates and forced an unnecessary clarification (2026-07-24, found via
+# the live benchmark). Keyed by the token already accepted to genel's right.
+_GENERIC_QUANTIFIER_EXCEPTIONS: dict[str, set[str]] = {
+    "genel": {"cerrahi"},
+}
+
 # Interrogative/demonstrative words (folded, matched as EXACT tokens — a
 # startswith root would swallow real values like "Nefroloji" via "ne"). These
 # are capitalized in sentence-initial position ("Kaç doktor var?", "Hangi
@@ -440,7 +452,15 @@ def extract_candidate_phrases(question: str) -> dict[str, list[str]]:
                 break
             if folded_word in _QUESTION_WORDS:
                 break
-            if any(folded_word.startswith(root) for root in _NEVER_CANDIDATE_ROOTS):
+            exception_words = _GENERIC_QUANTIFIER_EXCEPTIONS.get(folded_word)
+            is_exception = bool(
+                exception_words
+                and phrase_tokens
+                and fold(phrase_tokens[0]) in exception_words
+            )
+            if not is_exception and any(
+                folded_word.startswith(root) for root in _NEVER_CANDIDATE_ROOTS
+            ):
                 break
             phrase_tokens.insert(0, original)
             j -= 1
