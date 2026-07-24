@@ -634,15 +634,23 @@ class QueryAnalyzer:
         for month_name, month in _MONTHS.items():
             if month in bare_months_seen:
                 continue
+            # Any Turkish grammatical case of "ay" (month) following the
+            # month name - locative "haziran ayında" (in June), nominal
+            # "haziran ayı" (the month of June), etc. Previously only the
+            # locative "ayında" form was recognized, so a bare month
+            # reference with no explicit year ("... haziran ayı son 100
+            # randevu") was entirely invisible to date detection and the
+            # query ran with NO date filter at all - a full-table COUNT
+            # instead of a June-scoped one (2026-07-24 real UI bug report).
             for match in re.finditer(
-                rf"\b{self._strip_diacritics(month_name)}\s+ayinda\b", query_ascii
+                rf"\b{self._strip_diacritics(month_name)}\s+ay\w*\b", query_ascii
             ):
                 if self._overlaps_any(
                     match.span(), explicit_date_spans + month_year_spans
                 ):
                     continue
                 bare_months_seen.add(month)
-                ranges.append(self._month_range(f"{month_name} ayinda", today.year, month))
+                ranges.append(self._month_range(match.group(0), today.year, month))
                 break
 
         # Full calendar years, including Turkish case/possessive forms used by

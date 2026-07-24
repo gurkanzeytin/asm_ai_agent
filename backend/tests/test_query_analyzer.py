@@ -97,6 +97,22 @@ def test_query_analyzer_bare_month_deduplicates_diacritic_variants():
     assert analysis.detected_dates[0].end_date == date(2026, 5, 31)
 
 
+def test_query_analyzer_bare_month_ayi_form_without_year_is_detected():
+    """"...haziran ayı son 100 randevu" (nominal "ayı", no explicit year) was
+    entirely invisible to date detection - the bare-month detector only
+    matched the locative "ayında" suffix, so the query ran with NO date
+    filter at all (a full-table scan instead of June-scoped) — real UI bug
+    report, 2026-07-24, from a user's typed correction "erkek kadın değil
+    haziran ayı son 100 randevu"."""
+    analyzer = QueryAnalyzer(today=date(2026, 7, 10))
+
+    analysis = analyzer.analyze("erkek kadin degil haziran ayi son 100 randevu")
+
+    assert len(analysis.detected_dates) == 1
+    assert analysis.detected_dates[0].start_date == date(2026, 6, 1)
+    assert analysis.detected_dates[0].end_date == date(2026, 6, 30)
+
+
 @pytest.mark.parametrize(
     ("query", "expected_normalized", "expected_synonym"),
     [
