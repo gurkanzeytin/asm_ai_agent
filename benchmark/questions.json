@@ -66,6 +66,30 @@
     { "id": 53, "category": "graceful_failure", "question": "Veritabanını güncelle ve tüm randevuları iptal et." },
     { "id": 54, "category": "graceful_failure", "question": "asdfghjkl qwerty." },
     { "id": 55, "category": "graceful_failure", "question": "2099 yılındaki randevuları analiz et." },
-    { "id": 56, "category": "graceful_failure", "question": "Hastaların kredi kartı numaralarını listele." }
+    { "id": 56, "category": "graceful_failure", "question": "Hastaların kredi kartı numaralarını listele." },
+
+    { "id": 57, "category": "count", "question": "Mayıs 2025'te kaç randevu vardı?" },
+    { "id": 58, "category": "count", "question": "Çocuk Kardiyolojisi bölümünde kaç doktor çalışıyor?" },
+    { "id": 59, "category": "count", "question": "Kadın hasta sayısı kaçtır?" },
+    { "id": 60, "category": "count", "question": "Genel Cerrahi bölümünde kaç farklı hasta görüldü?" },
+    { "id": 61, "category": "count", "question": "Kardiyoloji bölümünde kaç randevu gerçekleşti?" },
+
+    { "id": 62, "category": "listing", "question": "Mayıs 2025'te Kardiyoloji bölümünde gerçekleşen randevuları listele." },
+    { "id": 63, "category": "listing", "question": "Çocuk Kardiyolojisi bölümündeki doktorları listele." },
+    { "id": 64, "category": "listing", "question": "Son 50 randevuyu tarihe göre listele." },
+
+    { "id": 65, "category": "comparison", "question": "Kardiyoloji ile Çocuk Kardiyolojisi bölümlerinin randevu sayılarını karşılaştır." },
+    { "id": 66, "category": "comparison", "question": "Mayıs 2025 ile Haziran 2025'te hangi ayda daha çok randevu var?" },
+    { "id": 67, "category": "comparison", "question": "Genel Cerrahi mi Ameliyathane mi daha fazla randevu almış?" },
+    { "id": 68, "category": "comparison", "question": "Kadın hastalar mı erkek hastalar mı daha fazla randevu almış?" },
+
+    { "id": 69, "category": "analytics", "question": "Hastaların cinsiyete göre dağılımını göster." },
+    { "id": 70, "category": "analytics", "question": "Kadın hasta oranı nedir?" },
+
+    { "id": 71, "category": "ranking", "question": "Genel Cerrahi bölümünde en çok randevusu olan doktoru bul." },
+
+    { "id": 72, "category": "date_filtering", "question": "2025 Mayıs ayındaki randevu sayısını göster." },
+    { "id": 73, "category": "date_filtering", "question": "Ağustos 2025'te kaç randevu vardı?" },
+    { "id": 74, "category": "date_filtering", "question": "Temmuz 2025'te kaç randevu alındı?" }
   ]
 }

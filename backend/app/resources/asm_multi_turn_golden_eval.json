@@ -208,6 +208,20 @@
           "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["GenelRandevuBolumAdi"], "date_column": "BaslangicTarihi", "date_start": "2025-06-01", "date_end": "2025-06-30", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
         }
       ]
+    },
+    {
+      "id": "MT-012",
+      "title": "Status negation follow-up excludes the prior turn's status instead of losing context",
+      "turns": [
+        {
+          "question": "Mayis 2025'te gerceklesen randevu sayisini goster",
+          "expected": {"follow_up": false, "analysis_type": "count", "metrics": ["completed_appointment_count"], "dimensions": [], "date_column": "BaslangicTarihi", "date_start": "2025-05-01", "date_end": "2025-05-31", "extra_include": ["Gerçekleşti"], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+        },
+        {
+          "question": "Peki gerceklesmeyenler?",
+          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": [], "date_column": "BaslangicTarihi", "date_start": "2025-05-01", "date_end": "2025-05-31", "extra_include": ["Beklemede", "Gelmedi", "Giriş Yapılmış", "İşlem Sürmekte"], "extra_exclude": ["Gerçekleşti"], "response_mode": null, "visible_sections": []}
+        }
+      ]
     }
   ]
 }
