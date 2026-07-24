@@ -233,37 +233,46 @@ export function SqlResultsTable({
   ) => {
     if (operator === "empty") return value == null || String(value).trim() === "";
     if (operator === "notEmpty") return value != null && String(value).trim() !== "";
-    const str = String(value ?? "").toLowerCase();
-    const fv = filterValue.toLowerCase();
-    const num = Number(value);
-    const fnum = Number(filterValue);
+    // Turkish-locale case folding: plain toLowerCase() maps "İ" -> "i̇" (i +
+    // combining dot, not plain "i"), so an exact-match search for "izmir"
+    // would never match a cell spelled "İZMİR".
+    const str = String(value ?? "").toLocaleLowerCase("tr");
+    const fv = filterValue.toLocaleLowerCase("tr");
     switch (operator) {
       case "eq":
         return str === fv;
       case "contains":
         return str.includes(fv);
       case "gt":
-        return !isNaN(num) && !isNaN(fnum) && num > fnum;
       case "lt":
-        return !isNaN(num) && !isNaN(fnum) && num < fnum;
       case "gte":
-        return !isNaN(num) && !isNaN(fnum) && num >= fnum;
-      case "lte":
-        return !isNaN(num) && !isNaN(fnum) && num <= fnum;
+      case "lte": {
+        // A NULL cell (common from LEFT JOINs) means "unknown", not zero -
+        // Number(null) === 0 would otherwise silently include NULL rows in
+        // e.g. an "appointment_count < 5" filter as if their count were 0.
+        if (value == null) return false;
+        const num = Number(value);
+        const fnum = Number(filterValue);
+        if (isNaN(num) || isNaN(fnum)) return false;
+        if (operator === "gt") return num > fnum;
+        if (operator === "lt") return num < fnum;
+        if (operator === "gte") return num >= fnum;
+        return num <= fnum;
+      }
       default:
         return true;
     }
   };
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = query.trim().toLocaleLowerCase("tr");
     const rowsWithIdx: RowMeta[] = safeRows.map((row, idx) => ({ row, idx }));
     return rowsWithIdx.filter(({ row }) => {
       const globalMatch =
         !q ||
         data.columns.some((c) =>
           String(row[c] ?? "")
-            .toLowerCase()
+            .toLocaleLowerCase("tr")
             .includes(q),
         );
       const filterMatch = filters.every((f) => matchFilter(row[f.column], f.operator, f.value));
@@ -281,7 +290,7 @@ export function SqlResultsTable({
       if (av == null) return 1;
       if (bv == null) return -1;
       if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
-      return String(av).localeCompare(String(bv), undefined, { numeric: true }) * dir;
+      return String(av).localeCompare(String(bv), "tr", { numeric: true }) * dir;
     });
   }, [filtered, sortKey, sortDir, visibleColumns]);
   const scalarMetricCards = useMemo(

@@ -93,16 +93,26 @@ function buildDisplayableKpiCard(item: DisplayableKpiPayload): MetricCard {
   return { label: item.label, value: String(item.value) };
 }
 
-const INITIAL_CONVERSATION: Conversation = {
-  id: "initial-conversation",
-  title: tr.header.newConversation,
-  messages: [],
-  updatedAt: 0,
-};
 const EMPTY_MESSAGES: Message[] = [];
 
 function makeId() {
   return globalThis.crypto?.randomUUID() ?? Math.random().toString(36).slice(2, 10);
+}
+
+// A fixed literal id here (as this previously was) becomes the `session_id`
+// sent to the backend for every tab's first message until "New chat" is
+// clicked - the backend's SessionStore is shared/in-memory and keyed only by
+// session_id, so any two tabs/reloads that each send a first message would
+// collide on the same conversational-context slot and silently inherit each
+// other's filters/metrics on a follow-up (2026-07-24). Generated once per
+// module load (i.e. once per tab), same as every other conversation id.
+function makeInitialConversation(): Conversation {
+  return {
+    id: makeId(),
+    title: tr.header.newConversation,
+    messages: [],
+    updatedAt: 0,
+  };
 }
 
 function classifyError(error: unknown): { kind: MessageErrorKind; code: string } {
@@ -126,8 +136,10 @@ interface ActiveRequest {
 }
 
 export function useChatController() {
-  const [conversations, setConversations] = useState<Conversation[]>([INITIAL_CONVERSATION]);
-  const [activeId, setActiveId] = useState<string | null>(INITIAL_CONVERSATION.id);
+  const [conversations, setConversations] = useState<Conversation[]>(() => [
+    makeInitialConversation(),
+  ]);
+  const [activeId, setActiveId] = useState<string | null>(() => conversations[0].id);
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [animatedMessageId, setAnimatedMessageId] = useState<string | null>(null);

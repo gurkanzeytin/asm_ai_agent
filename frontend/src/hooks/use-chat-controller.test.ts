@@ -38,15 +38,29 @@ describe("useChatController", () => {
 
     expect(mockedGenerateReport).toHaveBeenCalledWith(
       "Soru",
-      "initial-conversation",
+      expect.any(String),
       expect.any(Function),
       expect.any(AbortSignal),
     );
+    // Never a fixed literal - a hardcoded initial id would collide across
+    // every tab/reload that hasn't clicked "New chat" yet, sharing the
+    // backend's session-scoped conversational context between them
+    // (2026-07-24). Must look like a real generated id (UUID or the
+    // Math.random() fallback), not e.g. "initial-conversation".
+    const sentSessionId = mockedGenerateReport.mock.calls[0][1];
+    expect(sentSessionId).toMatch(/^[0-9a-f-]{8,36}$/i);
     expect(result.current.messages.at(-1)).toMatchObject({
       role: "assistant",
       content: "Yanıt",
       streaming: false,
     });
+  });
+
+  it("gives two independently mounted controllers different initial session ids", () => {
+    const first = renderHook(() => useChatController());
+    const second = renderHook(() => useChatController());
+
+    expect(first.result.current.activeId).not.toBe(second.result.current.activeId);
   });
 
   it("LIVE-FOLLOWUP-NO-RESPONSE-FORENSICS-003: a zero-row follow-up in the same conversation still renders a visible terminal answer", async () => {
