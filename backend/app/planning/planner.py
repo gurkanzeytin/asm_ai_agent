@@ -653,6 +653,26 @@ class QueryPlanner:
         if pattern in ("period_comparison", "percentage_change") and not comparisons:
             comparisons = ["current_period_vs_previous_period"]
 
+        # The deterministic period-comparison SQL builder renders a single
+        # row (current-period vs baseline-period totals, see
+        # DeterministicSQLBuilder._period_comparison) with no GROUP BY
+        # support at all — and already refuses a multi-metric plan outright
+        # (falls through to the LLM path, where a dimension is still useful
+        # in the prompt). A SINGLE-metric plan, though, IS handled by the
+        # deterministic builder, and a dimension surviving from an
+        # independent "X bazinda/gore" mention has no column to attach to in
+        # that single-row shape, so PlanComplianceValidator rejects the SQL
+        # as missing both the dimension and its projection column outright
+        # (2026-07-24, live multi-turn testing: "2025 Mart ile 2025 Nisan
+        # ayini bolum bazinda randevu sayisi olarak kiyasla" -> SAFE_ERROR;
+        # the identical question without "bolum bazinda" already worked
+        # correctly). A per-dimension breakdown of a period comparison is a
+        # real, separate feature - not yet implemented. Clearing it here
+        # (before resolved_projection is derived from `dimensions` below)
+        # answers with the two-period total instead of failing outright.
+        if pattern == "period_comparison" and dimensions and len(metrics) <= 1:
+            dimensions = []
+
         # A trend question ("randevu eğilimini özetle") carries no explicit
         # granularity KEYWORD ("aylık"/"haftalık") but its relative date range
         # ("son 6 ay") already resolved a granularity via the date detector —

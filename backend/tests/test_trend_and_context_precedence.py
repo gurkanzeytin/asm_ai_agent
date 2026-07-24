@@ -285,6 +285,27 @@ def test_explicit_multi_metric_department_comparison_routes_to_database_query():
     assert plan.dimensions
 
 
+def test_single_metric_period_comparison_with_dimension_drops_it_and_builds_sql():
+    """The deterministic period-comparison SQL builder renders a single row
+    (current vs baseline period totals) with no GROUP BY support at all -
+    unlike the multi-metric case above (which already falls through to the
+    LLM path regardless), a single-metric plan IS handled deterministically,
+    so a dimension surviving from "bolum bazinda" must be dropped or
+    PlanComplianceValidator rejects the SQL as missing that column entirely
+    (2026-07-24, live multi-turn testing: SAFE_ERROR on "2025 Mart ile 2025
+    Nisan ayini bolum bazinda randevu sayisi olarak kiyasla")."""
+    question = "2025 Mart ile 2025 Nisan ayını bölüm bazında randevu sayısı olarak kıyasla"
+    _, plan = _build_plan(question)
+
+    assert plan.analysis_type == "period_comparison"
+    assert plan.dimensions == []
+
+    result = DeterministicSQLBuilder().build(plan)
+    assert hasattr(result, "sql"), getattr(result, "reason", None)
+    compliance = PlanComplianceValidator().check(result.sql, plan, result.expected_aliases)
+    assert compliance.compliant, compliance.missing
+
+
 def test_genuinely_undefined_metric_produces_specific_clarification_not_generic_one():
     """'iptal oranı' has no corresponding status in this view's data (see
     column_intelligence.json unanswerable_concepts) — this must still surface
