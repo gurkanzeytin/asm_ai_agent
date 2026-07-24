@@ -52,6 +52,24 @@ class AnalyzeIntentNode(IAgentNode):
         try:
             intent_result = self.intent_classifier.classify(state.question)
             ambiguity = self.query_analyzer.detect_ambiguity(state.question)
+            if (
+                ambiguity is not None
+                and ambiguity.matched_phrase == "format_only_database_request"
+                and state.context_follow_up_detected
+                and state.retained_query_plan is not None
+            ):
+                # "Bunu SQL olarak yazacak sorguyu ver, çalıştırma" ("give me
+                # the query that will write THIS, don't run it") has no data
+                # subject of its own - "bunu" refers to the retained plan
+                # from the previous turn. detect_ambiguity only ever looks at
+                # this turn's raw text, so it can't see that a genuine
+                # follow-up context already answers "which data"; it asked
+                # for clarification and threw away the retained plan outright
+                # (2026-07-24, live multi-turn testing). RetrieveContextNode
+                # (which runs after this node) is what actually merges
+                # retained_query_plan into the final plan - this only clears
+                # the false-positive block so that merge gets a chance to run.
+                ambiguity = None
             if ambiguity:
                 logger.info(
                     "Ambiguous ranking phrase detected; clarification will be requested.",

@@ -116,6 +116,28 @@ def test_future_participle_describing_sql_does_not_demote_to_data():
     assert policy.visible_sections == ["sql"]
 
 
+def test_negated_calistir_does_not_flip_sql_only_to_data():
+    """'Bunu SQL olarak yazacak sorguyu ver, çalıştırma' ('give me the query,
+    don't run it') has 'çalıştırma' - the Turkish negation suffix '-ma'
+    attaches directly to the verb stem, so a bare \\w* wildcard on
+    'calistir\\w*' can't distinguish it from 'çalıştır' (run, positive). The
+    EXECUTION marker matched anyway and silently overrode the explicit
+    SQL-only request, executing and returning 'data' mode for a question
+    that explicitly asked NOT to run it (2026-07-24, live multi-turn
+    testing). SQL_ONLY_MARKER already special-cases bare 'calistirma' as an
+    SQL-only signal - the EXECUTION marker must not contradict it."""
+    question = "Bunu SQL olarak yazacak sorguyu ver, çalıştırma"
+    assert determine_requested_response_mode(question) == "sql"
+    assert determine_requested_visible_sections(question) == ["sql"]
+
+
+def test_positive_calistir_forms_still_read_as_execution():
+    """Regression guard: excluding the negated '-ma' form must not affect
+    genuine positive conjugations of 'çalıştır' (run)."""
+    assert determine_requested_response_mode("Bu SQL sorgusunu çalıştır") == "data"
+    assert determine_requested_response_mode("Sorguyu çalıştırır mısın?") == "data"
+
+
 def test_mixed_sql_and_data_question_shows_only_requested_artifacts():
     policy = determine_output_policy(
         question="SQL sorgusunu yaz ve çalıştırıp tabloyu getir",

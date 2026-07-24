@@ -33,7 +33,16 @@ _SQL_ONLY_MARKER = re.compile(
 _DATA_MARKER = re.compile(
     r"\b(veri(?!r)\w*|kayit\w*|liste\w*|getir\w*|cek\w*|tablo\w*|sonuc\w*)\b"
 )
-_EXECUTION_MARKER = re.compile(r"\b(calistir\w*|cek\w*|getir\w*|listele\w*|sonuc\w*)\b")
+# "calistir(?!ma\b)" excludes "çalıştırma" ("don't run [it]") - the Turkish
+# negation suffix "-ma/-me" attaches directly to the verb stem with no space,
+# so a bare \w* wildcard can't tell "çalıştır" (run, positive) from its own
+# negation. _SQL_ONLY_MARKER above already treats bare "calistirma" as an
+# explicit SQL-only signal ("...sorguyu ver, çalıştırma") - without this
+# exclusion, this marker matched the same word as an EXECUTION request and
+# silently overrode that SQL-only signal, executing and returning "data"
+# mode for a question that explicitly asked NOT to run it (2026-07-24, live
+# multi-turn testing).
+_EXECUTION_MARKER = re.compile(r"\b(calistir(?!ma\b)\w*|cek\w*|getir\w*|listele\w*|sonuc\w*)\b")
 _VISUAL_MARKER = re.compile(
     r"\b(grafik\w*|grafig\w*|chart|gorsel\w*|ciz\w*|cizgi\w*|bar|"
     r"sutun\w*|pasta|oranlama)\b"

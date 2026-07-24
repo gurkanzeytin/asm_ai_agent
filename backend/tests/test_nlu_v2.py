@@ -330,6 +330,49 @@ async def test_analyze_intent_node_sets_ambiguity():
     assert result.ambiguity.matched_phrase == "en iyi"
 
 
+@pytest.mark.asyncio
+async def test_format_only_ambiguity_suppressed_for_genuine_follow_up():
+    """'Bunu SQL olarak yazacak sorguyu ver, çalıştırma' ('give me the query
+    for this, don't run it') has no data subject of its own - "bunu" refers
+    to the previous turn's retained plan. detect_ambiguity only looks at
+    this turn's raw text and can't see that, so it asked for clarification
+    and discarded a genuine follow-up outright (2026-07-24, live multi-turn
+    testing). When a follow-up was actually detected AND a retained plan
+    exists, this specific ambiguity reason must be suppressed so
+    RetrieveContextNode gets a chance to merge the retained plan in."""
+    from app.agent.nodes.analyze_intent import AnalyzeIntentNode
+    from app.planning.models import QueryPlan
+    from app.services.intent_classifier import IntentClassifier
+
+    node = AnalyzeIntentNode(IntentClassifier(), query_analyzer=QueryAnalyzer(today=TODAY))
+    state = AgentState(
+        question="Bunu SQL olarak yazacak sorguyu ver, çalıştırma",
+        context_follow_up_detected=True,
+        retained_query_plan=QueryPlan(question="En yüksek 10 doktoru göster"),
+    )
+
+    result = await node.execute(state)
+
+    assert result.ambiguity is None
+
+
+@pytest.mark.asyncio
+async def test_format_only_ambiguity_still_fires_without_follow_up_context():
+    """Regression guard: the same phrasing with no session context (no
+    follow-up detected, no retained plan) must still ask for clarification -
+    the suppression above only applies to a genuine follow-up."""
+    from app.agent.nodes.analyze_intent import AnalyzeIntentNode
+    from app.services.intent_classifier import IntentClassifier
+
+    node = AnalyzeIntentNode(IntentClassifier(), query_analyzer=QueryAnalyzer(today=TODAY))
+    state = AgentState(question="Bunu SQL olarak yazacak sorguyu ver, çalıştırma")
+
+    result = await node.execute(state)
+
+    assert result.ambiguity is not None
+    assert result.ambiguity.matched_phrase == "format_only_database_request"
+
+
 # ── Turkish suffix handling & normalization ───────────────────────────────────
 
 
