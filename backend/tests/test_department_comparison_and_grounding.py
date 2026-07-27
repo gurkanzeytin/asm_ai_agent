@@ -84,6 +84,112 @@ class TestCompositeSplitting:
         assert result.grounded is True
 
 
+# ── GROUP BY over the composite department column splits it first ─────────
+
+
+class TestDepartmentGroupBySplitting:
+    """"En az/çok randevusu olan N bölümü göster" - GROUP BY on the raw
+    composite GenelRandevuBolumAdi column used to produce one row per
+    distinct COMBINATION (425+ of them) instead of one row per atomic
+    department: a bottom-N question returned nonsense like "Nöroşirurji,
+    Plastik ve Rekonstruktif Cerrahi," as if it were a single department
+    (2026-07-27, live multi-turn testing). Fixed via an XML-based CROSS
+    APPLY split (STRING_SPLIT is unavailable - the live database's
+    compatibility level is 110, below the 130 it requires)."""
+
+    def _grouped_plan(self, **overrides) -> QueryPlan:
+        defaults = dict(
+            question="Bölümlere göre randevu sayısını göster",
+            analysis_type="distribution",
+            metrics=["appointment_count"],
+            dimensions=["GenelRandevuBolumAdi"],
+        )
+        defaults.update(overrides)
+        return QueryPlan(**defaults)
+
+    def test_group_by_uses_the_split_alias_not_the_raw_column(self):
+        built = DeterministicSQLBuilder().build(self._grouped_plan())
+
+        assert hasattr(built, "sql"), getattr(built, "reason", "")
+        assert "GROUP BY dept_atomic.value" in built.sql
+        assert "GROUP BY GenelRandevuBolumAdi" not in built.sql
+        assert "CROSS APPLY" in built.sql
+        assert ".nodes(" in built.sql
+        # The output column is still named GenelRandevuBolumAdi so downstream
+        # presentation/label resolution is unaffected by the SQL-shape change.
+        assert "dept_atomic.value AS GenelRandevuBolumAdi" in built.sql
+
+    def test_empty_and_trailing_comma_fragments_are_excluded(self):
+        built = DeterministicSQLBuilder().build(self._grouped_plan())
+
+        assert hasattr(built, "sql"), getattr(built, "reason", "")
+        assert "dept_atomic.value <> ''" in built.sql
+
+    def test_ampersand_and_angle_brackets_are_stripped_not_entity_escaped(self):
+        """`&`/`<`/`>` must be dropped, not XML-entity-escaped (`&amp;` etc.):
+        standard entities end in `;`, and the shared LLM-output SQL extractor
+        (OutputParser.parse_sql) truncates at the FIRST semicolon anywhere in
+        the text - entity-escaping silently cut the query short mid-string
+        the first time this was live-tested."""
+        built = DeterministicSQLBuilder().build(self._grouped_plan())
+
+        assert hasattr(built, "sql"), getattr(built, "reason", "")
+        assert "&amp;" not in built.sql
+        assert "&lt;" not in built.sql
+        assert "&gt;" not in built.sql
+
+        from app.parsers.output_parser import OutputParser
+
+        assert OutputParser().parse_sql(built.sql) == built.sql
+
+    def test_split_group_by_passes_compliance_and_validator(self):
+        plan = self._grouped_plan()
+        built = DeterministicSQLBuilder().build(plan)
+        assert hasattr(built, "sql"), getattr(built, "reason", "")
+
+        from app.sql_validator.validator import SQLValidator
+
+        assert SQLValidator().validate(built.sql).valid
+        compliance = PlanComplianceValidator().check(
+            built.sql, plan, expected_aliases=built.expected_aliases, deterministic=True
+        )
+        assert compliance.compliant, compliance.missing
+
+    def test_bottom_n_ranking_still_applies_top_and_order(self):
+        plan = self._grouped_plan(
+            analysis_type="bottom_n", limit=5, ranking="ASC", order="ASC"
+        )
+        built = DeterministicSQLBuilder().build(plan)
+
+        assert hasattr(built, "sql"), getattr(built, "reason", "")
+        assert "TOP (5)" in built.sql
+        assert "ORDER BY appointment_count ASC" in built.sql
+        assert "GROUP BY dept_atomic.value" in built.sql
+
+    def test_cross_analysis_second_dimension_is_unaffected(self):
+        """A second, non-composite dimension alongside the department split
+        must survive untouched in both SELECT and GROUP BY."""
+        plan = self._grouped_plan(
+            analysis_type="cross_analysis", dimensions=["GenelRandevuBolumAdi", "CinsiyetId"]
+        )
+        built = DeterministicSQLBuilder().build(plan)
+
+        assert hasattr(built, "sql"), getattr(built, "reason", "")
+        assert "CinsiyetId AS CinsiyetId" in built.sql
+        assert "GROUP BY dept_atomic.value, CinsiyetId" in built.sql
+
+    def test_non_department_dimension_never_gets_the_cross_apply(self):
+        """Regression guard: a plan with no department dimension at all must
+        render exactly like before - no CROSS APPLY, no behavior change."""
+        built = DeterministicSQLBuilder().build(
+            self._grouped_plan(dimensions=["SubeAdi"])
+        )
+
+        assert hasattr(built, "sql"), getattr(built, "reason", "")
+        assert "CROSS APPLY" not in built.sql
+        assert "GROUP BY SubeAdi" in built.sql
+
+
 # ── comparison pair extraction ──────────────────────────────────────────────
 
 

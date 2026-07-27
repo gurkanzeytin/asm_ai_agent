@@ -60,6 +60,9 @@ DATE_COLUMN = "BaslangicTarihi"
 # Ameliyathane, "); equality on the raw value never matches a single
 # department, so its predicates are rendered as delimiter-bounded containment.
 DEPARTMENT_COLUMN = "GenelRandevuBolumAdi"
+# Table alias for the CROSS APPLY STRING_SPLIT that explodes the composite
+# department column into one atomic value per row (see `_standard`).
+_DEPARTMENT_SPLIT_ALIAS = "dept_atomic"
 FILTER_COLUMNS = {
     *(column for column, _tier in FIELD_COLUMNS.values()),
     "DoktorId",
@@ -149,7 +152,27 @@ class DeterministicSQLBuilder:
             return UnsupportedPlan("no verified metric mapping", skipped)
 
         dimensions = self._dimensions(plan)
-        select_parts = [f"{dimension} AS {dimension}" for dimension in dimensions]
+        splits_department = DEPARTMENT_COLUMN in dimensions
+        # GenelRandevuBolumAdi is comma-separated composite text ("Genel
+        # Cerrahi, Ameliyathane, "). Grouping the raw column yields one row
+        # per distinct COMBINATION (425+ of them) instead of one row per
+        # atomic department - a "top/bottom N bölüm" question then returns
+        # nonsense like "Nöroşirurji, Plastik ve Rekonstruktif Cerrahi," as
+        # if it were a single department (2026-07-27, live multi-turn
+        # testing). `_department_split_cross_apply` explodes each row into
+        # one per atomic department first, the same way filters already do
+        # via `_department_containment` - a row belonging to two departments
+        # is correctly counted under both.
+        select_parts = [
+            f"{_DEPARTMENT_SPLIT_ALIAS}.value AS {dimension}"
+            if dimension == DEPARTMENT_COLUMN
+            else f"{dimension} AS {dimension}"
+            for dimension in dimensions
+        ]
+        group_by_columns = [
+            f"{_DEPARTMENT_SPLIT_ALIAS}.value" if dimension == DEPARTMENT_COLUMN else dimension
+            for dimension in dimensions
+        ]
         expected_aliases = list(dimensions)
         metric_aliases: dict[str, str] = {}
         for metric_id, expression in metric_exprs:
@@ -158,7 +181,15 @@ class DeterministicSQLBuilder:
             expected_aliases.append(alias)
             metric_aliases[metric_id] = alias
         where = self._where(plan)
-        group_by = f"\nGROUP BY {', '.join(dimensions)}" if dimensions else ""
+        if splits_department:
+            empty_guard = f"{_DEPARTMENT_SPLIT_ALIAS}.value <> ''"
+            where = (
+                f"{where.rstrip()} AND {empty_guard}\n" if where else f"WHERE {empty_guard}\n"
+            )
+        from_clause = f"FROM {VIEW}\n"
+        if splits_department:
+            from_clause += self._department_split_cross_apply()
+        group_by = f"\nGROUP BY {', '.join(group_by_columns)}" if dimensions else ""
         order_by = self._order_by(plan, analysis_type, expected_aliases[-1])
         top = (
             f"TOP ({plan.limit}) "
@@ -172,7 +203,7 @@ class DeterministicSQLBuilder:
         )
         sql = (
             f"SELECT {top}{', '.join(select_parts)}\n"
-            f"FROM {VIEW}\n"
+            f"{from_clause}"
             f"{where}"
             f"{group_by}"
             f"{order_by};"
@@ -691,6 +722,42 @@ class DeterministicSQLBuilder:
         if department_values:
             rendered.append(self._department_containment(department_values))
         return [*rendered, *residual_filters]
+
+    def _department_split_cross_apply(self) -> str:
+        """CROSS APPLY that explodes the composite department column into one
+        row per atomic value, exposed as `{_DEPARTMENT_SPLIT_ALIAS}.value`.
+
+        `STRING_SPLIT` is unavailable: the live database's compatibility
+        level is 110 (SQL Server 2012), well below the 130 `STRING_SPLIT`
+        requires, even though the engine itself is newer (verified live,
+        2026-07-27). XML `.nodes()` has worked since SQL Server 2005, so it
+        is the compatibility-safe alternative. The inner derived table
+        materializes `.value(...)` into a plain NVARCHAR column - `.value()`/
+        other XML methods are not allowed directly in a GROUP BY, so the
+        outer query only ever sees a plain column.
+
+        `&`/`<`/`>` are DROPPED rather than XML-entity-escaped (`&amp;` etc.)
+        - standard entities end in `;`, and the LLM-output SQL extractor
+        (`OutputParser.parse_sql`, shared with the LLM-generation path) cuts
+        the statement off at the FIRST semicolon it finds anywhere in the
+        text, silently truncating the query mid-string (2026-07-27, found
+        immediately when this method was first live-tested). No real
+        department name currently contains any of these characters
+        (verified against the live distinct value list), so dropping them
+        is a defensive no-op today, not a data-loss risk.
+        """
+        escaped = (
+            f"REPLACE(REPLACE(REPLACE(REPLACE(REPLACE("
+            f"{DEPARTMENT_COLUMN}, '&', ''), '<', ''), '>', ''), ', ', ','), "
+            f"',', '</i><i>')"
+        )
+        return (
+            f"CROSS APPLY (\n"
+            f"    SELECT LTRIM(RTRIM(dept_node.value('.', 'NVARCHAR(4000)'))) AS value\n"
+            f"    FROM (SELECT CAST(N'<i>' + {escaped} + N'</i>' AS XML) AS dept_doc) AS dept_wrapped\n"
+            f"    CROSS APPLY dept_wrapped.dept_doc.nodes('/i') AS dept_split(dept_node)\n"
+            f") AS {_DEPARTMENT_SPLIT_ALIAS}\n"
+        )
 
     def _department_containment(self, values: list[str]) -> str:
         """Delimiter-bounded containment predicate over the composite department

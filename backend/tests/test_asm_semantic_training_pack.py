@@ -163,7 +163,11 @@ def test_business_dimensions_map_to_verified_view_columns(question, dimension, e
     assert not (set(plan.projection) & excluded)
 
     sql = sql_for(question)
-    assert f"GROUP BY {dimension}" in sql
+    # GenelRandevuBolumAdi is comma-separated composite text; GROUP BY splits
+    # it via a CROSS APPLY (deterministic_sql_builder._standard) rather than
+    # grouping the raw column, so it never appears literally in the GROUP BY.
+    expected_group_by = "dept_atomic.value" if dimension == "GenelRandevuBolumAdi" else dimension
+    assert f"GROUP BY {expected_group_by}" in sql
     assert "COUNT(*) AS" in sql or "NULLIF(COUNT(*), 0)" in sql
     assert PlanComplianceValidator().check(sql, plan, deterministic=True).compliant
 
@@ -196,7 +200,9 @@ def test_no_show_rate_by_branch_uses_department_dimension():
 
     sql = sql_for("gelmeme oranini branslara gore goster")
     assert "AS no_show_rate" in sql
-    assert "GROUP BY GenelRandevuBolumAdi" in sql
+    # See test_business_dimensions_map_to_verified_view_columns for why this
+    # is "dept_atomic.value", not the raw composite column.
+    assert "GROUP BY dept_atomic.value" in sql
     assert "NULLIF(COUNT(*), 0)" in sql
 
 

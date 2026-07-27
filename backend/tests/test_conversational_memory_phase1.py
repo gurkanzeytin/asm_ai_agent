@@ -221,7 +221,10 @@ async def test_average_duration_top_ten_departments_full_chain():
     assert isinstance(built, DeterministicSQL)
     assert "TOP (10)" in built.sql
     assert "AVG(CAST(RandevuSuresi AS FLOAT)) AS appointment_duration_average" in built.sql
-    assert "GROUP BY GenelRandevuBolumAdi" in built.sql
+    # GenelRandevuBolumAdi is comma-separated composite text; GROUP BY splits
+    # it via a CROSS APPLY (deterministic_sql_builder._standard) rather than
+    # grouping the raw column, so it never appears literally in the GROUP BY.
+    assert "GROUP BY dept_atomic.value" in built.sql
     assert "ORDER BY appointment_duration_average DESC" in built.sql
 
 

@@ -487,7 +487,21 @@ class PlanComplianceValidator:
         match = re.search(r"group\s+by\s+(.*?)(?:\border\s+by\b|;|$)", folded_sql, re.DOTALL)
         if not match:
             return False
-        return re.search(rf"\b{re.escape(dimension.lower())}\b", match.group(1)) is not None
+        group_by_text = match.group(1)
+        if re.search(rf"\b{re.escape(dimension.lower())}\b", group_by_text):
+            return True
+        # The composite department column is exploded via an XML-based
+        # CROSS APPLY split before grouping (deterministic_sql_builder.
+        # _standard/_department_split_cross_apply), so the GROUP BY
+        # references the split alias's `.value` column, not the raw column
+        # name literally.
+        if (
+            dimension.lower() == "genelrandevubolumadi"
+            and ".nodes(" in folded_sql
+            and ".value" in group_by_text
+        ):
+            return True
+        return False
 
     def _looks_like_raw_detail_projection(self, folded_sql: str) -> bool:
         select_clause = self._select_clause(folded_sql)

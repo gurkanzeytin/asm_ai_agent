@@ -148,7 +148,7 @@
       "question": "Branslara gore randevu sayisi",
       "covered_columns": ["GenelRandevuBolumAdi", "Id"],
       "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["GenelRandevuBolumAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
-      "sql": {"must_include": ["GROUP BY GenelRandevuBolumAdi"], "must_not_include": ["KategoriAdi AS", "SubeAdi AS", "HastaAdi", "HastaSoyadi"]}
+      "sql": {"must_include": ["GROUP BY dept_atomic.value"], "must_not_include": ["KategoriAdi AS", "SubeAdi AS", "HastaAdi", "HastaSoyadi"]}
     },
     {
       "id": "ASM24-022",
@@ -211,7 +211,7 @@
       "question": "Uyruk ve bransa gore randevu dagilimi",
       "covered_columns": ["Uyruk", "GenelRandevuBolumAdi", "Id"],
       "expected": {"answerable": true, "clarification_required": false, "analysis_type": "cross_analysis", "metrics": ["appointment_count"], "dimensions": ["GenelRandevuBolumAdi", "Uyruk"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
-      "sql": {"must_include": ["GROUP BY GenelRandevuBolumAdi, Uyruk"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+      "sql": {"must_include": ["GROUP BY dept_atomic.value, Uyruk"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
     },
     {
       "id": "ASM24-031",
@@ -232,7 +232,7 @@
       "question": "Kategori ve bransa gore randevu sayisi",
       "covered_columns": ["KategoriAdi", "GenelRandevuBolumAdi", "Id"],
       "expected": {"answerable": true, "clarification_required": false, "analysis_type": "cross_analysis", "metrics": ["appointment_count"], "dimensions": ["GenelRandevuBolumAdi", "KategoriAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
-      "sql": {"must_include": ["GROUP BY GenelRandevuBolumAdi, KategoriAdi"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+      "sql": {"must_include": ["GROUP BY dept_atomic.value, KategoriAdi"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
     },
     {
       "id": "ASM24-034",
@@ -260,7 +260,7 @@
       "question": "Bransa gore ayni gun alinan randevu orani",
       "covered_columns": ["GenelRandevuBolumAdi", "CreatedDate", "BaslangicTarihi", "Id"],
       "expected": {"answerable": true, "clarification_required": false, "analysis_type": "ratio", "metrics": ["same_day_booking_rate"], "dimensions": ["GenelRandevuBolumAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
-      "sql": {"must_include": ["CAST(CreatedDate AS DATE) = CAST(BaslangicTarihi AS DATE)", "NULLIF(COUNT(*), 0)", "GROUP BY GenelRandevuBolumAdi"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+      "sql": {"must_include": ["CAST(CreatedDate AS DATE) = CAST(BaslangicTarihi AS DATE)", "NULLIF(COUNT(*), 0)", "GROUP BY dept_atomic.value"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
     },
     {
       "id": "ASM24-038",
@@ -309,7 +309,7 @@
       "question": "Islem surmekte olan randevulari bransa gore say",
       "covered_columns": ["GenelRandevuBolumAdi", "RandevuDurumu", "Id"],
       "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["in_progress_count"], "dimensions": ["GenelRandevuBolumAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
-      "sql": {"must_include": ["GROUP BY GenelRandevuBolumAdi", "RandevuDurumu = N'İşlem Sürmekte'"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+      "sql": {"must_include": ["GROUP BY dept_atomic.value", "RandevuDurumu = N'İşlem Sürmekte'"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
     },
     {
       "id": "ASM24-045",
@@ -351,7 +351,7 @@
       "question": "Bolumlere gore protokol acilan randevu sayisi",
       "covered_columns": ["GenelRandevuBolumAdi", "ProtokolAcilisTarihi", "Id"],
       "expected": {"answerable": true, "clarification_required": false, "analysis_type": "count", "metrics": ["protocol_created_count"], "dimensions": ["GenelRandevuBolumAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
-      "sql": {"must_include": ["GROUP BY GenelRandevuBolumAdi", "ProtokolAcilisTarihi IS NOT NULL"], "must_not_include": ["GenelRandevuBolumAdi = N'Acil'", "HastaAdi", "HastaSoyadi"]}
+      "sql": {"must_include": ["GROUP BY dept_atomic.value", "ProtokolAcilisTarihi IS NOT NULL"], "must_not_include": ["GenelRandevuBolumAdi = N'Acil'", "HastaAdi", "HastaSoyadi"]}
     },
     {
       "id": "ASM24-051",
@@ -372,7 +372,7 @@
       "question": "Bransa gore sure tutarsizligi sayisi",
       "covered_columns": ["GenelRandevuBolumAdi", "BaslangicTarihi", "BitisTarihi", "RandevuSuresi", "Id"],
       "expected": {"answerable": true, "clarification_required": false, "analysis_type": "data_quality", "metrics": ["duration_mismatch_count"], "dimensions": ["GenelRandevuBolumAdi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
-      "sql": {"must_include": ["GROUP BY GenelRandevuBolumAdi", "DATEDIFF(minute, BaslangicTarihi, BitisTarihi) <> RandevuSuresi"], "must_not_include": ["appointment_duration_average", "HastaAdi", "HastaSoyadi"]}
+      "sql": {"must_include": ["GROUP BY dept_atomic.value", "DATEDIFF(minute, BaslangicTarihi, BitisTarihi) <> RandevuSuresi"], "must_not_include": ["appointment_duration_average", "HastaAdi", "HastaSoyadi"]}
     },
     {
       "id": "ASM24-054",
