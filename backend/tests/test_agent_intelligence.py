@@ -504,6 +504,49 @@ def test_age_group_question_derives_from_birth_date(planner, analyzer):
     assert "DogumTarihi" in plan.required_columns
 
 
+def test_age_group_sql_buckets_by_decade_not_raw_birth_date(planner, analyzer):
+    """The planner adds DogumTarihi to `dimensions` and a human-readable
+    derivation note ("10'luk yaş grupları"), but nothing consumed that note
+    - GROUP BY grouped the raw birth date itself, one row per distinct date
+    (up to 1000) instead of one row per decade bucket (2026-07-27, live
+    multi-turn testing)."""
+    from app.planning.compliance import PlanComplianceValidator
+    from app.services.deterministic_sql_builder import DeterministicSQLBuilder
+
+    plan = plan_for(planner, analyzer, "2025'te yaş gruplarına göre randevu dağılımını göster")
+    built = DeterministicSQLBuilder().build(plan)
+
+    assert hasattr(built, "sql"), getattr(built, "reason", None)
+    assert "GROUP BY (DATEDIFF(year, DogumTarihi, GETDATE()) / 10) * 10" in built.sql
+    assert "AS age_group" in built.sql
+    assert built.expected_aliases[0] == "age_group"
+    compliance = PlanComplianceValidator().check(
+        built.sql, plan, expected_aliases=built.expected_aliases, deterministic=True
+    )
+    assert compliance.compliant, (compliance.missing, compliance.missing_metrics)
+
+
+def test_direct_birth_date_grouping_is_not_bucketed_by_age():
+    """Regression guard: "doğum tarihine göre hasta dağılımı" genuinely asks
+    to group by the raw birth date itself - no age-group derivation note is
+    attached, so bucketing it too would answer a different question."""
+    from app.services.deterministic_sql_builder import DeterministicSQLBuilder
+    from app.services.query_analyzer import QueryAnalyzer as _Analyzer
+    from app.planning.planner import QueryPlanner as _Planner
+    from app.database_intelligence.models import ViewMetadata
+
+    q = "doğum tarihine göre hasta dağılımı"
+    view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+    analysis = _Analyzer().analyze(q)
+    plan = _Planner().build_plan(q, analysis, tables=[], views=[view])
+
+    assert plan.derived_calculations == []
+    built = DeterministicSQLBuilder().build(plan)
+    assert hasattr(built, "sql"), getattr(built, "reason", None)
+    assert "GROUP BY DogumTarihi" in built.sql
+    assert "DATEDIFF(year," not in built.sql
+
+
 def test_required_columns_are_always_real(planner, analyzer):
     plan = plan_for(planner, analyzer, "Şubelere göre iptal oranları nedir?")
     assert set(plan.required_columns) <= EXPECTED_COLUMNS

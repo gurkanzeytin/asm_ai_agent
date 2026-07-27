@@ -78,7 +78,7 @@
       "question": "Yas gruplarina gore randevu dagilimi",
       "covered_columns": ["DogumTarihi", "Id"],
       "expected": {"answerable": true, "clarification_required": false, "analysis_type": "distribution", "metrics": ["appointment_count"], "dimensions": ["DogumTarihi"], "response_mode": null, "visible_sections": [], "sql_should_build": true},
-      "sql": {"must_include": ["DogumTarihi", "GROUP BY DogumTarihi"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
+      "sql": {"must_include": ["DogumTarihi", "GROUP BY (DATEDIFF(year, DogumTarihi, GETDATE()) / 10) * 10"], "must_not_include": ["HastaAdi", "HastaSoyadi"]}
     },
     {
       "id": "ASM24-012",

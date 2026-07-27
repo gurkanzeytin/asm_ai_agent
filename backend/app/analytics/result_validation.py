@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from app.application_models.workflow_models import QueryResult
 from app.planning.models import QueryPlan
-from app.semantics.catalog import load_metric_catalog
+from app.semantics.catalog import AGE_GROUP_DERIVATION, load_metric_catalog
 
 logger = logging.getLogger(__name__)
 
@@ -234,7 +234,16 @@ class ResultValidator:
         self, result: QueryResult, plan: QueryPlan, report: ResultValidationReport
     ) -> None:
         lowered_columns = {column.lower() for column in result.columns}
+        # Age-group bucketing (deterministic_sql_builder._standard) renders
+        # DogumTarihi's decade formula under the output alias "age_group",
+        # never the raw column name - without this exception, every genuine
+        # age-group answer logged a spurious "missing dimension" finding.
+        buckets_age = "DogumTarihi" in plan.dimensions and AGE_GROUP_DERIVATION in (
+            plan.derived_calculations
+        )
         for dimension in plan.dimensions:
+            if dimension == "DogumTarihi" and buckets_age:
+                continue
             if result.rows and dimension.lower() not in lowered_columns:
                 report.add(
                     "missing_expected_dimension",

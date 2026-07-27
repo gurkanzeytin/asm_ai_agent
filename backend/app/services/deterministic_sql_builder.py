@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 from app.database_intelligence.value_catalog import FIELD_COLUMNS
 from app.planning.models import QueryPlan
-from app.semantics.catalog import load_metric_catalog
+from app.semantics.catalog import AGE_GROUP_DERIVATION, load_metric_catalog
 
 SUPPORTED_ANALYSIS_TYPES = {
     "count",
@@ -63,6 +63,11 @@ DEPARTMENT_COLUMN = "GenelRandevuBolumAdi"
 # Table alias for the CROSS APPLY STRING_SPLIT that explodes the composite
 # department column into one atomic value per row (see `_standard`).
 _DEPARTMENT_SPLIT_ALIAS = "dept_atomic"
+# "Yaş gruplarına göre ..." groups by decade, never the raw birth date - kept
+# identical to catalog.AGE_GROUP_DERIVATION's documented formula (see
+# `_standard`) so the two never drift apart.
+_AGE_GROUP_COLUMN = "DogumTarihi"
+_AGE_GROUP_EXPR = f"(DATEDIFF(year, {_AGE_GROUP_COLUMN}, GETDATE()) / 10) * 10"
 FILTER_COLUMNS = {
     *(column for column, _tier in FIELD_COLUMNS.values()),
     "DoktorId",
@@ -163,17 +168,36 @@ class DeterministicSQLBuilder:
         # one per atomic department first, the same way filters already do
         # via `_department_containment` - a row belonging to two departments
         # is correctly counted under both.
+        # "Yaş gruplarına göre ... göster" - the planner adds DogumTarihi to
+        # `dimensions` and a human-readable note to `derived_calculations`
+        # (catalog.AGE_GROUP_DERIVATION: "10'luk yaş grupları"), but nothing
+        # ever consumed that note - GROUP BY grouped the raw birth date
+        # itself, one row per distinct date (up to 1000) instead of one row
+        # per decade bucket (2026-07-27, live multi-turn testing). Rendering
+        # the SAME bucketing formula the derivation note already describes.
+        # Gated on that SAME note (not merely "DogumTarihi is a dimension"):
+        # "doğum tarihine göre hasta dağılımı" legitimately asks to group by
+        # the raw birth date itself, with no age-group derivation attached -
+        # bucketing it too would answer a different question than asked.
+        buckets_age = (
+            _AGE_GROUP_COLUMN in dimensions
+            and AGE_GROUP_DERIVATION in plan.derived_calculations
+        )
+        output_alias_for = {DEPARTMENT_COLUMN: DEPARTMENT_COLUMN}
+        group_expr_for = {DEPARTMENT_COLUMN: f"{_DEPARTMENT_SPLIT_ALIAS}.value"}
+        if buckets_age:
+            output_alias_for[_AGE_GROUP_COLUMN] = "age_group"
+            group_expr_for[_AGE_GROUP_COLUMN] = _AGE_GROUP_EXPR
         select_parts = [
-            f"{_DEPARTMENT_SPLIT_ALIAS}.value AS {dimension}"
-            if dimension == DEPARTMENT_COLUMN
+            f"{group_expr_for[dimension]} AS {output_alias_for[dimension]}"
+            if dimension in group_expr_for
             else f"{dimension} AS {dimension}"
             for dimension in dimensions
         ]
         group_by_columns = [
-            f"{_DEPARTMENT_SPLIT_ALIAS}.value" if dimension == DEPARTMENT_COLUMN else dimension
-            for dimension in dimensions
+            group_expr_for.get(dimension, dimension) for dimension in dimensions
         ]
-        expected_aliases = list(dimensions)
+        expected_aliases = [output_alias_for.get(dimension, dimension) for dimension in dimensions]
         metric_aliases: dict[str, str] = {}
         for metric_id, expression in metric_exprs:
             alias = self._alias_for_metric(metric_id, analysis_type)
