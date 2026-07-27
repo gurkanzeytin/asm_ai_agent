@@ -16,6 +16,7 @@ from app.planning.compliance import PlanComplianceValidator
 from app.planning.models import QueryPlan, ResolvedFilterPlan
 from app.planning.value_resolver import (
     extract_candidate_phrases,
+    extract_comparison_entities,
     extract_comparison_pair,
     resolve_value,
 )
@@ -132,6 +133,45 @@ class TestComparisonPair:
             "Hangisi daha yoğun: Ortopedi mi Kadın Doğum mu?"
         )
         assert pair == ("Ortopedi", "Kadın Doğum")
+
+
+class TestComparisonEntityEnumeration:
+    """"A, B ve C" enumerations — only 3+ (the 2-value case stays with
+    extract_comparison_pair, whose anchoring is deliberately narrower)."""
+
+    def test_three_entity_enumeration(self):
+        assert extract_comparison_entities(
+            "Kardiyoloji, Ortopedi ve Nöroloji'yi randevu sayısı bakımından karşılaştır"
+        ) == ["Kardiyoloji", "Ortopedi", "Nöroloji"]
+
+    def test_four_entity_enumeration(self):
+        assert extract_comparison_entities(
+            "Kardiyoloji, Ortopedi, Nöroloji ve Üroloji'yi kıyasla"
+        ) == ["Kardiyoloji", "Ortopedi", "Nöroloji", "Üroloji"]
+
+    def test_leading_month_name_is_not_absorbed(self):
+        assert extract_comparison_entities(
+            "2025 Mayıs ayında Kardiyoloji, Ortopedi ve Nöroloji'yi karşılaştır"
+        ) == ["Kardiyoloji", "Ortopedi", "Nöroloji"]
+
+    def test_branch_prefix_is_not_absorbed(self):
+        assert extract_comparison_entities(
+            "TEST ASM Gebze şubesinde Kardiyoloji, Ortopedi ve Nöroloji'yi karşılaştır"
+        ) == ["Kardiyoloji", "Ortopedi", "Nöroloji"]
+
+    def test_two_entity_pair_is_left_to_the_pair_extractor(self):
+        assert extract_comparison_entities("Ortopedi ile Kadın Doğum'u karşılaştır") == []
+
+    def test_department_name_containing_ve_stays_below_threshold(self):
+        # "Kalp ve Damar Cerrahisi" is a REAL department name whose own "ve"
+        # this loose scan mis-splits — the >=3 threshold plus the caller's
+        # all-or-nothing grounding rule is what keeps that harmless.
+        assert extract_comparison_entities(
+            "Kalp ve Damar Cerrahisi bölümünü Ortopedi ile karşılaştır"
+        ) == []
+
+    def test_no_comparison_marker_yields_nothing(self):
+        assert extract_comparison_entities("Kardiyoloji, Ortopedi ve Nöroloji bölümleri") == []
 
 
 # ── deterministic builder: containment predicate ────────────────────────────
@@ -265,6 +305,97 @@ class TestEntityComparisonSQL:
         assert hasattr(built, "sql"), getattr(built, "reason", "")
         assert "SubeAdi = N'Gebze Şubesi'" in built.sql
         assert "SubeAdi = N'Ataşehir Şubesi'" in built.sql
+
+
+class TestEntityBreakdownSQL:
+    """Three-or-more entity comparison ("Kardiyoloji, Ortopedi ve Nöroloji").
+
+    The pair contract (current_/baseline_ labels + one change figure) cannot
+    express three sides. Before this, such a question silently grounded ONLY
+    the first department and answered with a plain scalar count for it — no
+    comparison, no warning (2026-07-24, live multi-turn testing).
+    """
+
+    def _set_plan(self, values: list[str], **overrides) -> QueryPlan:
+        defaults = dict(
+            question="Kardiyoloji, Ortopedi ve Nöroloji'yi karşılaştır",
+            analysis_type="comparison",
+            metrics=["appointment_count"],
+            aggregation="COUNT(*)",
+            resolved_filters={
+                "department": ResolvedFilterPlan(
+                    field="department",
+                    values=values,
+                    grounded=True,
+                    confidence=0.95,
+                    match_type="comparison_pair",
+                )
+            },
+        )
+        defaults.update(overrides)
+        return QueryPlan(**defaults)
+
+    def test_three_entities_build_one_row_each(self):
+        values = ["Kardiyoloji", "Ortopedi", "Nöroloji"]
+        built = DeterministicSQLBuilder().build(self._set_plan(values))
+
+        assert hasattr(built, "sql"), getattr(built, "reason", "")
+        # Reported as a plain distribution so the existing categorical
+        # analytics/insight/chart path renders it with no new contract.
+        assert built.result_schema == "DistributionResult"
+        assert built.expected_aliases == ["entity_label", "appointment_count"]
+        assert built.sql.count("UNION ALL") == 2
+        for value in values:
+            assert f"N'{value}' AS entity_label" in built.sql
+        # NOT a GROUP BY: the department column is composite, so grouping it
+        # raw would yield combination rows instead of one row per entity.
+        assert "GROUP BY" not in built.sql
+        assert "ORDER BY appointment_count DESC" in built.sql
+
+    def test_three_entity_breakdown_passes_compliance(self):
+        plan = self._set_plan(["Kardiyoloji", "Ortopedi", "Nöroloji"])
+        built = DeterministicSQLBuilder().build(plan)
+        result = PlanComplianceValidator().check(
+            built.sql, plan, expected_aliases=built.expected_aliases, deterministic=True
+        )
+        assert result.compliant, result.missing
+
+    def test_each_branch_keeps_the_shared_date_filter(self):
+        from app.planning.models import DateFilterPlan
+
+        plan = self._set_plan(
+            ["Kardiyoloji", "Ortopedi", "Nöroloji"],
+            date_filters=[
+                DateFilterPlan(
+                    expression="2025",
+                    start_date="2025-01-01",
+                    end_date="2025-12-31",
+                    column="BaslangicTarihi",
+                )
+            ],
+        )
+        built = DeterministicSQLBuilder().build(plan)
+
+        assert hasattr(built, "sql"), getattr(built, "reason", "")
+        assert built.sql.count("2025-01-01") == 3
+
+    def test_two_entities_still_use_the_pair_contract(self):
+        """Regression guard: the 3+ path must not capture the pair case."""
+        built = DeterministicSQLBuilder().build(self._set_plan(["Kardiyoloji", "Ortopedi"]))
+
+        assert hasattr(built, "sql"), getattr(built, "reason", "")
+        assert built.result_schema == "EntityComparisonResult"
+        assert "UNION ALL" not in built.sql
+
+    def test_multi_metric_breakdown_is_unsupported(self):
+        plan = self._set_plan(
+            ["Kardiyoloji", "Ortopedi", "Nöroloji"],
+            metrics=["appointment_count", "no_show_rate"],
+        )
+        built = DeterministicSQLBuilder().build(plan)
+
+        assert not hasattr(built, "sql")
+        assert "multi-metric entity breakdown" in built.reason
 
 
 class TestEntityComparisonPresentation:

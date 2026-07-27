@@ -10,6 +10,7 @@ from app.planning.value_resolver import (
     build_clarification_headline,
     build_clarification_message,
     extract_candidate_phrases,
+    extract_comparison_entities,
     extract_comparison_pair,
 )
 
@@ -126,47 +127,60 @@ class ResolveFilterValuesNode(IAgentNode):
                     options=resolved.alternatives or [],
                 )
 
-        # Explicit two-value comparison ("Kardiyoloji ile Psikiyatri'yi
-        # karşılaştır"): both sides must ground on the SAME field; anything
-        # less is silently ignored — a guessed pair must never trigger a
-        # clarification or an invented filter.
+        # Explicit multi-value comparison ("Kardiyoloji ile Psikiyatri'yi
+        # karşılaştır", "Kardiyoloji, Ortopedi ve Nöroloji'yi karşılaştır"):
+        # EVERY side must ground on the SAME field; anything less is silently
+        # ignored — a guessed set must never trigger a clarification or an
+        # invented filter. That all-or-nothing rule is also what makes the
+        # looser 3+-entity comma/"ve" scan safe (a real name containing "ve",
+        # e.g. "Kalp ve Damar Cerrahisi", can be mis-split there, but the
+        # fragments never ground, so the enumeration is dropped whole).
         pair = extract_comparison_pair(plan.question)
-        if pair is not None:
+        mentions = extract_comparison_entities(plan.question) or (
+            list(pair) if pair is not None else []
+        )
+        if len(mentions) >= 2:
             for field_name in ("department", "branch"):
                 if field_name in forced_overrides:
                     continue
                 existing = resolved_filters.get(field_name)
                 if existing is not None and existing.grounded and len(existing.values) >= 2:
                     continue
-                left = await self.resolver.resolve(field_name, pair[0])
-                right = await self.resolver.resolve(field_name, pair[1])
-                if not (
-                    left.grounded
-                    and right.grounded
-                    and left.matched_value
-                    and right.matched_value
-                ):
+                grounded = [
+                    await self.resolver.resolve(field_name, mention) for mention in mentions
+                ]
+                if not all(item.grounded and item.matched_value for item in grounded):
                     continue
-                values = list(dict.fromkeys([left.matched_value, right.matched_value]))
+                values = list(dict.fromkeys(item.matched_value for item in grounded))
+                if len(values) < 2:
+                    continue
                 resolved_filters[field_name] = ResolvedFilterPlan(
                     field=field_name,
                     values=values,
                     source="grounded_value_resolver",
-                    confidence=min(left.confidence, right.confidence),
+                    confidence=min(item.confidence for item in grounded),
                     grounded=True,
                     match_type="comparison_pair",
-                    original_text=f"{pair[0]} / {pair[1]}",
+                    original_text=" / ".join(mentions),
                     clarification_required=False,
                 )
                 if field_name == "branch":
                     branch_filters = values
-                # The question IS a two-entity comparison: align the plan so
-                # the deterministic builder's entity-comparison path applies
-                # (one conditional-count row, no GROUP BY over composite text).
+                # The question IS an entity comparison: align the plan so the
+                # deterministic builder's entity path applies (conditional
+                # counts, no GROUP BY over composite text) — a pair renders one
+                # comparison row, three or more a per-entity breakdown.
+                # `projection` must be cleared alongside `dimensions`: an
+                # entity comparison selects entity labels and counts, never a
+                # raw display column, so a leftover concept column from the
+                # bare "bölüm" mention would fail PlanComplianceValidator's
+                # projection check and kill the whole answer (same failure
+                # class as the Phase 10 scalar-projection bug).
                 pair_plan_updates = {
                     "analysis_type": "comparison",
                     "dimensions": [],
                     "planned_dimensions": [],
+                    "projection": [],
                 }
                 plan = plan.model_copy(update=pair_plan_updates)
                 break

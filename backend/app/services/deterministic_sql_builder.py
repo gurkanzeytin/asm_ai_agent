@@ -312,12 +312,18 @@ class DeterministicSQLBuilder:
         one conditional-count row per grounded pair value. Only ever built from
         a grounded resolved pair (AI-INTELLIGENCE-016 comparison_pair) — a
         comparison plan without one falls through to the LLM path."""
-        pair = self._grounded_pair(plan)
-        if pair is None:
+        grounded = self._grounded_entities(plan)
+        if grounded is None:
             return UnsupportedPlan(
                 "comparison plan without a grounded two-value entity pair"
             )
-        field_name, values = pair
+        field_name, all_values = grounded
+        if len(all_values) > 2:
+            # Three or more sides cannot be expressed by this method's
+            # pair-shaped contract (current_/baseline_ labels + a single
+            # absolute/percentage change) — render a per-entity breakdown.
+            return self._entity_breakdown(plan, field_name, all_values)
+        values = all_values[:2]
         current_value, baseline_value = values[0], values[1]
         current_condition = self._entity_condition(field_name, current_value)
         baseline_condition = self._entity_condition(field_name, baseline_value)
@@ -359,12 +365,72 @@ class DeterministicSQLBuilder:
             sql=sql, result_schema="EntityComparisonResult", expected_aliases=aliases
         )
 
-    def _grounded_pair(self, plan: QueryPlan) -> tuple[str, list[str]] | None:
+    def _grounded_entities(self, plan: QueryPlan) -> tuple[str, list[str]] | None:
+        """Returns the grounded multi-value entity filter driving a comparison.
+
+        Every grounded value is returned (not just the first two) so a 3+-way
+        enumeration can be rendered as a per-entity breakdown; the pair path
+        slices what it needs.
+        """
         for field_name in ("department", "branch"):
             resolved = plan.resolved_filters.get(field_name)
             if resolved is not None and resolved.grounded and len(resolved.values) >= 2:
-                return field_name, list(resolved.values[:2])
+                return field_name, list(resolved.values)
         return None
+
+    def _entity_breakdown(
+        self, plan: QueryPlan, field_name: str, values: list[str]
+    ) -> DeterministicSQL | UnsupportedPlan:
+        """Three-or-more entity comparison: one row per requested entity.
+
+        Rendered as a UNION ALL of one aggregate per entity rather than a
+        `GROUP BY` over the entity column, because the department column is
+        composite (comma-separated, see `_department_containment`) — grouping
+        it raw yields combination rows ("Genel Cerrahi, Ameliyathane, ...")
+        instead of one clean row per requested entity. A row belonging to two
+        of the requested entities is counted under both, which is the correct
+        reading of "compare A, B and C".
+
+        Reported as a plain `DistributionResult` so the existing categorical
+        analytics/insight/chart/table path handles it with no new contract.
+        """
+        if len(plan.metrics) > 1:
+            return UnsupportedPlan(
+                "multi-metric entity breakdown not supported: only a single metric "
+                "can be compared across three or more entities today",
+                plan.metrics,
+            )
+        metric_id = (plan.metrics or ["appointment_count"])[0]
+        metric = self._metric_expr(metric_id)
+        if not metric:
+            return UnsupportedPlan(
+                "entity breakdown metric mapping is not verified", plan.metrics
+            )
+
+        alias = self._alias_for_metric(metric_id, "distribution")
+        # The per-entity conditions live in each branch's own WHERE, so the
+        # entity filter itself must not also be rendered as a shared clause.
+        pruned = self._without_pair_filters(plan, field_name)
+        base_where = self._where(pruned)
+        branches: list[str] = []
+        for value in values:
+            condition = self._entity_condition(field_name, value)
+            where = (
+                f"{base_where.rstrip()} AND {condition}\n"
+                if base_where
+                else f"WHERE {condition}\n"
+            )
+            branches.append(
+                f"SELECT {self._unicode_literal(value)} AS entity_label, "
+                f"{metric} AS {alias}\n"
+                f"FROM {VIEW}\n{where}"
+            )
+        sql = "UNION ALL\n".join(branches).rstrip() + f"\nORDER BY {alias} DESC;"
+        return DeterministicSQL(
+            sql=sql,
+            result_schema="DistributionResult",
+            expected_aliases=["entity_label", alias],
+        )
 
     def _entity_condition(self, field_name: str, value: str) -> str:
         if field_name == "department":

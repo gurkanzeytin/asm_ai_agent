@@ -514,6 +514,92 @@ _COMPARISON_CONTEXT_MARKERS: tuple[str, ...] = (
 
 _APOSTROPHE_SUFFIX = re.compile(r"['’`].*$")
 
+# Separator words that can join two entity mentions in an enumeration
+# ("Kardiyoloji, Ortopedi ve Nöroloji"). Folded, matched as exact tokens.
+_ENTITY_LIST_SEPARATORS = frozenset({"ve", "ile", "veya"})
+
+
+def _is_entity_candidate(word: str, folded_word: str) -> bool:
+    """True when a token looks like part of a proper-noun value mention."""
+    return bool(
+        word
+        and word[0].isupper()
+        and folded_word not in _QUESTION_WORDS
+        and not any(folded_word.startswith(root) for root in _NEVER_CANDIDATE_ROOTS)
+    )
+
+
+def extract_comparison_entities(question: str) -> list[str]:
+    """Finds a 3-or-more entity comparison enumeration ("Kardiyoloji, Ortopedi
+    ve Nöroloji'yi karşılaştır").
+
+    Returns `[]` for anything shorter: the two-entity case stays with
+    `extract_comparison_pair`, whose "X ile Y" / "X mi Y mi" anchoring is
+    deliberately narrower and already well covered. Pure text step — the
+    caller must still ground EVERY returned mention against real DB values,
+    and must abandon the whole enumeration if any single one fails. That
+    all-or-nothing rule is what keeps this loose comma/"ve" scan safe: a real
+    department name that itself contains "ve" ("Kalp ve Damar Cerrahisi")
+    can be mis-split here, but the resulting fragments ("Kalp") never ground,
+    so the enumeration is silently dropped rather than half-applied.
+    """
+    folded_question = fold(question)
+    if not any(marker in folded_question for marker in _COMPARISON_CONTEXT_MARKERS):
+        return []
+
+    raw_tokens = question.split()
+    cleaned = [
+        _APOSTROPHE_SUFFIX.sub("", token).strip(_STRIP_CHARS) for token in raw_tokens
+    ]
+    folded_tokens = [fold(token) for token in cleaned]
+    # A trailing comma both ENDS the current mention and continues the chain,
+    # so it has to be read before `_STRIP_CHARS` removes it above.
+    ends_with_comma = [
+        _APOSTROPHE_SUFFIX.sub("", token).rstrip(".;:!?").endswith(",")
+        for token in raw_tokens
+    ]
+
+    def _is_candidate(index: int) -> bool:
+        return _is_entity_candidate(cleaned[index], folded_tokens[index])
+
+    longest: list[str] = []
+    index = 0
+    while index < len(cleaned):
+        if not _is_candidate(index):
+            index += 1
+            continue
+
+        phrases: list[str] = []
+        cursor = index
+        while True:
+            run: list[str] = []
+            comma_terminated = False
+            while (
+                cursor < len(cleaned)
+                and len(run) < _MAX_PHRASE_TOKENS
+                and _is_candidate(cursor)
+            ):
+                run.append(cleaned[cursor])
+                comma_terminated = ends_with_comma[cursor]
+                cursor += 1
+                if comma_terminated:
+                    break
+            if not run:
+                break
+            phrases.append(" ".join(run))
+            if comma_terminated:
+                continue
+            if cursor < len(cleaned) and folded_tokens[cursor] in _ENTITY_LIST_SEPARATORS:
+                cursor += 1
+                continue
+            break
+
+        if len(phrases) > len(longest):
+            longest = phrases
+        index = max(cursor, index + 1)
+
+    return longest if len(longest) >= 3 else []
+
 
 def extract_comparison_pair(question: str) -> tuple[str, str] | None:
     """Finds an explicit "X ile Y" / "X mi Y mi" comparison pair of
@@ -531,15 +617,7 @@ def extract_comparison_pair(question: str) -> tuple[str, str] | None:
     folded_tokens = [fold(token) for token in cleaned]
 
     def _is_candidate(index: int) -> bool:
-        word = cleaned[index]
-        return bool(
-            word
-            and word[0].isupper()
-            and folded_tokens[index] not in _QUESTION_WORDS
-            and not any(
-                folded_tokens[index].startswith(root) for root in _NEVER_CANDIDATE_ROOTS
-            )
-        )
+        return _is_entity_candidate(cleaned[index], folded_tokens[index])
 
     def _phrase_back(end_index: int) -> str | None:
         """Walks backward from end_index, collecting a multi-word proper-noun
