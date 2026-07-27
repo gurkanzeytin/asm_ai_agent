@@ -55,6 +55,28 @@ _NUMBER_WORD = r"(?:\d+|bir|iki|uc|dort|bes|alti|yedi|sekiz|dokuz|on)"
 _DATE_PATTERNS = [
     (rf"\bson\s+{_NUMBER_WORD}\s+(?:gun|hafta|ay|yil)\w*", None),
     (rf"\bonceki\s+{_NUMBER_WORD}\s+(?:gun|hafta|ay|yil)\w*", None),
+    (
+        r"\b(?:19|20)\d{2}\s+(?:in\s+|nin\s+|yil\w*\s+)?"
+        r"(?:ilk|birinci|1|ikinci|2|ucuncu|3|dorduncu|4)\s+ceyrek\w*\b",
+        None,
+    ),
+    (
+        r"\b(?:ilk|birinci|1|ikinci|2|ucuncu|3|dorduncu|4)\s+ceyrek\w*"
+        r"\s+(?:19|20)\d{2}\b",
+        None,
+    ),
+    # Optional trailing "ay\w*" ("ocak ayı"/"ocak ayında"/"ocak ayının") must
+    # be consumed HERE, not left to the later month+"ay\w*" pattern below:
+    # `_is_date_only_followup` substitutes every `_DATE_PATTERNS` entry away
+    # in a single sequential pass, so once THIS pattern (matched first, since
+    # it comes earlier in the list) consumes "2025 ocak" without the "ayı"
+    # suffix, the month name is already gone from the remaining text by the
+    # time the later pattern runs - "ayı" is left stranded with nothing to
+    # match, and a genuine date-only follow-up ("Peki 2025 ocak ayı?") no
+    # longer classifies as one (2026-07-27, regression found immediately
+    # after this quarter/year+month pattern pair was added).
+    (rf"\b(?:19|20)\d{{2}}\s+(?:{_MONTH_NAMES})(?:\s+ay\w*)?\b", None),
+    (rf"\b(?:{_MONTH_NAMES})\s+(?:19|20)\d{{2}}\b", None),
     (r"\bgecen\s+hafta\b", "gecen hafta"),
     (r"\bgecen\s+ay\b", "gecen ay"),
     (r"\bbir\s+onceki\s+yil\w*\b", "bir onceki yil"),
@@ -134,9 +156,14 @@ _PRONOUN_PATTERNS = [
     r"\bbunlardan\b",
     r"\bonlardan\b",
     r"\bsunlardan\b",
+    r"\bayni\s+kapsam\w*",
+    r"\bayni\s+tablo\w*",
+    r"\bbu\s+kapsam\w*",
+    r"\bbu\s+sonuc\w*",
     r"\baynisini\b",
     r"\baynisi\b",
     r"\bbunun\b",
+    r"\bbunu\b",
     r"\bbunlarin\b",
     r"\bonlarin\b",
     r"\bbunlari\b",

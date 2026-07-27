@@ -113,6 +113,36 @@ def test_query_analyzer_bare_month_ayi_form_without_year_is_detected():
     assert analysis.detected_dates[0].end_date == date(2026, 6, 30)
 
 
+def test_bare_month_in_same_sentence_inherits_the_sibling_explicit_year():
+    """"2025 Nisan ayını Mart ayıyla kıyaslayıp ..." - "Mart" has no year of
+    its own, but "2025 Nisan" appears earlier in the SAME sentence. The bare-
+    month detector always anchored to TODAY'S year regardless, silently
+    mixing a real 2025 month with an unrelated current-year month in one
+    period comparison (2026-07-27, live multi-turn testing: resolved to
+    "Mart 2026", which has almost no data in this stale snapshot, turning
+    a real +4.4% comparison into a meaningless "-99.97%" one)."""
+    analyzer = QueryAnalyzer(today=date(2026, 7, 27))
+
+    analysis = analyzer.analyze(
+        "2025 Nisan ayını Mart ayıyla kıyaslayıp dikkat çeken anomalileri açıkla"
+    )
+
+    dates = {d.expression: (d.start_date, d.end_date) for d in analysis.detected_dates}
+    assert dates["2025 nisan"] == (date(2025, 4, 1), date(2025, 4, 30))
+    assert dates["mart ayiyla"] == (date(2025, 3, 1), date(2025, 3, 31))
+
+
+def test_bare_month_without_a_sibling_year_still_uses_todays_year():
+    """Regression guard: a bare month with no explicit year ANYWHERE in the
+    question must still default to today's year, unchanged."""
+    analyzer = QueryAnalyzer(today=date(2026, 7, 27))
+
+    analysis = analyzer.analyze("Mart ayında kaç randevu var")
+
+    assert len(analysis.detected_dates) == 1
+    assert analysis.detected_dates[0].start_date == date(2026, 3, 1)
+
+
 class TestPartialCalendarYear:
     """"2025'in ilk 6 ayı" (the first six MONTHS of 2025).
 

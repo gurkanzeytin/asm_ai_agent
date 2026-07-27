@@ -524,14 +524,31 @@ class QueryAnalyzer:
         )
         explicit_dates = list(explicit_date_pattern.finditer(query_ascii))
         explicit_date_spans = [match.span() for match in explicit_dates]
-        month_year_spans = [
-            match.span()
-            for pattern in (
-                rf"\b(20\d{{2}}|19\d{{2}})\s+({month_alternatives})\b",
-                rf"\b({month_alternatives})\s+(20\d{{2}}|19\d{{2}})\b",
-            )
-            for match in re.finditer(pattern, query_ascii)
+        _year_month_matches = list(
+            re.finditer(rf"\b(20\d{{2}}|19\d{{2}})\s+({month_alternatives})\b", query_ascii)
+        )
+        _month_year_matches = list(
+            re.finditer(rf"\b({month_alternatives})\s+(20\d{{2}}|19\d{{2}})\b", query_ascii)
+        )
+        month_year_spans = [match.span() for match in _year_month_matches] + [
+            match.span() for match in _month_year_matches
         ]
+        # Anchor year for a BARE month mentioned elsewhere in the SAME
+        # sentence ("2025 Nisan ayını Mart ayıyla kıyasla") - the earliest
+        # explicit year+month pair's year, so "Mart" inherits 2025 instead of
+        # defaulting to today's year. Without this, comparing two named
+        # months in one question silently mixed a real year with today's
+        # year (2026-07-27, live multi-turn testing: "Mart 2026" baseline
+        # instead of "Mart 2025", turning the comparison into "vs. 9 stray
+        # rows" instead of the intended two 2025 months).
+        _year_positions: list[tuple[int, int]] = [
+            (match.start(), int(match.group(1))) for match in _year_month_matches
+        ] + [
+            (match.start(), int(match.group(2))) for match in _month_year_matches
+        ]
+        same_sentence_anchor_year = (
+            min(_year_positions, key=lambda item: item[0])[1] if _year_positions else None
+        )
         # Partial calendar year: "2025'in ilk 6 ayı" (the first six months of
         # 2025), "2025'in son 3 ayı" (the last three). Detected BEFORE the bare
         # year and relative "son N ay" loops below, whose spans must exclude
@@ -558,6 +575,39 @@ class QueryAnalyzer:
                     date(year, first_month, 1),
                     date(year, last_month, monthrange(year, last_month)[1]),
                     "month",
+                )
+            )
+
+        quarter_index = {
+            "ilk": 1,
+            "birinci": 1,
+            "1": 1,
+            "ikinci": 2,
+            "2": 2,
+            "ucuncu": 3,
+            "3": 3,
+            "dorduncu": 4,
+            "4": 4,
+        }
+        quarter_matches = list(
+            re.finditer(
+                rf"\b(20\d{{2}}|19\d{{2}})\s+(?:in\s+|nin\s+|yil\w*\s+)?"
+                rf"(ilk|birinci|1|ikinci|2|ucuncu|3|dorduncu|4)\s+ceyrek\w*\b",
+                query_ascii,
+            )
+        )
+        quarter_spans = [match.span() for match in quarter_matches]
+        for match in quarter_matches:
+            year = int(match.group(1))
+            quarter = quarter_index[match.group(2)]
+            first_month = (quarter - 1) * 3 + 1
+            last_month = first_month + 2
+            ranges.append(
+                self._date_range(
+                    match.group(0),
+                    date(year, first_month, 1),
+                    date(year, last_month, monthrange(year, last_month)[1]),
+                    "quarter",
                 )
             )
 
@@ -688,7 +738,12 @@ class QueryAnalyzer:
                 ):
                     continue
                 bare_months_seen.add(month)
-                ranges.append(self._month_range(match.group(0), today.year, month))
+                anchor_year = (
+                    same_sentence_anchor_year
+                    if same_sentence_anchor_year is not None
+                    else today.year
+                )
+                ranges.append(self._month_range(match.group(0), anchor_year, month))
                 break
 
         # Full calendar years, including Turkish case/possessive forms used by
@@ -700,7 +755,8 @@ class QueryAnalyzer:
             query_ascii,
         ):
             if self._overlaps_any(
-                match.span(), explicit_date_spans + month_year_spans + partial_year_spans
+                match.span(),
+                explicit_date_spans + month_year_spans + partial_year_spans + quarter_spans,
             ):
                 continue
             year = int(match.group(1))
