@@ -515,7 +515,48 @@ class PlanComplianceValidator:
             "createddate",
             "bitistarihi",
         )
-        has_aggregate = any(
-            func in select_clause for func in ("count(", "sum(", "avg(", "min(", "max(")
-        )
-        return has_aggregate and any(marker in select_clause for marker in raw_markers)
+        agg_funcs = ("count(", "sum(", "avg(", "min(", "max(")
+        has_aggregate = any(func in select_clause for func in agg_funcs)
+        if not has_aggregate:
+            return False
+        # A raw marker is only a genuine problem when it is a SEPARATE,
+        # un-aggregated projection alongside the aggregate (e.g. a bare
+        # "BitisTarihi" column next to a COUNT/AVG) - not when it is an
+        # ARGUMENT the aggregate itself legitimately operates on, such as
+        # `AVG(CAST(DATEDIFF(day, CreatedDate, BaslangicTarihi) AS FLOAT))`
+        # (appointment_lead_time_average's own formula). Stripping every
+        # balanced aggregate-function call out of the text first, then
+        # checking only what remains, tells the two cases apart - without
+        # this, the lead-time metric's OWN correct formula was rejected as
+        # "raw detail projection in aggregate analysis" the first time it
+        # was live-tested (2026-07-27), never having been exercised before.
+        remainder = self._strip_balanced_calls(select_clause, agg_funcs)
+        return any(marker in remainder for marker in raw_markers)
+
+    @staticmethod
+    def _strip_balanced_calls(text: str, func_prefixes: tuple[str, ...]) -> str:
+        """Removes every `func(...)` call (with correctly paired nested
+        parentheses) for the given lowercase function prefixes, e.g.
+        "avg(cast(datediff(day, createddate, x) as float))" -> ""."""
+        result: list[str] = []
+        i, n = 0, len(text)
+        while i < n:
+            matched_len = 0
+            for prefix in func_prefixes:
+                if text.startswith(prefix, i):
+                    matched_len = len(prefix)
+                    break
+            if matched_len:
+                depth = 1
+                j = i + matched_len
+                while j < n and depth > 0:
+                    if text[j] == "(":
+                        depth += 1
+                    elif text[j] == ")":
+                        depth -= 1
+                    j += 1
+                i = j
+            else:
+                result.append(text[i])
+                i += 1
+        return "".join(result)

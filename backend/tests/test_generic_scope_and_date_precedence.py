@@ -237,6 +237,37 @@ class TestComplianceGuards:
         result = PlanComplianceValidator().check(sql, plan)
         assert not any("ungrounded" in item for item in result.missing)
 
+    def test_raw_marker_as_an_aggregate_argument_is_not_a_detail_leak(self):
+        """appointment_lead_time_average's own formula -
+        `AVG(CAST(DATEDIFF(day, CreatedDate, BaslangicTarihi) AS FLOAT))` -
+        uses CreatedDate as an ARGUMENT the aggregate operates on, not as a
+        separate raw per-row column. The "raw detail projection" guard used
+        to flag any raw marker appearing ANYWHERE in the SELECT clause
+        regardless of whether it was inside an aggregate call, rejecting
+        this metric's own correct SQL outright the first time it was
+        live-tested (2026-07-27, never exercised before)."""
+        plan = QueryPlan(
+            question="q", analysis_type="lead_time_analysis",
+            metrics=["appointment_lead_time_average"],
+        )
+        sql = (
+            "SELECT AVG(CAST(DATEDIFF(day, CreatedDate, BaslangicTarihi) AS FLOAT)) "
+            "AS appointment_lead_time_average FROM dbo.vw_RandevuRaporu;"
+        )
+        result = PlanComplianceValidator().check(sql, plan, deterministic=True)
+        assert not any("raw detail projection" in item for item in result.missing)
+
+    def test_raw_marker_as_a_separate_projection_is_still_a_detail_leak(self):
+        """Regression guard: a genuine raw-detail column selected ALONGSIDE
+        an aggregate (not as its argument) must still be rejected."""
+        plan = QueryPlan(question="q", analysis_type="count", metrics=["appointment_count"])
+        sql = (
+            "SELECT COUNT(*) AS appointment_count, BitisTarihi AS BitisTarihi "
+            "FROM dbo.vw_RandevuRaporu;"
+        )
+        result = PlanComplianceValidator().check(sql, plan, deterministic=True)
+        assert any("raw detail projection" in item for item in result.missing)
+
     def test_grouping_by_branch_is_never_flagged_as_a_filter(self):
         plan = QueryPlan(question="q", dimensions=["SubeAdi"])
         sql = "SELECT SubeAdi, COUNT(*) FROM dbo.vw_RandevuRaporu GROUP BY SubeAdi;"

@@ -184,8 +184,7 @@
         "ne kadar suruyor",
         "muayene suresi",
         "ortalama muayene sure",
-        "randevu sureleri",
-        "sureler"
+        "randevu sureleri"
       ],
       "compatible_dimensions_group": "standard",
       "default_time_column": "BaslangicTarihi",
@@ -453,6 +452,7 @@
         "lead time",
         "onceden alinma suresi",
         "randevu alma suresi",
+        "randevu alma oncesi sure",
         "randevu olusturma ile",
         "onceden randevu"
       ],

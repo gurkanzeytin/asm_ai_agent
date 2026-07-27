@@ -192,10 +192,26 @@ def test_fewshot_never_returns_removed_column_examples():
         ("gelmeme oranı nedir", "no_show_rate"),
         ("ortalama randevu süresi", "appointment_duration_average"),
         ("hastalar kaç gün önceden randevu alıyor", "appointment_lead_time_average"),
+        ("ortalama randevu alma öncesi süre nedir", "appointment_lead_time_average"),
     ],
 )
 def test_metric_matching(question, expected_metric):
     assert expected_metric in catalog.match_metrics(fold(question))
+
+
+def test_lead_time_wins_over_duration_for_its_own_phrasing():
+    """'appointment_duration_average' used to carry a bare, overly generic
+    single-token synonym ("sureler") that trivially matched any question
+    mentioning the word "süre" - including a genuine lead-time question
+    ("randevu alma öncesi süre" = "the time before taking an appointment"),
+    which has no synonym of its own that survives a contiguous-token match
+    once "öncesi" sits between "alma" and "süre". Silently answered with
+    the wrong metric (2026-07-27, live multi-turn testing) - worse than a
+    crash. Regression guard: the WRONG metric must not even be a candidate,
+    not just "not first"."""
+    matched = catalog.match_metrics(fold("ortalama randevu alma öncesi süre nedir"))
+    assert matched == ["appointment_lead_time_average"]
+    assert "appointment_duration_average" not in matched
 
 
 @pytest.mark.parametrize(
