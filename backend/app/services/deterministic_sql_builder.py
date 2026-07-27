@@ -109,7 +109,7 @@ class DeterministicSQLBuilder:
         if analysis_type not in SUPPORTED_ANALYSIS_TYPES:
             return UnsupportedPlan(f"unsupported analysis type: {analysis_type}")
         if analysis_type == "cohort_analysis":
-            return self._cohort(adaptive_retry=adaptive_retry)
+            return self._cohort(plan, adaptive_retry=adaptive_retry)
         if analysis_type in {
             "period_comparison",
             "baseline_comparison",
@@ -252,7 +252,7 @@ class DeterministicSQLBuilder:
             expected_aliases=[],
         )
 
-    def _cohort(self, *, adaptive_retry: bool) -> DeterministicSQL:
+    def _cohort(self, plan: QueryPlan, *, adaptive_retry: bool) -> DeterministicSQL:
         # 'Son dakika' = created within the 24h before the appointment start;
         # negative lead times are excluded (BETWEEN 0 AND 24).
         upper_hour = 48 if adaptive_retry else 24
@@ -266,7 +266,21 @@ class DeterministicSQLBuilder:
                 f"100.0 * SUM(CASE WHEN {condition} THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) AS {prefix}_rate"
             )
             aliases.extend([f"{prefix}_count", f"{prefix}_rate"])
-        sql = f"SELECT {', '.join(select_parts)}\n" f"FROM {VIEW}\n" f"WHERE {cohort_filter};"
+        # The lead-time window is always applied; any OTHER plan-level
+        # scoping (a date range, department, branch, status filter) narrows
+        # WHICH appointments are considered for it - e.g. "2025'te son
+        # dakika alınan randevular" must restrict to 2025, not silently run
+        # the cohort over the entire table. Previously this method took no
+        # `plan` at all, so a stated date_filter never made it into the SQL
+        # and PlanComplianceValidator's generic per-filter check rejected the
+        # (otherwise-correct) cohort SQL outright -> SAFE_ERROR (2026-07-27,
+        # live multi-turn testing; the cohort path had never been exercised
+        # end-to-end before).
+        where = self._where(plan)
+        where = (
+            f"{where.rstrip()} AND {cohort_filter};" if where else f"WHERE {cohort_filter};"
+        )
+        sql = f"SELECT {', '.join(select_parts)}\n" f"FROM {VIEW}\n" f"{where}"
         return DeterministicSQL(sql=sql, result_schema="CohortResult", expected_aliases=aliases)
 
     def _period_comparison(

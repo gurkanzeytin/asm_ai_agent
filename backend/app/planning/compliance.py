@@ -293,6 +293,30 @@ class PlanComplianceValidator:
         # with a fixed, non-metric_id name (e.g. "current_period_count") by
         # long-established, already-tested design — only genuine multi-metric
         # coverage is new ground here.
+        #
+        # That single-metric carve-out did not actually protect cohort_
+        # analysis: the planner declares THREE metrics for it (appointment_
+        # count/completed_appointment_rate/no_show_rate), so `len(plan.
+        # metrics) > 1` was true and this check ran anyway - but
+        # DeterministicSQLBuilder._cohort renders its OWN fixed CohortResult
+        # aliases (cohort_total_count/completed_rate/no_show_rate/...), never
+        # the metric_ids themselves, so the check always failed and silently
+        # routed every cohort question to the LLM fallback path (2026-07-27,
+        # found once the cohort path's separate missing-date-filter bug,
+        # above, was fixed and it could be exercised at all). Excluded
+        # explicitly alongside the other fixed-shape analysis types the
+        # comment above already names.
+        _FIXED_SHAPE_ANALYSIS_TYPES = {
+            "cohort_analysis",
+            "period_comparison",
+            "baseline_comparison",
+            "adaptive_time_comparison",
+            "percentage_change",
+            "comparison",
+            "anomaly_comparison",
+            "variance_analysis",
+            "time_trend",
+        }
         missing_metrics = (
             sorted(
                 {
@@ -301,7 +325,7 @@ class PlanComplianceValidator:
                     if not re.search(rf"\bas\s+{re.escape(metric_id.lower())}\b", folded_sql)
                 }
             )
-            if len(plan.metrics) > 1
+            if len(plan.metrics) > 1 and plan.analysis_type not in _FIXED_SHAPE_ANALYSIS_TYPES
             else []
         )
         missing_dimensions = sorted(

@@ -14,6 +14,7 @@ from app.application_models.workflow_models import QueryResult
 from app.context.models import ConversationContext
 from app.context.resolver import ContextResolver
 from app.database_intelligence.models import ViewMetadata
+from app.planning.compliance import PlanComplianceValidator
 from app.planning.models import QueryPlan
 from app.planning.planner import QueryPlanner
 from app.reporting.presentation import format_number, format_percent, label_for
@@ -120,6 +121,66 @@ def test_cohort_contract_has_no_cancelled_fields():
     assert "cancelled_rate" not in fields
     for prefix in STATUS_PREFIXES:
         assert f"{prefix}_rate" in fields
+
+
+def test_cohort_plan_passes_full_compliance_check(planner, analyzer):
+    """The real planner declares THREE metrics for a cohort question
+    (appointment_count/completed_appointment_rate/no_show_rate), which used
+    to trip PlanComplianceValidator's multi-metric coverage check even
+    though DeterministicSQLBuilder._cohort deliberately renders its own
+    fixed CohortResult aliases (cohort_total_count/completed_rate/...), not
+    the metric_ids themselves - the single-metric carve-out for this exact
+    "fixed-shape analysis" case only excluded `len(plan.metrics) == 1`
+    plans, missing cohort's 3-metric shape entirely. Silently routed every
+    cohort question to the (also failing) LLM fallback path (2026-07-27,
+    only surfaced once the missing-date-filter bug below was fixed and this
+    path could be exercised end-to-end for the first time)."""
+    plan = _cohort_plan(planner, analyzer)
+    assert len(plan.metrics) > 1
+    built = DeterministicSQLBuilder().build(plan)
+
+    result = PlanComplianceValidator().check(
+        built.sql, plan, expected_aliases=built.expected_aliases, deterministic=True
+    )
+    assert result.compliant, (result.missing, result.missing_metrics)
+
+
+def test_cohort_incorporates_an_explicit_date_filter(planner, analyzer):
+    """"2025'te son dakika alınan randevuların gerçekleşme durumu nasıl"
+    must restrict WHICH appointments enter the cohort to 2025, not silently
+    run the lead-time window over the entire table.
+    DeterministicSQLBuilder._cohort used to take no `plan` parameter at all,
+    so ANY plan-level filter (date, department, branch, status) was always
+    dropped - PlanComplianceValidator's generic per-date-filter check then
+    rejected the (otherwise fine) cohort SQL outright -> SAFE_ERROR
+    (2026-07-27, live multi-turn testing; the cohort path had never been
+    exercised end-to-end before)."""
+    plan = plan_for(
+        planner, analyzer,
+        "2025'te son dakika alınan randevuların gerçekleşme durumu nasıl",
+    )
+    assert plan.date_filters
+    built = DeterministicSQLBuilder().build(plan)
+
+    assert "BaslangicTarihi >= '2025-01-01'" in built.sql
+    assert "DATEDIFF(hour, CreatedDate, BaslangicTarihi) BETWEEN 0 AND 24" in built.sql
+    result = PlanComplianceValidator().check(
+        built.sql, plan, expected_aliases=built.expected_aliases, deterministic=True
+    )
+    assert result.compliant, (result.missing, result.missing_metrics)
+
+
+def test_cohort_without_any_extra_filter_is_unchanged():
+    """Regression guard: a bare cohort question with no plan-level filters
+    at all must render identically to before (WHERE is just the lead-time
+    window, nothing ANDed onto an empty clause)."""
+    from app.planning.models import QueryPlan as _Plan
+
+    plan = _Plan(question="q", analysis_type="cohort_analysis")
+    built = DeterministicSQLBuilder().build(plan)
+
+    assert built.sql.count("WHERE") == 1
+    assert "WHERE DATEDIFF(hour, CreatedDate, BaslangicTarihi) BETWEEN 0 AND 24;" in built.sql
 
 
 def test_cohort_rate_sum_validation_flags_gaps():
