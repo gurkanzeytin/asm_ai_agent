@@ -144,6 +144,33 @@ class TestAnswerabilityGuard:
         assert result.reason == "unsafe_write_intent"
         assert any(signal.startswith("unsafe_write_intent:") for signal in result.signals)
 
+    def test_dated_comparison_with_no_recognized_operation_verb_is_answerable(self):
+        """"2025 Nisan ayını Mart ayıyla kıyaslayıp dikkat çeken anomalileri
+        açıkla" has two dates but `detected_operations` only recognizes 4
+        basic verbs (LIST/COUNT/SUM/AVG - "goster"/"kac"/"toplam"/
+        "ortalama") - neither "kıyasla" nor "açıkla" is in that vocabulary,
+        so `has_dated_aggregate` was False despite being a fully in-domain
+        question `analysis_patterns.json` itself already recognizes
+        ("kiyasla" is a period_comparison trigger) - OUT_OF_SCOPE'd outright
+        even though the anomaly_comparison/period_comparison analysis types
+        and their deterministic builders both exist (2026-07-27, live
+        multi-turn testing)."""
+        result = self.guard.assess(
+            "2025 Nisan ayını Mart ayıyla kıyaslayıp dikkat çeken anomalileri açıkla"
+        )
+        assert result.answerable
+        assert result.reason == "dated_aggregate_detected"
+
+    def test_conjugated_comparison_verb_still_recognized(self):
+        """"kiyaslayip" (kıyaslayıp, gerund form) is a genuine substring match
+        for catalog.detect_period_comparison (used by the planner itself)
+        but NOT for catalog.match_pattern's stricter no-prefix stem check on
+        the same trigger word - reuse detect_period_comparison rather than
+        re-deriving the same signal with rules stricter than the component
+        that actually acts on it."""
+        result = self.guard.assess("2025 Ocak ile 2025 Şubat'ı kıyaslayıp yorumla")
+        assert result.answerable
+
     def test_generic_sql_table_request_is_not_answerable_without_subject(self):
         result = self.guard.assess(
             "SQL sorgusunu yaz ve \u00e7al\u0131\u015ft\u0131r\u0131p tabloyu getir"
@@ -236,13 +263,22 @@ class TestRouting:
     def test_clean_execution_continues(self):
         assert route_after_execution(AgentState(question="q")) == "continue"
 
-    def test_data_only_after_execution_skips_analytics_and_report(self):
+    def test_data_only_after_execution_continues_to_result_enrichment(self):
         state = AgentState(
             question="q",
             response_mode="data",
             query_result=make_query_result([{"c": 1}], ["c"]),
         )
-        assert route_after_execution(state) == "data_only"
+        assert route_after_execution(state) == "continue"
+
+    def test_data_only_after_analysis_skips_llm_report_stages(self):
+        state = AgentState(
+            question="q",
+            response_mode="data",
+            query_result=make_query_result([{"c": 1}], ["c"]),
+            analytics=AnalyticsResult(analytics_type="distribution", row_count=1),
+        )
+        assert route_after_analysis(state) == "data_only"
 
     def test_visualization_after_analysis_skips_llm_report_stages(self):
         state = AgentState(

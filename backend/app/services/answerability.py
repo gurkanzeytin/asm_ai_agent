@@ -158,8 +158,33 @@ class AnswerabilityGuard:
             or bool(context_signals.department)
             or has_resolved_domain_context
         )
-        has_dated_aggregate = bool(analysis.detected_dates) and bool(
-            analysis.detected_operations
+        # `detected_operations` only recognizes 4 basic verbs (LIST/COUNT/
+        # SUM/AVG — "goster"/"kac"/"toplam"/"ortalama"), so a dated
+        # COMPARISON/ANOMALY request ("2025 Nisan ayını Mart ayıyla
+        # kıyaslayıp dikkat çeken anomalileri açıkla" - "kıyasla"/"açıkla",
+        # neither in that vocabulary) had dates but no recognized operation,
+        # so `has_dated_aggregate` was False despite being a fully in-domain
+        # question that `analysis_patterns.json` itself already recognizes
+        # ("kiyasla" is a period_comparison trigger) - OUT_OF_SCOPE'd outright
+        # even though the anomaly_comparison analysis type and its
+        # deterministic builder both exist (2026-07-27, live multi-turn
+        # testing). Matching a known analysis pattern is just as strong an
+        # operation signal as the narrow 4-verb list.
+        has_dated_aggregate = bool(analysis.detected_dates) and (
+            bool(analysis.detected_operations)
+            or catalog.match_pattern(folded_question, len(analysis.detected_dates)) is not None
+            # `match_pattern`'s own period_comparison branch requires an
+            # EXACT/stem match on "kiyasla"/"karsilastir" (no prefix
+            # matching, by design), so a conjugated form like "kıyaslayıp"
+            # ("kiyaslayip") never matches it even though the planner's own
+            # `detect_period_comparison` (substring-based) recognizes it
+            # just fine - reuse that instead of re-deriving the same signal
+            # with stricter rules than the component that actually acts on it.
+            or bool(
+                catalog.detect_period_comparison(
+                    folded_question, len(analysis.detected_dates)
+                )
+            )
         )
         # A question naming ANY known view column/metric by its business name
         # or synonym is in-scope even with no recognized entity noun ("hasta",
