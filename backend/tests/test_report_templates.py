@@ -104,6 +104,60 @@ def test_template_renderer_table():
     assert "| B | 8 |" in rendered.markdown
 
 
+def test_template_renderer_table_uses_dimension_labels_not_raw_columns():
+    """Table columns are almost always a mix of dimensions and metrics (e.g.
+    entity_label + appointment_count) - label_for() only ever consults the
+    metric-alias catalog, so every dimension column rendered raw
+    ("Entity Label", "Cinsiyetid", "Doktoradi") instead of its Turkish label
+    (2026-07-27, found across every grouped answer in live multi-turn
+    testing). "Cinsiyetid" (not "CinsiyetId") is exactly what Python's
+    str.title() fallback produced for a PascalCase SQL column name with no
+    underscore to mark a word boundary - proof the raw fallback was firing."""
+    rendered = TemplateReportRenderer().render(
+        ReportType.TABLE,
+        _query_result(
+            ["CinsiyetId", "appointment_count"],
+            [{"CinsiyetId": "K", "appointment_count": 16}, {"CinsiyetId": "E", "appointment_count": 3}],
+        ),
+    )
+
+    assert rendered is not None
+    assert "| Cinsiyet | Toplam Randevu |" in rendered.markdown
+    assert "Cinsiyetid" not in rendered.markdown
+
+
+def test_template_renderer_table_entity_breakdown_label():
+    """3+-entity comparison breakdown (deterministic_sql_builder.
+    _entity_breakdown) uses the generic entity_label column."""
+    rendered = TemplateReportRenderer().render(
+        ReportType.TABLE,
+        _query_result(
+            ["entity_label", "appointment_count"],
+            [{"entity_label": "Kardiyoloji", "appointment_count": 13168}],
+        ),
+    )
+
+    assert rendered is not None
+    assert "| Karşılaştırma Grubu | Toplam Randevu |" in rendered.markdown
+
+
+def test_template_renderer_single_row_uses_dimension_label_not_raw_column():
+    """A single grouped row mixes a dimension with its metric (e.g. "Şube:
+    TEST ASM Gebze, Protokole Dönüşüm Oranı: %100") - same label_for() gap
+    as the table renderer above."""
+    rendered = TemplateReportRenderer().render(
+        ReportType.SINGLE_ROW,
+        _query_result(
+            ["SubeAdi", "protocol_conversion_rate"],
+            [{"SubeAdi": "TEST ASM Gebze", "protocol_conversion_rate": 100.0}],
+        ),
+    )
+
+    assert rendered is not None
+    assert "- **Şube:** TEST ASM Gebze" in rendered.markdown
+    assert "Subeadi" not in rendered.markdown
+
+
 def test_template_renderer_empty():
     rendered = TemplateReportRenderer().render(ReportType.EMPTY, _query_result(["id"], []))
 

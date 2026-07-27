@@ -16,6 +16,7 @@ from app.reporting.presentation import (
     format_number,
     format_percent,
     format_value,
+    get_column_label,
     label_for,
 )
 from app.reporting.report_classifier import ReportType
@@ -279,20 +280,31 @@ class TemplateReportRenderer:
         return TemplateRenderResult("Sorgu Sonucu", markdown, "single_value")
 
     def _render_single_row(self, query_result: QueryResult) -> TemplateRenderResult:
+        # A single row commonly mixes a DIMENSION column with its metric
+        # (e.g. "Şube: TEST ASM Gebze, Protokole Dönüşüm Oranı: %100") -
+        # label_for() only ever consults the metric-alias catalog, so any
+        # dimension column rendered raw title-cased ("Subeadi") instead of
+        # its Turkish label ("Şube"). get_column_label() covers both.
         row = query_result.rows[0]
         lines = ["# Sorgu Sonucu", ""]
         for key in query_result.columns:
             if key in row:
-                lines.append(f"- **{label_for(key)}:** {_render_cell(key, row[key])}")
+                lines.append(f"- **{get_column_label(key)}:** {_render_cell(key, row[key])}")
         for key, value in row.items():
             if key not in query_result.columns:
-                lines.append(f"- **{label_for(key)}:** {_render_cell(key, value)}")
+                lines.append(f"- **{get_column_label(key)}:** {_render_cell(key, value)}")
         return TemplateRenderResult("Sorgu Sonucu", "\n".join(lines), "single_row")
 
     def _render_table(self, query_result: QueryResult) -> TemplateRenderResult:
+        # Table columns are almost always a mix of dimensions and metrics
+        # (e.g. entity_label + appointment_count) - label_for() only ever
+        # consults the metric-alias catalog, so every dimension column
+        # rendered raw ("Entity Label", "Cinsiyetid", "Doktoradi") instead of
+        # its Turkish label (2026-07-27, found across every grouped answer
+        # in live multi-turn testing). get_column_label() covers both.
         query_result = cap_query_result(query_result, DEFAULT_GROUPED_RESULT_LIMIT)
         columns = query_result.columns or _columns_from_rows(query_result.rows)
-        header = "| " + " | ".join(label_for(col) for col in columns) + " |"
+        header = "| " + " | ".join(get_column_label(col) for col in columns) + " |"
         separator = "| " + " | ".join("---" for _ in columns) + " |"
         rows = []
         for row in query_result.rows:
