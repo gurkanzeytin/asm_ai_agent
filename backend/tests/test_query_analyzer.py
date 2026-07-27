@@ -113,6 +113,62 @@ def test_query_analyzer_bare_month_ayi_form_without_year_is_detected():
     assert analysis.detected_dates[0].end_date == date(2026, 6, 30)
 
 
+class TestPartialCalendarYear:
+    """"2025'in ilk 6 ayı" (the first six MONTHS of 2025).
+
+    Two bugs in one phrasing (2026-07-24, live multi-turn testing):
+    "ilk 6" was read as a row LIMIT (the "son N" branch excluded temporal
+    units, the "ilk N" branch did not), which the deterministic time-series
+    builder cannot express as TOP(N) -> SAFE_ERROR; and the partial-year
+    scope was dropped entirely, so the answer covered the FULL year.
+    """
+
+    analyzer = QueryAnalyzer(today=date(2026, 7, 20))
+
+    def test_first_n_months_of_a_year(self):
+        analysis = self.analyzer.analyze("2025'in ilk 6 ayının randevu trendini özetle")
+
+        assert analysis.detected_limit is None
+        assert len(analysis.detected_dates) == 1
+        assert analysis.detected_dates[0].start_date == date(2025, 1, 1)
+        assert analysis.detected_dates[0].end_date == date(2025, 6, 30)
+
+    def test_last_n_months_of_a_year_is_anchored_to_that_year(self):
+        """Not relative to today: the bare "son 3 ay" detector must not also
+        fire here, or both ranges end up ANDed into the same SQL."""
+        analysis = self.analyzer.analyze("2025'in son 3 ayında kaç randevu var")
+
+        assert len(analysis.detected_dates) == 1
+        assert analysis.detected_dates[0].start_date == date(2025, 10, 1)
+        assert analysis.detected_dates[0].end_date == date(2025, 12, 31)
+
+    def test_yilinin_form_and_spelled_out_count(self):
+        assert self.analyzer.analyze("2025 yılının ilk 4 ayını göster").detected_dates[
+            0
+        ].end_date == date(2025, 4, 30)
+        assert self.analyzer.analyze("2025'in ilk altı ayı").detected_dates[
+            0
+        ].end_date == date(2025, 6, 30)
+
+    def test_relative_months_without_a_year_stay_relative_to_today(self):
+        analysis = self.analyzer.analyze("son 3 ayda kaç randevu var")
+
+        assert len(analysis.detected_dates) == 1
+        assert analysis.detected_dates[0].end_date == date(2026, 7, 20)
+
+    def test_plain_year_still_resolves_to_the_full_year(self):
+        analysis = self.analyzer.analyze("2025 yılında kaç randevu var")
+
+        assert len(analysis.detected_dates) == 1
+        assert analysis.detected_dates[0].start_date == date(2025, 1, 1)
+        assert analysis.detected_dates[0].end_date == date(2025, 12, 31)
+
+    def test_genuine_row_limits_are_unaffected(self):
+        assert self.analyzer.analyze("ilk 50 randevuyu getir").detected_limit == 50
+        assert self.analyzer.analyze("son 100 randevuyu getir").detected_limit == 100
+        assert self.analyzer.analyze("en yoğun 5 doktoru göster").detected_limit == 5
+
+
 @pytest.mark.parametrize(
     ("query", "expected_normalized", "expected_synonym"),
     [

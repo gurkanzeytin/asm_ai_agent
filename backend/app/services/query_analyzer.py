@@ -394,7 +394,13 @@ class QueryAnalyzer:
         handled by date detection instead.
         """
         folded = self._fold(normalized_query)
-        match = re.search(r"\bilk\s+(\d+)\b", folded)
+        # The temporal-unit exclusion has to mirror the "son N" branch below:
+        # "2025'in ilk 6 ayı" means the first six MONTHS, not the first six
+        # ROWS. Without it the bogus limit=6 reached the deterministic
+        # time-series builder, which has no TOP(N) support, and
+        # PlanComplianceValidator rejected the SQL outright -> SAFE_ERROR
+        # (2026-07-24, live multi-turn testing).
+        match = re.search(r"\bilk\s+(\d+)\b(?!\s*(?:gun|hafta|ay|yil)\w*)", folded)
         if match:
             return int(match.group(1)), None
         match = re.search(r"\bson\s+(\d+)\b(?!\s*(?:gun|hafta|ay|yil)\w*)", folded)
@@ -526,6 +532,35 @@ class QueryAnalyzer:
             )
             for match in re.finditer(pattern, query_ascii)
         ]
+        # Partial calendar year: "2025'in ilk 6 ayı" (the first six months of
+        # 2025), "2025'in son 3 ayı" (the last three). Detected BEFORE the bare
+        # year and relative "son N ay" loops below, whose spans must exclude
+        # these — a bare "2025" would otherwise also add the FULL year and a
+        # bare "son 3 ay" a relative-to-today range, both ANDed into the same
+        # SQL alongside this one (the double-range bug class fixed in an
+        # earlier pass). Query normalization has already turned the possessive
+        # apostrophe into a space ("2025'in" -> "2025 in").
+        partial_year_matches = list(
+            re.finditer(
+                rf"\b(20\d{{2}}|19\d{{2}})\s+(?:in\s+|nin\s+|yil\w*\s+)?"
+                rf"(ilk|son)\s+{_NUMBER_TOKEN}\s+ay\w*\b",
+                query_ascii,
+            )
+        )
+        partial_year_spans = [match.span() for match in partial_year_matches]
+        for match in partial_year_matches:
+            year = int(match.group(1))
+            months = max(1, min(12, self._parse_number(match.group(3))))
+            first_month, last_month = (1, months) if match.group(2) == "ilk" else (13 - months, 12)
+            ranges.append(
+                self._date_range(
+                    match.group(0),
+                    date(year, first_month, 1),
+                    date(year, last_month, monthrange(year, last_month)[1]),
+                    "month",
+                )
+            )
+
         for index in range(0, len(explicit_dates), 2):
             first = explicit_dates[index]
             first_date = date(
@@ -609,6 +644,9 @@ class QueryAnalyzer:
             ranges.append(self._date_range(match.group(0), start, end, "week"))
 
         for match in re.finditer(rf"\bson\s+{_NUMBER_TOKEN}\s+ay\w*\b", query_ascii):
+            # "2025'in son 3 ayı" is anchored to that year, not to today.
+            if self._overlaps_any(match.span(), partial_year_spans):
+                continue
             months = self._parse_number(match.group(1))
             start = self._shift_months(today, months)
             ranges.append(self._date_range(match.group(0), start, today, "month"))
@@ -662,7 +700,7 @@ class QueryAnalyzer:
             query_ascii,
         ):
             if self._overlaps_any(
-                match.span(), explicit_date_spans + month_year_spans
+                match.span(), explicit_date_spans + month_year_spans + partial_year_spans
             ):
                 continue
             year = int(match.group(1))

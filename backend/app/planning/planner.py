@@ -380,20 +380,17 @@ class QueryPlanner:
                 intelligence["analysis_type"],
             )
 
-            # A bare "ilk/son N" number elsewhere in the question (e.g. "ilk 6
-            # ayının ... trendini özetle" - intended as "first 6 months",
-            # a date-range qualifier) is detected generically as a row-count
-            # LIMIT by the query analyzer regardless of what it's modifying.
-            # The deterministic time-series builder has no TOP(N) support at
-            # all (a trend answers with every bucket in the resolved date
-            # range, not "the first N rows"), so PlanComplianceValidator's
-            # generic "plan.limit needs a matching TOP" check rejects the
-            # SQL outright -> SAFE_ERROR (2026-07-24, live multi-turn
-            # testing: "2025'in ilk 6 ayının randevu trendini özetle").
-            # Correctly narrowing the date range itself to the first N
-            # months is a separate, deeper fix in query_analyzer - not yet
-            # implemented; dropping the limit here at least answers with the
-            # full resolved date range instead of failing outright.
+            # Defense in depth: the deterministic time-series builder has no
+            # TOP(N) support at all (a trend answers with every bucket in the
+            # resolved date range, not "the first N rows"), so any row limit
+            # reaching it would fail PlanComplianceValidator's generic
+            # "plan.limit needs a matching TOP" check and kill the whole
+            # answer. The one phrasing known to produce a bogus limit here
+            # ("2025'in ilk 6 ayının ... trendini özetle", where "ilk 6"
+            # qualifies MONTHS, not rows) is now fixed at its source in
+            # `QueryAnalyzer._detect_limit_and_order`, which also resolves it
+            # into a real partial-year date range — this guard stays for any
+            # other wording that pairs an explicit row limit with a trend.
             resolved_limit = analysis.detected_limit
             if resolved_limit and intelligence["analysis_type"] == "time_trend":
                 resolved_limit = None
