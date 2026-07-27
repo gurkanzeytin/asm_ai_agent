@@ -157,6 +157,10 @@ class DeterministicSQLBuilder:
             return UnsupportedPlan("no verified metric mapping", skipped)
 
         dimensions = self._dimensions(plan)
+        time_bucket_expr = None
+        if plan.grouping_granularity and not dimensions:
+            date_column = (plan.date_filters[0].column if plan.date_filters else None) or DATE_COLUMN
+            time_bucket_expr = self._time_bucket_expression(plan.grouping_granularity, date_column)
         splits_department = DEPARTMENT_COLUMN in dimensions
         # GenelRandevuBolumAdi is comma-separated composite text ("Genel
         # Cerrahi, Ameliyathane, "). Grouping the raw column yields one row
@@ -188,16 +192,19 @@ class DeterministicSQLBuilder:
         if buckets_age:
             output_alias_for[_AGE_GROUP_COLUMN] = "age_group"
             group_expr_for[_AGE_GROUP_COLUMN] = _AGE_GROUP_EXPR
-        select_parts = [
+        select_parts = [f"{time_bucket_expr} AS period_start"] if time_bucket_expr else []
+        group_by_columns = [time_bucket_expr] if time_bucket_expr else []
+        expected_aliases = ["period_start"] if time_bucket_expr else []
+        select_parts.extend([
             f"{group_expr_for[dimension]} AS {output_alias_for[dimension]}"
             if dimension in group_expr_for
             else f"{dimension} AS {dimension}"
             for dimension in dimensions
-        ]
-        group_by_columns = [
+        ])
+        group_by_columns.extend(
             group_expr_for.get(dimension, dimension) for dimension in dimensions
-        ]
-        expected_aliases = [output_alias_for.get(dimension, dimension) for dimension in dimensions]
+        )
+        expected_aliases.extend(output_alias_for.get(dimension, dimension) for dimension in dimensions)
         metric_aliases: dict[str, str] = {}
         for metric_id, expression in metric_exprs:
             alias = self._alias_for_metric(metric_id, analysis_type)
@@ -213,8 +220,12 @@ class DeterministicSQLBuilder:
         from_clause = f"FROM {VIEW}\n"
         if splits_department:
             from_clause += self._department_split_cross_apply()
-        group_by = f"\nGROUP BY {', '.join(group_by_columns)}" if dimensions else ""
-        order_by = self._order_by(plan, analysis_type, expected_aliases[-1])
+        group_by = f"\nGROUP BY {', '.join(group_by_columns)}" if group_by_columns else ""
+        order_by = (
+            "\nORDER BY period_start ASC"
+            if time_bucket_expr
+            else self._order_by(plan, analysis_type, expected_aliases[-1])
+        )
         top = (
             f"TOP ({plan.limit}) "
             if plan.limit

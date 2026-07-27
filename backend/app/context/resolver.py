@@ -87,6 +87,10 @@ _OUTPUT_ACTION_FOLLOWUP_MARKERS = (
     "tablo getir",
     "grafik yap",
     "grafik ciz",
+    "grafigi ciz",
+    "grafigini ciz",
+    "grafigi goster",
+    "grafigini goster",
     "grafige cevir",
     # "Bunu grafikte göster" ("show THIS as a chart") - a presentation-only
     # follow-up on the previous result, same family as "grafik yap"/"grafiğe
@@ -97,11 +101,14 @@ _OUTPUT_ACTION_FOLLOWUP_MARKERS = (
     "grafikte goster",
     "grafik olarak goster",
     "sql olarak ver",
+    "sql sorgusunu",
     "sql ini ver",
     "sqlini ver",
     "sorgusunu ver",
+    "sorgusunu goster",
 )
 _CONVERSATIONAL_CONTINUATION_MARKERS = ("o zaman", "peki")
+_COMPARISON_FOLLOWUP_MARKERS = ("kiyasla", "karsilastir", "farki", "farkini")
 
 _CLARIFICATION_MULTIPLE = (
     "Daha önce birden fazla konu konuşuldu. Hangisini kastettiğinizi belirtir misiniz?"
@@ -411,15 +418,24 @@ class ContextResolver:
             result.follow_up_signals.append("conversational_continuation")
 
         if (
-            not result.follow_up_signals
-            and context.query_plan_snapshot is not None
+            context.query_plan_snapshot is not None
             and any(
                 marker in folded_question
                 for marker in _OUTPUT_ACTION_FOLLOWUP_MARKERS
             )
             and current_signals.is_empty()
+            and "output_action_followup" not in result.follow_up_signals
         ):
             result.follow_up_signals.append("output_action_followup")
+
+        if (
+            not result.follow_up_signals
+            and not context.is_empty()
+            and any(marker in folded_question for marker in _COMPARISON_FOLLOWUP_MARKERS)
+            and "onceki" not in folded_question
+            and (signals.date_expression or current_signals.is_empty())
+        ):
+            result.follow_up_signals.append("comparison_followup")
 
         # "Top 10 departments" does not state what is being ranked.  When a
         # successful prior plan supplies that metric, it is a genuine ranking
@@ -446,14 +462,25 @@ class ContextResolver:
         # already fires for genuinely independent short questions that merely
         # happen to be short (e.g. a new department's own doctor listing),
         # where concatenating the prior question would corrupt the text.
+        needs_output_or_comparison_replay = (
+            "output_action_followup" in result.follow_up_signals
+            or "comparison_followup" in result.follow_up_signals
+        )
         if (
             result.follow_up_signals
-            and _merge_policy.has_strong_followup_marker(folded_question)
+            and (
+                (
+                    _merge_policy.has_strong_followup_marker(folded_question)
+                    and result.resolved_question == question
+                )
+                or needs_output_or_comparison_replay
+            )
             and context.last_question
-            and result.resolved_question == question
+            and self._extractor.fold(context.last_question)
+            not in self._extractor.fold(result.resolved_question)
         ):
             result.resolved_question = (
-                f"{context.last_question.rstrip('.')}. {question}".strip()
+                f"{context.last_question.rstrip('.')}. {result.resolved_question}".strip()
             )
             result.inherited["previous_question"] = context.last_question
 
@@ -574,7 +601,19 @@ class ContextResolver:
     ) -> str | None:
         """Determines the unique referent for a pronoun, or None when ambiguous."""
         pronoun_text = " ".join(signals.pronouns)
-        if any(marker in pronoun_text for marker in ("aynisi", "aynisini", "bunun")):
+        if any(
+            marker in pronoun_text
+            for marker in (
+                "aynisi",
+                "aynisini",
+                "bunun",
+                "bunu",
+                "ayni kapsam",
+                "ayni tablo",
+                "bu kapsam",
+                "bu sonuc",
+            )
+        ):
             if (
                 context.metrics
                 or context.dimensions

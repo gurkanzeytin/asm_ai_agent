@@ -6,10 +6,13 @@ from app.agent.state import AgentState
 from app.context.analytical_signals import merge_query_plans
 from app.planning.models import QueryPlan
 from app.planning.planner import QueryPlanner
+from app.semantics.view_mapping import fold
 from app.services.interfaces import IPromptService
 from app.services.query_analyzer import QueryAnalyzer
 
 logger = logging.getLogger(__name__)
+
+_OUTPUT_ACTION_MARKERS = ("sql", "sorgu")
 
 
 class RetrieveContextNode(IAgentNode):
@@ -111,15 +114,33 @@ class RetrieveContextNode(IAgentNode):
             # merge-inherited filter (incl. its column choice) must survive.
             if (
                 query_plan is not None
-                and current_turn_has_date
                 and state.context_follow_up_detected
                 and state.question != planning_question
+                and not all(marker in fold(planning_question) for marker in _OUTPUT_ACTION_MARKERS)
             ):
                 resolved_plan = self._build_plan(state.question, db_context, None)
                 if resolved_plan is not None and resolved_plan.date_filters:
-                    query_plan = query_plan.model_copy(
-                        update={"date_filters": list(resolved_plan.date_filters)}
-                    )
+                    if resolved_plan.periods or resolved_plan.analysis_type in {
+                        "period_comparison",
+                        "baseline_comparison",
+                        "adaptive_time_comparison",
+                        "percentage_change",
+                    }:
+                        query_plan = merge_query_plans(
+                            current=resolved_plan,
+                            retained=state.retained_query_plan,
+                            raw_question=state.question,
+                            follow_up_detected=state.context_follow_up_detected,
+                        )
+                    else:
+                        query_plan = query_plan.model_copy(
+                            update={
+                                "date_filters": list(resolved_plan.date_filters),
+                                "periods": [],
+                                "current_period": None,
+                                "baseline_period": None,
+                            }
+                        )
 
             logger.info("RetrieveContextNode completed successfully.")
 

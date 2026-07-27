@@ -507,6 +507,11 @@ def merge_query_plans(
     if not follow_up_detected or retained is None:
         return current
 
+    from app.semantics import catalog
+    from app.semantics.view_mapping import fold
+
+    folded = fold(raw_question)
+
     # A GENUINE explicit "listele" (list) request for raw records is always
     # self-contained: it asks a fundamentally different question ("show me
     # rows") than any analytical metric/dimension/ratio/comparison from an
@@ -528,13 +533,12 @@ def merge_query_plans(
     # göster." -> limit=None, projection=[]), which genuinely must keep
     # inheriting the retained metric/dimension (existing, tested behavior -
     # a blanket `analysis_type == "list"` bypass broke it).
-    if current.analysis_type == "list" and current.projection:
+    if (
+        current.analysis_type == "list"
+        and current.projection
+        and "ayni tablo" not in folded
+    ):
         return current
-
-    from app.semantics import catalog
-    from app.semantics.view_mapping import fold
-
-    folded = fold(raw_question)
     merged = retained.model_copy(deep=True)
     updates: dict = {
         "question": raw_question,
@@ -555,6 +559,12 @@ def merge_query_plans(
     if current_dimensions and any(marker in folded for marker in _FILTER_ONLY_MARKERS):
         # "... ile sınırla" names a filter value, not a new GROUP BY.
         current_dimensions = []
+    if current_dimensions and "yerine" in folded:
+        replacement_dimensions = [
+            dimension for dimension in current_dimensions if dimension not in retained.dimensions
+        ]
+        if replacement_dimensions:
+            current_dimensions = replacement_dimensions
     if current_dimensions:
         additive = any(marker in folded for marker in _DIMENSION_ADD_MARKERS)
         dimensions = (
@@ -578,6 +588,16 @@ def merge_query_plans(
             [value for value in retained.projection if value in dimensions],
             [value for value in current.projection if value in dimensions],
         ) or list(dimensions)
+        if retained.analysis_type in {
+            "period_comparison",
+            "baseline_comparison",
+            "adaptive_time_comparison",
+            "percentage_change",
+        }:
+            updates["analysis_type"] = current.analysis_type or "count"
+            updates["periods"] = []
+            updates["current_period"] = None
+            updates["baseline_period"] = None
 
     # Planner defaults on a terse ranking/dimension follow-up are not an
     # explicit metric override.  Only raw-text metric evidence may replace the
@@ -734,8 +754,31 @@ def merge_query_plans(
         updates["analysis_type"] = current.analysis_type
     if current.grouping_granularity is not None:
         updates["grouping_granularity"] = current.grouping_granularity
+        if current.analysis_type is not None:
+            updates["analysis_type"] = current.analysis_type
+        if not current_dimensions:
+            updates["dimensions"] = []
+            updates["planned_dimensions"] = []
+            updates["projection"] = []
     if current.comparisons:
         updates["comparisons"] = list(current.comparisons)
+    if current.periods:
+        updates["periods"] = list(current.periods)
+    if current.analysis_type in {
+        "period_comparison",
+        "baseline_comparison",
+        "adaptive_time_comparison",
+        "percentage_change",
+    }:
+        updates["analysis_type"] = current.analysis_type
+        if current.ranking is None:
+            updates["ranking"] = None
+        if current.order is None:
+            updates["order"] = None
+        if not current_dimensions:
+            updates["dimensions"] = []
+            updates["planned_dimensions"] = []
+            updates["projection"] = []
     if current.derived_calculations:
         updates["derived_calculations"] = _union(
             retained.derived_calculations, current.derived_calculations

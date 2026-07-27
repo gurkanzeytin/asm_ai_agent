@@ -116,16 +116,28 @@ def route_after_execution(state: AgentState) -> str:
         and not state.last_execution_error
     ):
         logger.info(
-            "Execution Router Decision: data-only output requested; skipping "
-            "analytics/report generation. workflow_id=%s",
+            "Execution Router Decision: data-only output requested; running "
+            "result enrichment before skipping report generation. workflow_id=%s",
             state.workflow_id or "unknown",
         )
-        return "data_only"
+        return "continue"
     return "continue"
 
 
 def route_after_analysis(state: AgentState) -> str:
     """Skips LLM insight/report stages when deterministic chart metadata is enough."""
+    if (
+        state.response_mode == "data"
+        and state.query_result is not None
+        and not state.analytics_blocked_reason
+        and not state.errors
+    ):
+        logger.info(
+            "Analysis Router Decision: data-only output requested; skipping "
+            "insight/report generation. workflow_id=%s",
+            state.workflow_id or "unknown",
+        )
+        return "data_only"
     if (
         state.response_mode == "visualization"
         and state.query_result is not None
@@ -327,7 +339,6 @@ class AgentGraphBuilder:
             route_after_execution,
             {
                 "retry": "generate_sql",
-                "data_only": END,
                 "continue": "analyze_results",
             },
         )
@@ -335,6 +346,7 @@ class AgentGraphBuilder:
             "analyze_results",
             route_after_analysis,
             {
+                "data_only": END,
                 "visualization_only": END,
                 "continue": "generate_insights",
             },

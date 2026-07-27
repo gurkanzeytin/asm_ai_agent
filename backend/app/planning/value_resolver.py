@@ -108,6 +108,7 @@ _QUESTION_WORDS = {
     "nasil", "neden", "nicin", "niye",
     "nerede", "nereye", "nereden", "nereli", "nere", "neresi",
     "bu", "su", "o", "iste",
+    "sonuc", "sonucu", "sonucun", "sonuca", "sonucta", "sonuctan",
     "bunu", "bunun", "buna", "bunda", "bundan", "bununla",
     "sunu", "sunun", "suna", "sunda", "sundan", "sununla",
     "onu", "onun", "ona", "onda", "ondan", "onunla",
