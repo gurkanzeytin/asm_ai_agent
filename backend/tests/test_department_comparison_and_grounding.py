@@ -45,6 +45,34 @@ class TestQuestionWordCandidates:
         assert result == {"department": ["Psikiyatri"]}
 
 
+class TestPronounInflectionsAreNeverValueCandidates:
+    """"Bunu şubeye göre kır" ("break this down by branch") walked back from
+    the "şube" cue straight into "Bunu" and asked the user to disambiguate
+    it as a BRANCH NAME ("'Bunu' değerine uygun bir şube bulunamadı...")
+    instead of resolving as a follow-up pronoun - only the nominative
+    demonstratives ("bu"/"şu"/"o") were in the stopset, not their inflected
+    forms (2026-07-27, live multi-turn testing)."""
+
+    def test_accusative_pronoun_yields_no_candidate(self):
+        assert extract_candidate_phrases("Bunu şubeye göre kır") == {}
+        assert extract_candidate_phrases("Onu bölüme göre göster") == {}
+        assert extract_candidate_phrases("Şunu doktora göre kır") == {}
+
+    def test_other_inflections_yield_no_candidate(self):
+        assert extract_candidate_phrases("Buna göre şubeleri sırala") == {}
+        assert extract_candidate_phrases("Onun bölümünü göster") == {}
+
+    def test_real_department_starting_like_the_o_pronoun_still_extracts(self):
+        # A startswith root for "o" would have swallowed "Onkoloji" - this is
+        # exactly why the inflected forms are listed as exact tokens instead.
+        result = extract_candidate_phrases("Onkoloji bölümündeki randevuları göster.")
+        assert result == {"department": ["Onkoloji"]}
+
+    def test_real_branch_mention_still_extracts(self):
+        result = extract_candidate_phrases("TEST ASM Gebze şubesindeki randevuları göster.")
+        assert result == {"branch": ["TEST ASM Gebze"]}
+
+
 # ── empty-value guards in the pure matcher ──────────────────────────────────
 
 

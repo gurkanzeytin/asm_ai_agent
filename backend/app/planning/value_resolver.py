@@ -86,9 +86,21 @@ _GENERIC_QUANTIFIER_EXCEPTIONS: dict[str, set[str]] = {
 }
 
 # Interrogative/demonstrative words (folded, matched as EXACT tokens — a
-# startswith root would swallow real values like "Nefroloji" via "ne"). These
-# are capitalized in sentence-initial position ("Kaç doktor var?", "Hangi
-# bölüm ...?") and must never be mistaken for a proper-noun value mention.
+# startswith root would swallow real values like "Nefroloji" via "ne", or
+# "Onkoloji" via an "on" root for the pronoun "o"). These are capitalized in
+# sentence-initial position ("Kaç doktor var?", "Hangi bölüm ...?", "Bunu
+# şubeye göre kır") and must never be mistaken for a proper-noun value
+# mention. The nominative demonstratives ("bu"/"şu"/"o") were already here;
+# their inflected accusative/genitive/dative/locative/ablative/instrumental
+# forms were not, so "Bunu şubeye göre kır" walked back from the "şube" cue
+# straight into "Bunu" and asked the user to disambiguate it as a BRANCH
+# NAME ("'Bunu' değerine uygun bir şube bulunamadı...") instead of resolving
+# as a follow-up pronoun (2026-07-27, live multi-turn testing). This is the
+# value-CANDIDATE stopset only - distinct from extractor._PRONOUN_PATTERNS
+# (follow-up referent resolution), which deliberately excludes bare "bunu"/
+# "onu" for unrelated reasons (see composite-department-grounding memory,
+# Phase 10) - adding them here carries none of that risk, it only stops them
+# from being treated as a literal filter value.
 _QUESTION_WORDS = {
     "kac", "kacar", "kacinci", "hangi", "hangisi", "hangileri",
     "ne", "neler", "nedir", "neyi", "neye",
@@ -96,6 +108,9 @@ _QUESTION_WORDS = {
     "nasil", "neden", "nicin", "niye",
     "nerede", "nereye", "nereden", "nereli", "nere", "neresi",
     "bu", "su", "o", "iste",
+    "bunu", "bunun", "buna", "bunda", "bundan", "bununla",
+    "sunu", "sunun", "suna", "sunda", "sundan", "sununla",
+    "onu", "onun", "ona", "onda", "ondan", "onunla",
 }
 
 # AI-INTELLIGENCE-017 regression fix: bare domain/dimension nouns (folded
