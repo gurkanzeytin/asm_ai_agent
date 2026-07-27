@@ -78,6 +78,13 @@ _GENERIC_SCOPE_ALL_PATTERN = re.compile(
 # "X bazında / X'e göre" grouping wording: the word before the marker names the dimension.
 _GROUP_BY_PATTERN = re.compile(r"(\w+)\s+(?:baz(?:inda|li)\b|gore\b)")
 
+# The specific word forms of "durum" (status) that _GROUP_BY_PATTERN must
+# capture for a "bazında"/"göre" marker to genuinely mean "group by status" -
+# any OTHER marker elsewhere in the same sentence ("aylar bazında") must not
+# count as license to keep RandevuDurumu as a dimension (see the status-value
+# stripping block in _resolve_intelligence).
+_STATUS_GROUPING_WORDS = {"durum", "duruma", "durumu", "durumuna", "durumda"}
+
 _ASCENDING_MARKERS = ("en az", "en dusuk", "en seyrek")
 
 _DESCRIPTIVE_PRIORITY = ("ad_soyad", "bolum_adi", "sirket_adi", "test_adi", "name", "title")
@@ -247,6 +254,7 @@ class QueryPlanner:
                 status_value,
                 department_filter=signals.department,
                 department_column=view_mapping.concept_column("Department", view_name),
+                status_column=view_mapping.status_column(view_name),
             )
             if raw_list_request:
                 list_projection = self._view_list_projection(view_name)
@@ -545,6 +553,7 @@ class QueryPlanner:
         status_value: str | None = None,
         department_filter: str | None = None,
         department_column: str | None = None,
+        status_column: str | None = None,
     ) -> dict:
         """Catalog-driven analytical resolution (Agent Intelligence Foundation).
 
@@ -575,6 +584,31 @@ class QueryPlanner:
         ):
             dimensions = [d for d in dimensions if d != department_column]
 
+        # A resolved status VALUE ("... durumu gelmedi olanların ...") already
+        # narrows to one status via status_value/status_filter; the bare
+        # "randevu durumu" mention that grounded it also independently matches
+        # the status dimension synonym list, adding it back as a degenerate
+        # GROUP BY (already single-valued) - and, worse, stealing the sole
+        # GROUP BY slot from the REAL grouping request elsewhere in the
+        # sentence ("aylar bazında"), since DeterministicSQLBuilder._standard
+        # only time-buckets when `dimensions` is empty (2026-07-27, live UI
+        # testing: "... aylar bazında oranlarını ..." silently grouped by
+        # status instead of by month). Unlike the department guard above (a
+        # flat "any grouping marker in the sentence" check), this one must be
+        # positional: the sentence CAN legitimately contain a "bazında/göre"
+        # marker that belongs to a different word ("aylar"), so only a marker
+        # whose captured word is itself a "durum" form keeps the dimension.
+        if (
+            status_value
+            and status_column
+            and status_column in dimensions
+            and not any(
+                match.group(1) in _STATUS_GROUPING_WORDS
+                for match in _GROUP_BY_PATTERN.finditer(folded)
+            )
+        ):
+            dimensions = [d for d in dimensions if d != status_column]
+
         # Measure-phrase fallback: a status concept was independently resolved
         # (view_mapping.resolve_status_filter) and the utterance carries a
         # generic count/total/ratio request ("say", "toplamını", "adedini",
@@ -585,13 +619,28 @@ class QueryPlanner:
         # (catalog.detect_measure_request, generic wording only), and metric
         # selection (catalog.metrics_for_status_value, catalog-authoritative
         # — only applied when exactly one candidate exists, never invented).
-        if not metrics and status_value:
+        #
+        # Fires even when `metrics` is already non-empty: a phrase like
+        # "randevu durumu gelmedi olanların ... oranlarını" independently
+        # matches two unrelated generic metrics via bare keyword overlap
+        # ("aylik randevu" -> monthly_appointment_count, "gelmedi" ->
+        # no_show_count) - both real catalog synonym hits, but the WRONG
+        # shape for what was actually asked (a single combined RATE, not two
+        # raw counts side by side). `has_status_metric_of_kind` distinguishes
+        # that from a genuinely-already-correct match (e.g. "gelmedi
+        # sayısı" -> no_show_count is exactly the right count metric) so this
+        # never clobbers a correct resolution (2026-07-27, live UI testing:
+        # SAFE_ERROR - the resulting SQL had two raw counts and no NULLIF'd
+        # division at all).
+        if status_value:
             measure_kind = catalog.detect_measure_request(folded)
             if measure_kind:
                 candidates = catalog.metrics_for_status_value(
                     status_value, rate=(measure_kind == "rate")
                 )
-                if len(candidates) == 1:
+                if len(candidates) == 1 and not catalog.has_status_metric_of_kind(
+                    metrics, status_value, rate=(measure_kind == "rate")
+                ):
                     metrics = candidates
         date_range_count = len(analysis.detected_dates)
         pattern = catalog.match_pattern(folded, date_range_count)

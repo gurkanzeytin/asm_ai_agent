@@ -68,12 +68,33 @@ CONFIDENCE_NEGATION_FOLLOWUP = 0.93
 # plan exists in memory: they modify that plan rather than introduce a new
 # standalone analysis.  Keep this narrow so a complete independent question
 # that merely shares a dimension never inherits stale context.
+#
+# Numeric-threshold phrasing ("... 50'den küçük olanları", "100'den fazla
+# olanlar") belongs to the same family: it narrows a PREVIOUS metric/result
+# by a value comparison rather than asking something new, and — unlike a
+# pronoun or a short elliptical fragment — can be long enough (many content
+# tokens) to miss every other follow-up signal entirely. Without this, such
+# a question was treated as a fully independent one and silently answered
+# with an UNSCOPED, all-time total instead of the previous turn's date scope
+# (2026-07-27, live UI testing: "2025'in ilk çeyreği ..." followed by
+# "Toplam randevu sayısının 50'den küçük olanları" dropped the 2025 Q1 scope
+# entirely and returned the grand total).
 _CONSTRAINT_EDIT_MARKERS = (
     "sadece",
     "sinirla",
     "sinirlandir",
     "filtrele",
     "ayir",
+    "den kucuk",
+    "dan kucuk",
+    "den buyuk",
+    "dan buyuk",
+    "den az",
+    "dan az",
+    "den fazla",
+    "dan fazla",
+    "ustunde",
+    "altinda",
 )
 
 _OUTPUT_ACTION_FOLLOWUP_MARKERS = (

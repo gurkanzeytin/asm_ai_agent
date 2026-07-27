@@ -231,6 +231,30 @@ async def test_metric_addition_preserves_monthly_trend_bucket():
 
 
 @pytest.mark.asyncio
+async def test_numeric_threshold_followup_keeps_previous_date_scope():
+    """"Toplam randevu sayısının 50'den küçük olanları" has no pronoun, no
+    "peki", and is too many content tokens to be elliptical - it fell
+    through every follow-up signal and answered as a fully independent,
+    UNSCOPED question, dropping the previous turn's "2025 ilk çeyrek" date
+    filter entirely (2026-07-27, live UI testing). There is no grouped
+    breakdown to apply the "<50" threshold to (the previous turn was a
+    scalar total), so the accepted behavior is to at least keep the
+    inherited date scope rather than silently fall back to an all-time
+    total."""
+    chain = _Chain()
+    first, _ = await chain.turn(
+        "2025 yilinin ilk uc ayinin toplam randevu sayisi kactir"
+    )
+    assert _date(first) == ("2025-01-01", "2025-03-31")
+
+    second, resolution = await chain.turn(
+        "Toplam randevu sayisinin 50 den kucuk olanlari"
+    )
+    assert resolution.follow_up_detected is True
+    assert _date(second) == ("2025-01-01", "2025-03-31")
+
+
+@pytest.mark.asyncio
 async def test_month_year_comparison_followup_builds_period_comparison_plan():
     chain = _Chain()
     first, _ = await chain.turn(

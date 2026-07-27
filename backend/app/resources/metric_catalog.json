@@ -158,7 +158,6 @@
         "birden fazla randevusu olan",
         "tekrar eden hasta",
         "birden fazla gelen",
-        "fazla randevusu olan",
         "tek seferlik"
       ],
       "compatible_dimensions_group": "organizational",
@@ -614,6 +613,7 @@
       ],
       "formula_type": "conditional_rate",
       "formula": "100.0 * SUM(CASE WHEN RandevuDurumu = N'Gerçekleşti' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0)",
+      "status_value": "Gerçekleşti",
       "numerator": "completed_appointment_count",
       "denominator": "appointment_count",
       "synonyms": [
@@ -666,6 +666,7 @@
       ],
       "formula_type": "conditional_rate",
       "formula": "100.0 * SUM(CASE WHEN RandevuDurumu = N'Gelmedi' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0)",
+      "status_value": "Gelmedi",
       "numerator": "no_show_count",
       "denominator": "appointment_count",
       "synonyms": [

@@ -97,6 +97,40 @@ def test_turkish_chart_suffix_is_detected_from_real_ui_text():
     assert policy.visible_sections == ["chart"]
 
 
+def test_negated_grafik_request_shows_only_table_not_chart():
+    """'Bunu grafik değil sadece tablo olarak ver' (NOT a chart, just table)
+    following an earlier chart request came back with BOTH a fully expanded
+    chart section AND the requested table - the bare 'grafik\\w*' substring
+    marker has no way to tell a positive chart request apart from its own
+    explicit rejection a few tokens later via 'değil' (2026-07-27, live UI
+    testing)."""
+    question = "Bunu grafik değil sadece tablo olarak ver"
+    assert determine_requested_response_mode(question) == "data"
+    assert determine_requested_visible_sections(question) == ["table"]
+
+    policy = determine_output_policy(
+        question=question,
+        outcome="EXECUTE_SQL",
+        generated_sql="SELECT 1;",
+        query_result=_result(),
+        analytics=None,
+    )
+    assert policy.response_mode == "data"
+    assert policy.visible_sections == ["table"]
+
+
+def test_positive_grafik_forms_still_read_as_visualization():
+    """Regression guard: excluding 'grafik ... değil' must not affect a
+    genuine positive chart request, including one with filler words between
+    the noun and a later, unrelated 'değil'."""
+    assert determine_requested_response_mode("Şubelere göre randevu grafiği çiz") == (
+        "visualization"
+    )
+    assert determine_requested_visible_sections("Grafik olarak göster, tablo değil") == [
+        "chart"
+    ]
+
+
 def test_future_participle_describing_sql_does_not_demote_to_data():
     """'2025 ocak randevularını listeleyecek sql sorgusunu oluşturur musun'
     (real UI bug report, 2026-07-24): 'listeleyecek' describes what the SQL

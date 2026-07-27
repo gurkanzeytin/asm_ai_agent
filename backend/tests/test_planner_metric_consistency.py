@@ -225,6 +225,54 @@ async def test_status_grouping_phrase_equivalence(question):
     assert compliance.compliant, (question, compliance.missing)
 
 
+@pytest.mark.asyncio
+async def test_monthly_no_show_rate_groups_by_month_not_by_status():
+    """"2025 yılının aylık toplam randevuların randevu durumu gelmedi
+    olanların aylar bazında oranlarını liste gösterir misin" crashed with
+    SAFE_ERROR ("ratio division-by-zero protection (NULLIF)"): the bare
+    "randevu durumu" mention independently matched RandevuDurumu as a GROUP
+    BY dimension (stealing the sole GROUP BY slot from the REAL "aylar
+    bazında" month grouping - DeterministicSQLBuilder only time-buckets when
+    dimensions is empty), while catalog.match_metrics separately matched two
+    unrelated raw counts (monthly_appointment_count, no_show_count) instead
+    of the single no_show_rate ratio metric that already exists with a
+    NULLIF-protected formula (2026-07-27, live UI testing)."""
+    question = (
+        "2025 yılının aylık toplam randevuların randevu durumu gelmedi "
+        "olanların aylar bazında oranlarını liste gösterir misin"
+    )
+    plan = await _single_turn_plan(question)
+    assert plan.metrics == ["no_show_rate"], (question, plan.metrics)
+    assert plan.dimensions == [], (question, plan.dimensions)
+    assert plan.grouping_granularity == "month"
+    assert plan.extra_filters == []
+    built, compliance = build_and_check(plan)
+    assert compliance.compliant, (question, compliance.missing)
+    assert "nullif" in built.sql.lower()
+    assert "period_start" in built.sql
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Durum bazında randevu sayılarını göster.",
+        "cinsiyete gore gelmeme orani",
+    ],
+)
+def test_status_dimension_stripping_does_not_affect_unrelated_status_questions(question):
+    """Regression guard for the fix above: stripping RandevuDurumu out of
+    `dimensions` when a status VALUE is resolved must never fire when no
+    specific status value is named (plain "durum bazında" grouping), and the
+    metric-override fallback must never touch an already-correct rate metric
+    match (a real synonym-phrase hit like "gelmeme oranı")."""
+    plan = plan_for(question)
+    if question == "Durum bazında randevu sayılarını göster.":
+        assert plan.dimensions == ["RandevuDurumu"]
+    else:
+        assert plan.metrics == ["no_show_rate"]
+        assert "RandevuDurumu" not in plan.dimensions
+
+
 # ═══════════════════════ D — Measure verb / inflection coverage ═════════════
 
 

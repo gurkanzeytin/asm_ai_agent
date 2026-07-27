@@ -247,6 +247,42 @@ def test_suffix_tolerant_matching():
     assert "SubeAdi" in catalog.match_dimensions(fold("şubelerin randevuları"))
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "En fazla randevusu olan bölüm hangisi",
+        "En fazla randevusu olan doktor kim",
+        "2025 yılında 50'den fazla randevusu olan doktorları sırala",
+    ],
+)
+def test_generic_fazla_phrasing_does_not_match_repeat_patient_count(question):
+    """repeat_patient_count's synonym list used to include the bare, generic
+    "fazla randevusu olan" (missing the "birden" qualifier that the real
+    synonyms "birden fazla randevusu olan"/"birden çok randevusu olan" all
+    have) - a substring of THREE unrelated constructs: the superlative
+    ranking idiom "EN fazla randevusu olan X" (the single most common Turkish
+    ranking phrase in this whole domain), a numeric threshold ("50'DEN fazla
+    randevusu olan"), and the genuine repeat-patient concept ("BİRDEN fazla
+    randevusu olan"). Silently corrupted metric resolution for the first two
+    into the wrong metric entirely (2026-07-27, live UI testing: "En fazla
+    randevusu olan bölüm hangisi" - the most common ranking question in this
+    domain - resolved to repeat_patient_count instead of appointment_count)."""
+    matched = catalog.match_metrics(fold(question))
+    assert "repeat_patient_count" not in matched
+
+
+def test_genuine_repeat_patient_phrasing_still_matches():
+    """Regression guard: removing the overly-generic bare synonym must not
+    affect the genuine "birden fazla" (more than one) repeat-patient
+    phrasings that already carry their own qualifier."""
+    for question in (
+        "Birden fazla randevusu olan hastaları göster",
+        "Birden fazla randevu alan hastalar kim",
+        "Birden çok randevusu olan hastaları listele",
+    ):
+        assert "repeat_patient_count" in catalog.match_metrics(fold(question))
+
+
 # ═══════════════ Multi-metric preservation (match_metrics span-overlap) ══════
 
 

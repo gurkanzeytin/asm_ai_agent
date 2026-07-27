@@ -509,6 +509,25 @@ def metrics_for_status_value(status_value: str, *, rate: bool = False) -> list[s
     ]
 
 
+def has_status_metric_of_kind(metrics: list[str], status_value: str, *, rate: bool) -> bool:
+    """Whether `metrics` already contains a conditional_count/conditional_rate
+    metric anchored to `status_value` of the requested kind. Used by the
+    planner to tell a genuinely-already-correct metric selection (e.g.
+    no_show_count matched for a plain "gelmedi sayısı" count request) apart
+    from a wrong-shape one (raw component metrics matched from bare keyword
+    overlap - e.g. "aylik randevu" + "gelmedi" separately - when the question
+    actually asked for the single combined RATE) that still needs the
+    metrics_for_status_value fallback to fire."""
+    wanted_type = "conditional_rate" if rate else "conditional_count"
+    by_id = load_metric_catalog().by_id()
+    return any(
+        mid in by_id
+        and by_id[mid].formula_type == wanted_type
+        and by_id[mid].status_value == status_value
+        for mid in metrics
+    )
+
+
 # Generic Turkish measure-request vocabulary: verbs/nouns that ask for a
 # count, total, or ratio — independent of which status/entity they apply to
 # and independent of the metric synonym phrase list (covers imperative/
@@ -529,7 +548,7 @@ _COUNT_REQUEST_MARKERS = (
     "kac tane",
     "kac ",
 )
-_RATE_REQUEST_MARKERS = ("orani", "oranini", "yuzdesi", "yuzde")
+_RATE_REQUEST_MARKERS = ("orani", "oranini", "oranlari", "oranlarini", "yuzdesi", "yuzde")
 
 
 def detect_measure_request(folded_question: str) -> str | None:

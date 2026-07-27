@@ -101,6 +101,34 @@ class TestDateInheritance:
         assert "date" not in resolution.inherited
 
 
+class TestNumericThresholdConstraintFollowup:
+    """"Toplam randevu sayısının 50'den küçük olanları" has no pronoun, no
+    "peki"/"o zaman", and is too many content tokens (7) to qualify as
+    elliptical (max 4) - it fell through every existing follow-up signal and
+    was answered as a fully independent, UNSCOPED question, silently
+    dropping the previous turn's date scope entirely (2026-07-27, live UI
+    testing: a prior "2025'in ilk çeyreği" total became an all-time total
+    instead). A numeric-threshold clause ("X'ten küçük/büyük olanlar")
+    narrows a previous result rather than asking something new, the same
+    family as the existing "sadece"/"sınırla" constraint-edit markers."""
+
+    def test_smaller_than_threshold_detected_as_followup(self, manager):
+        ask(manager, "2025 yılının ilk üç ayının toplam randevu sayısı kaçtır")
+        resolution = ask(manager, "Toplam randevu sayısının 50'den küçük olanları")
+        assert resolution.follow_up_detected
+        assert "constraint_edit_followup" in resolution.follow_up_signals
+
+    def test_larger_than_threshold_detected_as_followup(self, manager):
+        ask(manager, "2025 yılının ilk üç ayının toplam randevu sayısı kaçtır")
+        resolution = ask(manager, "Toplam randevu sayısının 100'den fazla olanları")
+        assert resolution.follow_up_detected
+        assert "constraint_edit_followup" in resolution.follow_up_signals
+
+    def test_threshold_phrase_with_no_prior_context_is_not_a_followup(self, manager):
+        resolution = ask(manager, "Toplam randevu sayısının 50'den küçük olanları")
+        assert not resolution.follow_up_detected
+
+
 # ─────────────────────────────────────────────
 # Department / doctor inheritance
 # ─────────────────────────────────────────────

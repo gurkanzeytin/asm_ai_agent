@@ -48,6 +48,39 @@ _VISUAL_MARKER = re.compile(
     r"\b(grafik\w*|grafig\w*|chart|gorsel\w*|ciz\w*|cizgi\w*|bar|"
     r"sutun\w*|pasta|oranlama)\b"
 )
+# "grafik değil, sadece tablo olarak ver" (NOT a chart, just give me a
+# table) - "değil" is a separate word following the noun (unlike the
+# "çalıştır-ma" suffix negation above), so a bare _VISUAL_MARKER substring
+# match can't tell "grafik göster" (positive) from its own explicit
+# rejection a few tokens later. Without this, an explicit "no chart, table
+# only" follow-up on an EARLIER chart request still came back with both the
+# chart AND the table rendered (2026-07-27, live UI testing: the chart
+# section stayed fully expanded above the requested table). Up to 2 filler
+# words are tolerated ("grafik olarak değil") between the visual term and
+# the negation.
+_VISUAL_NEGATED = re.compile(
+    r"\b(?:grafik\w*|grafig\w*|chart|gorsel\w*|ciz\w*|cizgi\w*|bar|"
+    r"sutun\w*|pasta|oranlama)\b(?:\s+\w+){0,2}?\s+degil\b"
+)
+
+
+def _wants_visual(folded: str) -> bool:
+    return bool(_VISUAL_MARKER.search(folded)) and not _VISUAL_NEGATED.search(folded)
+
+
+# Symmetric with _VISUAL_NEGATED above: "tablo değil, grafik göster" (NOT a
+# table, show a chart) must not still count "tablo" as a data/table request
+# just because the bare word appears before its own rejection.
+_DATA_NEGATED = re.compile(
+    r"\b(?:veri(?!r)\w*|kayit\w*|liste\w*|getir\w*|cek\w*|tablo\w*)\b"
+    r"(?:\s+\w+){0,2}?\s+degil\b"
+)
+
+
+def _wants_data(intent_probe: str) -> bool:
+    return bool(_DATA_MARKER.search(intent_probe)) and not _DATA_NEGATED.search(intent_probe)
+
+
 _ANSWER_MARKER = re.compile(
     r"\b(yanitla|cevapla|yorum|yorumla|ozet|rapor|analiz|acikla|"
     r"degerlendir|ne anlama|sonucunu yorumla)\b"
@@ -81,10 +114,10 @@ class OutputPolicy(BaseModel):
 def determine_requested_response_mode(question: str) -> ResponseMode | None:
     """Infers an explicit presentation request from the user's wording."""
     folded = _fold(question)
-    if _VISUAL_MARKER.search(folded):
+    if _wants_visual(folded):
         return "visualization"
     intent_probe = _strip_sql_describing_participle(folded)
-    has_data_marker = bool(_DATA_MARKER.search(intent_probe))
+    has_data_marker = _wants_data(intent_probe)
     if _SQL_ONLY_MARKER.search(folded) and not (
         has_data_marker or _EXECUTION_MARKER.search(intent_probe)
     ):
@@ -100,12 +133,12 @@ def determine_requested_visible_sections(question: str) -> list[str]:
     """Infers the exact artifact families explicitly requested by the user."""
     folded = _fold(question)
     intent_probe = _strip_sql_describing_participle(folded)
-    wants_visual = bool(_VISUAL_MARKER.search(folded))
+    wants_visual = _wants_visual(folded)
     wants_sql = bool(_SQL_MARKER.search(folded)) and (
         bool(_SQL_ONLY_MARKER.search(folded))
         or any(term in folded for term in ("sql ver", "sql yaz", "sql olustur", "sorgu ver"))
     )
-    wants_data = bool(_DATA_MARKER.search(intent_probe)) or (
+    wants_data = _wants_data(intent_probe) or (
         bool(_SQL_MARKER.search(folded)) and bool(_EXECUTION_MARKER.search(intent_probe))
     )
     wants_answer = bool(_ANSWER_MARKER.search(folded))
