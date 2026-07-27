@@ -262,6 +262,48 @@ describe("sohbet arayüzü düzenlemeleri", () => {
     );
   });
 
+  it("rapor metriklerini ve bulguları ayrı, taranabilir bloklarda gösterir", () => {
+    const { container } = render(
+      <ChatMessage
+        message={{
+          id: "assistant-report",
+          role: "assistant",
+          content: [
+            "# Sorgu Sonucu",
+            "",
+            "2 cinsiyet listelenmiştir.",
+            "",
+            "| Cinsiyet | Toplam Randevu | Gelmeme Oranı |",
+            "| --- | ---: | ---: |",
+            "| E | 13.654 | %9,8 |",
+            "| K | 16.044 | %9,7 |",
+            "",
+            "**Sorgulanan metrikler**",
+            "- **Toplam Randevu:** toplam 29698, ortalama 14849, en yüksek: K, en düşük: E",
+            "- **Gelmeme Oranı:** toplam 19.49, ortalama 9.74, en yüksek: E, en düşük: K",
+            "",
+            "**Öne çıkan bulgular**",
+            "- En yüksek değer E grubunda (9.8); en düşük K (9.7).",
+            "",
+            "**Varsayımlar ve Sınırlamalar**",
+            "- Seçilen kapsamda yalnızca bir kategori bulunduğu için karşılaştırma yapılamadı.",
+          ].join("\n"),
+          createdAt: 1,
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Sorgulanan metrikler" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Öne çıkan bulgular" })).toBeTruthy();
+    expect(container.querySelector('[data-report-section="metrics"]')).toBeTruthy();
+    expect(container.querySelector('[data-report-section="assumptions"]')).toBeTruthy();
+    expect(container.querySelectorAll('[data-report-section-item="metric"]')).toHaveLength(2);
+    expect(container.querySelector('[data-report-section-item="finding"]')).toBeTruthy();
+    expect(screen.getByText("toplam 29698")).toBeTruthy();
+    expect(screen.getByText("en yüksek: E")).toBeTruthy();
+    expect(screen.getByText("Varsayımlar ve Sınırlamalar")).toBeTruthy();
+  });
+
   it("SQL seçim kutularını aynı sol eksene hizalar", () => {
     render(
       <SqlResultsTable

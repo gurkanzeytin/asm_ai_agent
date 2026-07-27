@@ -1,6 +1,17 @@
-Summarize the SQL result as a concise markdown report. Write the ENTIRE report in Turkish —
-the title, every heading's content, and every sentence — never English, even if column, table,
-or branch names in the results are in English.
+SQL sonucunu kullanıcının sorusuna göre yanıtla. Yanıtın TAMAMI Türkçe olsun:
+başlık, açıklama ve tüm cümleler Türkçe olmalı; sonuçlardaki kolon, tablo veya
+şube adları İngilizce olsa bile anlatım dili Türkçe kalmalı.
+
+Çıktı sözleşmesi:
+- Kullanıcı tek değer, toplam, ortalama, minimum veya maksimum sorduyse sadece gerekli
+  değeri ve kısa bağlamını ver. Gereksiz bölüm, öneri veya veri notu ekleme.
+- Kullanıcı karşılaştırma istediyse karşılaştırılan tarafları, değerleri ve farkı kısa
+  bir cümlede ver. Karşılaştırma yapılamıyorsa nedeni tek "Not:" cümlesiyle belirt.
+- Kullanıcı tablo/liste istediyse kısa bir giriş ve gerekirse markdown tablo ver.
+- Kullanıcı grafik istediyse metni uzatma; grafik için verinin hazır olduğunu kısa söyle.
+- Sadece kullanıcı açıkça "detaylı rapor", "bulgular", "metrikler", "varsayımlar" veya
+  "veri notları" isterse ayrı markdown bölümleri kullan.
+- Uydurma öneri üretme. Veri sınırı veya varsayım yoksa bunlardan bahsetme.
 
 Question:
 {question}
@@ -8,17 +19,6 @@ Question:
 Results:
 {results}
 
-# [Türkçe rapor başlığı]
+# [Kısa Türkçe başlık]
 
-## Yönetici Özeti
-2-3 kısa cümle, Türkçe.
-
-## Öne Çıkan Bulgular
-Ana metrikler ve bulgular, Türkçe. Gerektiğinde markdown tablo kullan.
-
-## Öneriler
-Varsa uygulanabilir sonraki adımlar, Türkçe.
-
-## Veri Notları
-Kesme veya veri sınırları varsa belirt, Türkçe.
-
+Kullanıcının sorduğu çıktıyı kısa ve doğrudan ver.

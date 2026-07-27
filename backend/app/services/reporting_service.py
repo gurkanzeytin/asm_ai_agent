@@ -533,6 +533,11 @@ class ReportingService:
             query_result=query_result_dto,
             analytics=analytics_dto,
         )
+        resolved_output_signals = (
+            _analytical_signals.from_query_plan(query_plan_dto)
+            if query_plan_dto is not None
+            else (resolution.resolved_signals if resolution else None)
+        )
 
         return WorkflowResult(
             workflow_id=workflow_id,
@@ -569,14 +574,16 @@ class ReportingService:
             inherited_context_fields=list(resolution.inherited.keys()) if resolution else [],
             overridden_context_fields=resolution.overridden_fields if resolution else [],
             removed_context_fields=resolution.removed_fields if resolution else [],
-            resolved_metrics=resolution.resolved_signals.metrics if resolution else [],
-            resolved_dimensions=resolution.resolved_signals.dimensions if resolution else [],
+            resolved_metrics=resolved_output_signals.metrics if resolved_output_signals else [],
+            resolved_dimensions=(
+                resolved_output_signals.dimensions if resolved_output_signals else []
+            ),
             resolved_filters=(
                 {
-                    family: getattr(resolution.resolved_signals, family)
+                    family: getattr(resolved_output_signals, family)
                     for family in _FILTER_FAMILIES
                 }
-                if resolution
+                if resolved_output_signals
                 else {}
             ),
             # AI-INTELLIGENCE-018 (item 6): the QueryPlan's own

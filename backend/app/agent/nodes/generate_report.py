@@ -5,6 +5,7 @@ from app.agent.nodes.node_interface import IAgentNode
 from app.agent.state import AgentState
 from app.application_models.generated_report import GeneratedReport
 from app.application_models.outcome import AgentOutcome
+from app.reporting.output_policy import should_render_expanded_answer
 from app.reporting.presentation import get_metric_label
 from app.services.interfaces import IWorkflowService
 from app.shared.result_limits import OVERSIZED_ANALYTICAL_RESULT_MESSAGE
@@ -160,10 +161,13 @@ class GenerateReportNode(IAgentNode):
         """
         try:
             sections: list[str] = []
+            wants_expanded_answer = should_render_expanded_answer(
+                state.raw_question or state.question
+            )
             insights = state.analytics.insights if state.analytics else {}
             findings = insights.get("reasoning_findings") or []
             metric_summaries = state.analytics.metric_summaries if state.analytics else {}
-            if metric_summaries:
+            if metric_summaries and wants_expanded_answer:
                 # Multi-metric requests must show every requested metric, never
                 # just the one the legacy single-column heuristic picked.
                 metric_lines = []
@@ -185,7 +189,7 @@ class GenerateReportNode(IAgentNode):
                 sections.append(
                     "\n\n**Sorgulanan metrikler**\n" + "\n".join(metric_lines)
                 )
-            if findings:
+            if findings and wants_expanded_answer:
                 sections.append(
                     "\n\n**Öne çıkan bulgular**\n"
                     + "\n".join(f"- {finding}" for finding in findings)
@@ -206,11 +210,19 @@ class GenerateReportNode(IAgentNode):
                         f"{excluded} dönemi henüz tamamlanmadığı için eğilim hesabında tam "
                         "dönemlerle birlikte değerlendirilmemiştir."
                     )
-            if assumptions:
+            if assumptions and wants_expanded_answer:
                 sections.append(
                     "\n\n**Varsayımlar ve Sınırlamalar**\n"
                     + "\n".join(f"- {assumption}" for assumption in assumptions)
                 )
+            elif assumptions:
+                compact_notes = [
+                    assumption
+                    for assumption in assumptions[:2]
+                    if assumption and assumption not in report_dto.markdown
+                ]
+                if compact_notes:
+                    sections.append("\n\n" + "\n".join(f"Not: {note}" for note in compact_notes))
             if not sections:
                 return report_dto
             return report_dto.model_copy(

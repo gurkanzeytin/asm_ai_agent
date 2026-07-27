@@ -31,7 +31,8 @@ _SQL_ONLY_MARKER = re.compile(
 # Genuine noun inflections (verisi/verileri/veriyi/verinin/...) are
 # unaffected - none of them have "r" immediately after "veri".
 _DATA_MARKER = re.compile(
-    r"\b(veri(?!r)\w*|kayit\w*|liste\w*|getir\w*|cek\w*|tablo\w*|sonuc\w*)\b"
+    r"\b(veri(?!r)\w*|kayit\w*|liste\w*|getir\w*|cek\w*|tablo\w*)\b"
+    r"|\bsonuc\w*\b.{0,24}\b(goster\w*|getir\w*|listele\w*)\b"
 )
 # "calistir(?!ma\b)" excludes "çalıştırma" ("don't run [it]") - the Turkish
 # negation suffix "-ma/-me" attaches directly to the verb stem with no space,
@@ -42,7 +43,7 @@ _DATA_MARKER = re.compile(
 # silently overrode that SQL-only signal, executing and returning "data"
 # mode for a question that explicitly asked NOT to run it (2026-07-24, live
 # multi-turn testing).
-_EXECUTION_MARKER = re.compile(r"\b(calistir(?!ma\b)\w*|cek\w*|getir\w*|listele\w*|sonuc\w*)\b")
+_EXECUTION_MARKER = re.compile(r"\b(calistir(?!ma\b)\w*|cek\w*|getir\w*|listele\w*)\b")
 _VISUAL_MARKER = re.compile(
     r"\b(grafik\w*|grafig\w*|chart|gorsel\w*|ciz\w*|cizgi\w*|bar|"
     r"sutun\w*|pasta|oranlama)\b"
@@ -50,6 +51,10 @@ _VISUAL_MARKER = re.compile(
 _ANSWER_MARKER = re.compile(
     r"\b(yanitla|cevapla|yorum|yorumla|ozet|rapor|analiz|acikla|"
     r"degerlendir|ne anlama|sonucunu yorumla)\b"
+)
+_EXPANDED_ANSWER_MARKER = re.compile(
+    r"\b(detay\w*|detayli|ayrinti\w*|kapsamli|rapor\w*|bulgu\w*|"
+    r"metrik\w*|varsayim\w*|sinirlam\w*|olasi aciklama\w*)\b"
 )
 # "X'i listeleyecek SQL sorgusu" - a future-tense participle (-ecek/-acak)
 # directly modifying "sql/sorgu" is a relative clause describing what the SQL
@@ -115,6 +120,12 @@ def determine_requested_visible_sections(question: str) -> list[str]:
     if wants_visual:
         sections.append("chart")
     return sections
+
+
+def should_render_expanded_answer(question: str) -> bool:
+    """Returns true only when the user explicitly asks for report-style detail."""
+    folded = _fold(question)
+    return bool(_EXPANDED_ANSWER_MARKER.search(folded))
 
 
 def _fold(text: str) -> str:

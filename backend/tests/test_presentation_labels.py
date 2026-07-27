@@ -182,7 +182,10 @@ def test_reasoning_sections_render_turkish_labels_not_raw_ids():
             ),
         },
     )
-    state = AgentState(question="aylık randevu sayısı ve gerçekleşme oranı", analytics=analytics)
+    state = AgentState(
+        question="aylık randevu sayısı ve gerçekleşme oranı için detaylı metrik raporu",
+        analytics=analytics,
+    )
     report = GeneratedReport(
         title="Sorgu Sonucu",
         markdown="# Sorgu Sonucu",
@@ -212,7 +215,7 @@ def test_forbidden_raw_identifiers_never_appear_in_rendered_report():
             for metric_id in ("monthly_appointment_count", "appointment_count")
         },
     )
-    state = AgentState(question="test", analytics=analytics)
+    state = AgentState(question="detaylı metrik raporu", analytics=analytics)
     report = GeneratedReport(
         title="Sorgu Sonucu", markdown="# Sorgu Sonucu", provider="template", model="table"
     )
@@ -221,6 +224,34 @@ def test_forbidden_raw_identifiers_never_appear_in_rendered_report():
 
     for forbidden in _FORBIDDEN_RAW_IDENTIFIERS:
         assert forbidden not in updated.markdown, f"'{forbidden}' leaked into report markdown"
+
+
+def test_reasoning_sections_stay_compact_unless_detail_requested():
+    node = GenerateReportNode(workflow_service=None)
+    analytics = AnalyticsResult(
+        analytics_type="summary",
+        data_shape=DataShape.SINGLE_ROW,
+        metric_summaries={
+            "appointment_count": MetricSummary(
+                metric_id="appointment_count",
+                metric_label=get_metric_label("appointment_count"),
+                total=27881.0,
+                average=27881.0,
+            ),
+        },
+    )
+    state = AgentState(question="TEST ASM Gebze toplam randevu sayısı kaç?", analytics=analytics)
+    report = GeneratedReport(
+        title="Sorgu Sonucu",
+        markdown="# Sorgu Sonucu\n\n**Toplam Randevu:** 27.881",
+        provider="template",
+        model="single_value",
+    )
+
+    updated = node._append_reasoning_sections(report, state)
+
+    assert updated.markdown == report.markdown
+    assert "Sorgulanan metrikler" not in updated.markdown
 
 
 # ── 7. LLM prompt payload carries metric_label alongside metric_id ────────

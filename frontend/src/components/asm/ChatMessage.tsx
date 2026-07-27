@@ -3,11 +3,13 @@ import { lazy, Suspense, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
+  Activity,
   AlertTriangle,
   Check,
   ChevronRight,
   Copy,
   DatabaseZap,
+  Lightbulb,
   Pencil,
   RefreshCw,
   ServerCrash,
@@ -337,6 +339,8 @@ function AssistantText({
   animate?: boolean;
 }) {
   const animatedContent = useAnimatedText(content, "", 0.012, animate, 1200);
+  const reportMarkdown = streaming ? null : extractReportSections(animatedContent);
+  const markdownContent = reportMarkdown?.mainMarkdown ?? animatedContent;
 
   return (
     <div className="prose-chat">
@@ -409,8 +413,11 @@ function AssistantText({
           ),
         }}
       >
-        {animatedContent}
+        {markdownContent}
       </ReactMarkdown>
+      {reportMarkdown && reportMarkdown.sections.length > 0 && (
+        <ReportSections sections={reportMarkdown.sections} />
+      )}
       {streaming && (
         <motion.span
           aria-hidden="true"
@@ -421,6 +428,175 @@ function AssistantText({
       )}
     </div>
   );
+}
+
+type ReportSectionKind = "metrics" | "findings" | "assumptions";
+
+type ReportSection = {
+  kind: ReportSectionKind;
+  title: string;
+  items: string[];
+};
+
+type ParsedReportMarkdown = {
+  mainMarkdown: string;
+  sections: ReportSection[];
+};
+
+const reportSectionMarkers: Record<string, Omit<ReportSection, "items">> = {
+  "**Sorgulanan metrikler**": {
+    kind: "metrics",
+    title: "Sorgulanan metrikler",
+  },
+  "**Öne çıkan bulgular**": {
+    kind: "findings",
+    title: "Öne çıkan bulgular",
+  },
+  "**Varsayımlar ve Sınırlamalar**": {
+    kind: "assumptions",
+    title: "Varsayımlar ve Sınırlamalar",
+  },
+};
+
+function extractReportSections(markdown: string): ParsedReportMarkdown {
+  const mainLines: string[] = [];
+  const sections: ReportSection[] = [];
+  let currentSection: ReportSection | null = null;
+
+  markdown.split(/\r?\n/).forEach((line) => {
+    const trimmed = line.trim();
+    const marker = reportSectionMarkers[trimmed];
+
+    if (marker) {
+      if (currentSection) {
+        sections.push(currentSection);
+      }
+      currentSection = { ...marker, items: [] };
+      return;
+    }
+
+    if (!currentSection) {
+      mainLines.push(line);
+      return;
+    }
+
+    const bulletMatch = trimmed.match(/^[-*]\s+(.+)$/);
+    if (bulletMatch) {
+      currentSection.items.push(bulletMatch[1].trim());
+      return;
+    }
+
+    if (!trimmed) {
+      return;
+    }
+
+    if (currentSection.items.length === 0) {
+      currentSection.items.push(trimmed);
+      return;
+    }
+
+    currentSection.items[currentSection.items.length - 1] += ` ${trimmed}`;
+  });
+
+  if (currentSection) {
+    sections.push(currentSection);
+  }
+
+  return {
+    mainMarkdown: mainLines.join("\n").trimEnd(),
+    sections: sections.filter((section) => section.items.length > 0),
+  };
+}
+
+function ReportSections({ sections }: { sections: ReportSection[] }) {
+  return (
+    <div className="mt-4 grid gap-3" data-report-sections>
+      {sections.map((section) => {
+        const Icon =
+          section.kind === "metrics"
+            ? Activity
+            : section.kind === "assumptions"
+              ? AlertTriangle
+              : Lightbulb;
+        return (
+          <section key={section.kind} data-report-section={section.kind}>
+            <div className="mb-2 flex items-center gap-2">
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-border/70 bg-background/50 text-primary">
+                <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+              </span>
+              <h2 className="text-sm font-semibold leading-6 text-foreground">{section.title}</h2>
+            </div>
+            <div className="grid gap-2">
+              {section.items.map((item, index) =>
+                section.kind === "metrics" ? (
+                  <MetricSummaryItem item={item} key={`${section.kind}-${index}`} />
+                ) : (
+                  <FindingSummaryItem item={item} key={`${section.kind}-${index}`} />
+                ),
+              )}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function MetricSummaryItem({ item }: { item: string }) {
+  const parsed = parseMetricItem(item);
+
+  return (
+    <div
+      className="rounded-lg border border-border/70 bg-background/45 px-3 py-2.5 shadow-sm shadow-black/[0.02]"
+      data-report-section-item="metric"
+    >
+      <div className="text-sm font-semibold leading-5 text-foreground">{parsed.label}</div>
+      {parsed.parts.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {parsed.parts.map((part) => (
+            <span
+              key={part}
+              className="rounded-md border border-border/60 bg-muted/35 px-2 py-1 text-[11px] font-medium leading-4 text-muted-foreground"
+            >
+              {part}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FindingSummaryItem({ item }: { item: string }) {
+  return (
+    <div
+      className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5"
+      data-report-section-item="finding"
+    >
+      <p className="text-sm leading-relaxed text-foreground">{stripInlineMarkdown(item)}</p>
+    </div>
+  );
+}
+
+function parseMetricItem(item: string): { label: string; parts: string[] } {
+  const normalized = stripInlineMarkdown(item);
+  const match = normalized.match(/^([^:]+):\s*(.*)$/);
+
+  if (!match) {
+    return { label: normalized, parts: [] };
+  }
+
+  return {
+    label: match[1].trim(),
+    parts: match[2]
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean),
+  };
+}
+
+function stripInlineMarkdown(value: string): string {
+  return value.replace(/\*\*(.*?)\*\*/g, "$1").trim();
 }
 
 export function TypingIndicator({ stage }: { stage?: WorkflowStage }) {

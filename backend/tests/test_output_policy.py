@@ -5,6 +5,7 @@ from app.reporting.output_policy import (
     determine_output_policy,
     determine_requested_response_mode,
     determine_requested_visible_sections,
+    should_render_expanded_answer,
 )
 
 
@@ -190,3 +191,10 @@ def test_terminal_outcome_stays_answer_only():
     )
     assert policy.response_mode == "answer"
     assert policy.visible_sections == ["answer"]
+
+
+def test_expanded_answer_requires_explicit_detail_request():
+    assert should_render_expanded_answer("Kısaca yorumla") is False
+    assert should_render_expanded_answer("Ortalama değer kaç?") is False
+    assert should_render_expanded_answer("Detaylı rapor ver") is True
+    assert should_render_expanded_answer("Sorgulanan metrikleri ve bulguları göster") is True

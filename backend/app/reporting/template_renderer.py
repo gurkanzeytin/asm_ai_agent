@@ -155,21 +155,7 @@ class TemplateReportRenderer:
         if isinstance(percentage, Number):
             summary += f" ({format_percent(percentage)})"
         summary += "."
-        lines = [
-            "# Dönem Karşılaştırması",
-            "",
-            summary,
-            "",
-            "## Temel Göstergeler",
-            "",
-            f"- **{format_number(current)}** — {current_label}",
-            f"- **{format_number(baseline)}** — {baseline_label}",
-            f"- **{format_number(absolute)}** — {label_for('absolute_change')}",
-        ]
-        if isinstance(percentage, Number):
-            lines.append(
-                f"- **{format_percent(percentage)}** — {label_for('percentage_change')}"
-            )
+        lines = ["# Dönem Karşılaştırması", "", summary]
         return TemplateRenderResult("Dönem Karşılaştırması", "\n".join(lines), "comparison")
 
     def _render_entity_comparison(self, row: dict[str, Any]) -> TemplateRenderResult:
@@ -198,22 +184,7 @@ class TemplateReportRenderer:
             f"{baseline_label} için {format_number(baseline)} randevu kaydedildi; "
             f"{verdict}."
         )
-        lines = [
-            "# Karşılaştırma",
-            "",
-            summary,
-            "",
-            "## Temel Göstergeler",
-            "",
-            f"- **{format_number(current)}** — {current_label}",
-            f"- **{format_number(baseline)}** — {baseline_label}",
-            f"- **{format_number(abs(difference))}** — Fark",
-        ]
-        percentage = row.get("percentage_change")
-        if isinstance(percentage, Number):
-            lines.append(
-                f"- **{format_percent(percentage)}** — {label_for('percentage_change')}"
-            )
+        lines = ["# Karşılaştırma", "", summary]
         return TemplateRenderResult("Karşılaştırma", "\n".join(lines), "entity_comparison")
 
     def _render_anomaly(self, query_result: QueryResult) -> TemplateRenderResult:
@@ -263,20 +234,7 @@ class TemplateReportRenderer:
         row = query_result.rows[0]
         label, value = next(iter(row.items()))
         rendered_value = _render_cell(label, value)
-        is_count_metric = label.lower().endswith(("_count", "_sayisi")) or label.lower() in {
-            "count",
-            "row_count",
-        }
-        summary = (
-            f"Sorguya göre toplam {rendered_value} kayıt bulunmaktadır."
-            if is_count_metric
-            else f"{label_for(label)} {rendered_value} olarak hesaplanmıştır."
-        )
-        markdown = (
-            "# Sorgu Sonucu\n\n"
-            f"**{label_for(label)}:** {rendered_value}\n\n"
-            f"{summary}"
-        )
+        markdown = "# Sorgu Sonucu\n\n" f"**{label_for(label)}:** {rendered_value}"
         return TemplateRenderResult("Sorgu Sonucu", markdown, "single_value")
 
     def _render_single_row(self, query_result: QueryResult) -> TemplateRenderResult:

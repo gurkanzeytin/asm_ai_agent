@@ -147,6 +147,23 @@ describe("SqlResultsTable — DOCTOR-DISPLAY-NAME-ENRICHMENT-001 hidden columns"
     render(<SqlResultsTable data={visibleIdData} />);
     expect(screen.getByText("7773")).toBeTruthy();
   });
+
+  it("hides a backend-hidden column when a later result reuses the same column key", () => {
+    const visibleIdData: SqlResult = {
+      ...doctorData,
+      columnMetadata: doctorData.columnMetadata?.map((m) =>
+        m.key === "DoktorId" ? { ...m, hidden: false } : m,
+      ),
+    };
+    const { rerender } = render(<SqlResultsTable data={visibleIdData} />);
+
+    expect(screen.getByText("7773")).toBeTruthy();
+
+    rerender(<SqlResultsTable data={doctorData} />);
+
+    expect(screen.queryByText("7773")).toBeNull();
+    expect(screen.getByText(String(doctorData.rows[0].DoktorAdi))).toBeTruthy();
+  });
 });
 
 describe("SqlResultsTable — result-size safety", () => {

@@ -143,7 +143,7 @@ export function SqlResultsTable({
   const recommendedChartType = chartTypeFromRecommendation(data.visualization);
   const chartOnly = displayMode === "chart";
   const tableVisible = displayMode !== "chart";
-  const chartAllowed = displayMode !== "table";
+  const showChartInitially = chartOnly || displayMode === "both" || Boolean(recommendedChartType);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
@@ -154,9 +154,7 @@ export function SqlResultsTable({
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [focusedRow, setFocusedRow] = useState<number | null>(null);
   const [showStats, setShowStats] = useState(false);
-  const [showChart, setShowChart] = useState(
-    chartOnly || (chartAllowed && Boolean(recommendedChartType)),
-  );
+  const [showChart, setShowChart] = useState(showChartInitially);
   const [density, setDensity] = useState<TableDensity>("normal");
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
 
@@ -195,7 +193,7 @@ export function SqlResultsTable({
     });
     setColumnVisibility((prev) => {
       const next: Record<string, boolean> = {};
-      for (const c of data.columns) next[c] = prev[c] ?? !isHiddenByDefault(c);
+      for (const c of data.columns) next[c] = isHiddenByDefault(c) ? false : (prev[c] ?? true);
       return next;
     });
     setColumnWidths((prev) => {

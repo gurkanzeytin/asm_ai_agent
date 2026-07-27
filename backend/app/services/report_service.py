@@ -7,6 +7,7 @@ from app.application_models.workflow_models import QueryResult
 from app.insights.models import InsightConfidence, InsightResult
 from app.insights.output_validation import ENGLISH_WORD_PATTERN
 from app.llm.interfaces import ILLMProvider
+from app.reporting.output_policy import should_render_expanded_answer
 from app.reporting.report_classifier import ReportClassifier, ReportType
 from app.reporting.template_renderer import TemplateReportRenderer
 from app.services.exceptions import ReportServiceException
@@ -60,7 +61,7 @@ class ReportService(IReportService):
 
             if report_type == ReportType.ANALYTICAL and self._insights_usable(insights):
                 return self._render_insight_report(
-                    insights, query_result, execution_id, start_time
+                    question, insights, query_result, execution_id, start_time
                 )
             template_result = self.template_renderer.render(report_type, query_result)
             if template_result is not None:
@@ -175,44 +176,47 @@ class ReportService(IReportService):
 
     def _render_insight_report(
         self,
+        question: str,
         insights: InsightResult,
         query_result: QueryResult,
         execution_id: str | None,
         start_time: float,
     ) -> GeneratedReport:
-        """Assembles the analytical report from the existing insight narrative + data table."""
+        """Assembles an analytical answer from the existing insight narrative.
+
+        Default chat answers stay compact. The report-style sections are kept
+        only for wording that explicitly asks for details.
+        """
         from app.core.config import settings
 
-        max_rows = min(
-            getattr(settings, "REPORT_MAX_ROWS", DEFAULT_GROUPED_RESULT_LIMIT),
-            DEFAULT_GROUPED_RESULT_LIMIT,
-        )
-        capped = cap_query_result(query_result, max_rows)
-        table_result = self.template_renderer.render(ReportType.TABLE, capped)
+        if should_render_expanded_answer(question):
+            max_rows = min(
+                getattr(settings, "REPORT_MAX_ROWS", DEFAULT_GROUPED_RESULT_LIMIT),
+                DEFAULT_GROUPED_RESULT_LIMIT,
+            )
+            capped = cap_query_result(query_result, max_rows)
+            table_result = self.template_renderer.render(ReportType.TABLE, capped)
 
-        # Section names per spec: Sorgu Sonucu (title+summary) / Öne Çıkan
-        # Bulgular (highlights+observations merged) / Olası Açıklamalar
-        # (considerations — the LLM's hypotheses, framed as such by the
-        # insight_generation.md prompt directive). Deterministic assumptions
-        # and limitations (partial-period/comparison-sufficiency) live in a
-        # separate "Varsayımlar ve Sınırlamalar" section appended later by
-        # GenerateReportNode._append_reasoning_sections, sourced from
-        # analytics directly rather than the LLM.
-        lines: list[str] = [f"# {insights.title}", ""]
-        lines += ["## Sorgu Sonucu", insights.summary, ""]
-        findings = list(insights.highlights) + list(insights.observations)
-        if findings:
-            lines.append("## Öne Çıkan Bulgular")
-            lines += [f"- {item}" for item in findings]
-            lines.append("")
-        if insights.considerations:
-            lines.append("## Olası Açıklamalar")
-            lines += [f"- {item}" for item in insights.considerations]
-            lines.append("")
-        if table_result is not None:
-            lines.append("## Veri")
-            table_body = table_result.markdown.split("\n", 2)[-1].lstrip("\n")
-            lines.append(table_body)
+            lines: list[str] = [f"# {insights.title}", ""]
+            lines += ["## Sorgu Sonucu", insights.summary, ""]
+            findings = list(insights.highlights) + list(insights.observations)
+            if findings:
+                lines.append("## Öne Çıkan Bulgular")
+                lines += [f"- {item}" for item in findings[:3]]
+                lines.append("")
+            if insights.considerations:
+                lines.append("## Olası Açıklamalar")
+                lines += [f"- {item}" for item in insights.considerations[:2]]
+                lines.append("")
+            if table_result is not None:
+                lines.append("## Veri")
+                table_body = table_result.markdown.split("\n", 2)[-1].lstrip("\n")
+                lines.append(table_body)
+        else:
+            lines = [f"# {insights.title}", "", insights.summary]
+            for consideration in insights.considerations[:1]:
+                if consideration and consideration not in insights.summary:
+                    lines += ["", f"Not: {consideration}"]
 
         latency_ms = (time.perf_counter() - start_time) * 1000
         self._log_report_telemetry(

@@ -46,13 +46,16 @@ TREND_RESULT = _query_result(
 )
 
 
-def _insights(confidence=InsightConfidence.HIGH) -> InsightResult:
+def _insights(
+    confidence=InsightConfidence.HIGH,
+    considerations: list[str] | None = None,
+) -> InsightResult:
     return InsightResult(
         title="Randevu Trendi",
         summary="Randevular yılın ilk çeyreğinde artış gösterdi.",
         highlights=["Şubat ayında %59 artış görüldü."],
         observations=["Mart ayı Şubat ile aynı seviyede kaldı."],
-        considerations=[],
+        considerations=considerations or [],
         rules=[],
         confidence=confidence,
         llm_generated=True,
@@ -84,15 +87,37 @@ async def test_analytical_report_reuses_insight_narrative_without_llm():
         question="Son 6 ayın randevularını analiz et",
         sql="SELECT ...",
         query_result=TREND_RESULT,
-        insights=_insights(),
+        insights=_insights(
+            considerations=[
+                "Seçilen kapsamda yalnızca bir kategori bulunduğu için karşılaştırma yapılamadı."
+            ],
+        ),
     )
 
     llm_provider.generate.assert_not_called()
     assert report.provider == "insight_reuse"
     assert report.title == "Randevu Trendi"
     assert "Randevular yılın ilk çeyreğinde artış gösterdi." in report.markdown
+    assert "Şubat ayında %59 artış görüldü." not in report.markdown
+    assert "Olası Açıklamalar" not in report.markdown
+    assert "Not: Seçilen kapsamda yalnızca bir kategori" in report.markdown
+    assert "| 2026-01 | 452 |" not in report.markdown
+
+
+@pytest.mark.asyncio
+async def test_detailed_analytical_report_keeps_bounded_sections():
+    service, llm_provider = _report_service()
+
+    report = await service.generate_report(
+        question="Son 6 ayın randevularını analiz et ve detaylı rapor ver",
+        sql="SELECT ...",
+        query_result=TREND_RESULT,
+        insights=_insights(),
+    )
+
+    llm_provider.generate.assert_not_called()
+    assert report.provider == "insight_reuse"
     assert "Şubat ayında %59 artış görüldü." in report.markdown
-    # The data table is preserved in the report body.
     assert "| 2026-01 | 452 |" in report.markdown
 
 
