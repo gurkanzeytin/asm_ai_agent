@@ -227,25 +227,42 @@ class QueryPlanner:
                 # Ranked dimensions are ranked by appointment volume in this domain.
                 aggregation = "COUNT(*)"
 
-            status_filter = view_mapping.resolve_status_filter(folded, view_name)
-            if status_filter:
-                extra_filters = extra_filters + [status_filter]
-            status_value = view_mapping.resolve_status_value(folded, view_name)
+            # Explicit exclusion of NAMED statuses ("Beklemede ve İşlem Sürmekte
+            # olanları HARİÇ TUT") takes precedence over positive status
+            # resolution: the named statuses must NOT become a positive filter
+            # or drive a conditional metric (waiting_count/in_progress_count) —
+            # the intent is the COMPLEMENT. Rendered as the same equality/IN
+            # path as the single-word negation below.
+            excluded_status_values = view_mapping.resolve_excluded_status_values(
+                folded, view_name
+            )
+            if excluded_status_values is not None:
+                status_column_name = view_mapping.status_column(view_name)
+                extra_filters = extra_filters + [
+                    f"{status_column_name} = '{value}'" for value in excluded_status_values
+                ]
+                status_filter = None
+                status_value = None
+            else:
+                status_filter = view_mapping.resolve_status_filter(folded, view_name)
+                if status_filter:
+                    extra_filters = extra_filters + [status_filter]
+                status_value = view_mapping.resolve_status_value(folded, view_name)
 
-            # Status negation ("gerçekleşmeyenler", "tamamlanmayan"): renders as
-            # an IN-list over the complement statuses — the SAME equality/IN
-            # rendering path already used for a positive status filter, never a
-            # new '<>' predicate. Mutually exclusive with the positive match
-            # above (a question naming both would be contradictory).
-            if not status_filter:
-                negated_status_values = view_mapping.resolve_negated_status_values(
-                    folded, view_name
-                )
-                if negated_status_values:
-                    negated_column = view_mapping.status_column(view_name)
-                    extra_filters = extra_filters + [
-                        f"{negated_column} = '{value}'" for value in negated_status_values
-                    ]
+                # Status negation ("gerçekleşmeyenler", "tamamlanmayan"): renders
+                # as an IN-list over the complement statuses — the SAME
+                # equality/IN rendering path already used for a positive status
+                # filter, never a new '<>' predicate. Mutually exclusive with the
+                # positive match above (a question naming both is contradictory).
+                if not status_filter:
+                    negated_status_values = view_mapping.resolve_negated_status_values(
+                        folded, view_name
+                    )
+                    if negated_status_values:
+                        negated_column = view_mapping.status_column(view_name)
+                        extra_filters = extra_filters + [
+                            f"{negated_column} = '{value}'" for value in negated_status_values
+                        ]
 
             intelligence = self._resolve_intelligence(
                 folded,
@@ -258,6 +275,34 @@ class QueryPlanner:
                 department_column=view_mapping.concept_column("Department", view_name),
                 status_column=view_mapping.status_column(view_name),
             )
+            # In an exclusion ("Beklemede ve İşlem Sürmekte olanları hariç tut"),
+            # the named statuses also match their conditional metrics via the
+            # catalog (beklemede -> waiting_count, işlem sürmekte ->
+            # in_progress_count) — counting exactly what the user asked to
+            # EXCLUDE. Drop any metric anchored to an excluded status so the
+            # plan measures the neutral volume (appointment_count) over the
+            # complement filter instead.
+            if excluded_status_values is not None:
+                kept_statuses = set(excluded_status_values)
+                surviving = [
+                    metric_id
+                    for metric_id in intelligence["metrics"]
+                    if (value := catalog.metric_status_value(metric_id)) is None
+                    or value in kept_statuses
+                ]
+                surviving = surviving or ["appointment_count"]
+                if surviving != intelligence["metrics"]:
+                    intelligence["metrics"] = surviving
+                    # The dropped status metric's SUM(CASE...) formula also lives
+                    # in intelligence["aggregation"]; leaving it stale makes
+                    # PlanComplianceValidator demand that SUM in SQL the builder
+                    # no longer emits. Re-derive it from the surviving primary
+                    # metric (appointment_count -> COUNT(*)).
+                    by_id = catalog.load_metric_catalog().by_id()
+                    primary = by_id.get(surviving[0])
+                    intelligence["aggregation"] = (
+                        primary.formula if primary and primary.formula else "COUNT(*)"
+                    )
             if raw_list_request:
                 list_projection = self._view_list_projection(view_name)
                 intelligence.update(

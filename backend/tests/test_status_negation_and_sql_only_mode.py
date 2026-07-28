@@ -27,8 +27,13 @@ from app.database_intelligence.models import DatabaseContext, ViewMetadata
 from app.planning.compliance import PlanComplianceValidator
 from app.planning.models import QueryPlan
 from app.reporting.output_policy import determine_requested_response_mode
-from app.semantics.view_mapping import resolve_negated_status_values
+from app.semantics.view_mapping import (
+    resolve_excluded_status_values,
+    resolve_negated_status_values,
+)
 from app.services.deterministic_sql_builder import DeterministicSQLBuilder
+from app.planning.planner import QueryPlanner
+from app.services.query_analyzer import QueryAnalyzer
 
 
 # ── SQL-only response mode detection ────────────────────────────────────────
@@ -74,6 +79,69 @@ class TestNegatedStatusValues:
         # "gerceklesen" must not accidentally substring-match inside
         # "gerceklesmeyen" (or vice versa) — they mean opposite things.
         assert resolve_negated_status_values("gerceklesen randevu sayisi") is None
+
+
+class TestExcludedStatusValues:
+    def test_multi_value_haric_returns_the_complement(self):
+        """"Beklemede ve İşlem Sürmekte olanları hariç tut" excludes BOTH named
+        statuses; the complement is the remaining three (live 2026-07-28: the
+        agent instead counted ONLY Beklemede)."""
+        values = resolve_excluded_status_values(
+            "beklemede ve islem surmekte olanlari haric tut bolum bazinda randevu sayisi"
+        )
+        assert values is not None
+        assert set(values) == {"Gelmedi", "Gerçekleşti", "Giriş Yapılmış"}
+
+    def test_single_status_disinda_excludes_only_that_one(self):
+        values = resolve_excluded_status_values("gelmedi durumu disinda randevu sayisi")
+        assert values is not None
+        assert set(values) == {
+            "Beklemede", "Gerçekleşti", "Giriş Yapılmış", "İşlem Sürmekte",
+        }
+
+    def test_no_exclusion_operator_returns_none(self):
+        # A positive status mention without an exclusion operator is not an
+        # exclusion — "bekleyen randevu sayısı" stays a positive filter.
+        assert resolve_excluded_status_values("bekleyen randevu sayisi") is None
+
+    def test_exclusion_operator_without_named_status_returns_none(self):
+        assert resolve_excluded_status_values("radyoloji haric randevu sayisi") is None
+
+
+class TestExcludedStatusPlanner:
+    def _plan(self, question: str) -> QueryPlan:
+        return QueryPlanner().build_plan(
+            question,
+            QueryAnalyzer().analyze(question),
+            tables=[],
+            views=[ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])],
+        )
+
+    def test_exclusion_drops_status_metric_and_filters_to_complement(self):
+        plan = self._plan(
+            "2024 yilinda beklemede ve islem surmekte olanlari haric tut, "
+            "bolum bazinda randevu sayisini goster"
+        )
+        # The named statuses must NOT drive a conditional metric.
+        assert plan.metrics == ["appointment_count"]
+        assert "waiting_count" not in plan.metrics
+        assert "in_progress_count" not in plan.metrics
+        # The WHERE keeps only the complement statuses.
+        status_values = {
+            f.split("= '")[1].rstrip("'")
+            for f in plan.extra_filters
+            if f.startswith("RandevuDurumu = '")
+        }
+        assert status_values == {"Gelmedi", "Gerçekleşti", "Giriş Yapılmış"}
+        built = DeterministicSQLBuilder().build(plan)
+        assert hasattr(built, "sql"), getattr(built, "reason", "")
+        assert "Beklemede" not in built.sql
+        assert "İşlem Sürmekte" not in built.sql
+
+    def test_positive_status_question_is_unaffected(self):
+        plan = self._plan("2024 yilinda bekleyen randevu sayisi")
+        assert plan.metrics == ["waiting_count"]
+        assert plan.extra_filters == ["RandevuDurumu = 'Beklemede'"]
 
 
 class TestFromRawTextNegation:

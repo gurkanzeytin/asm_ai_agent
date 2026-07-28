@@ -173,6 +173,45 @@ def resolve_negated_status_values(
     return None
 
 
+# Explicit exclusion operators applied to named statuses ("Beklemede ve İşlem
+# Sürmekte olanları HARİÇ TUT"). Folded forms: hariç/hariç tut/haricinde ->
+# "haric"; dışında/dışındaki -> "disind".
+_STATUS_EXCLUSION_MARKERS = ("haric", "disind")
+
+
+def resolve_excluded_status_values(
+    folded_question: str, view_name: str | None = None
+) -> list[str] | None:
+    """Maps an explicit exclusion of NAMED statuses ("Beklemede ve İşlem
+    Sürmekte olanları hariç tut") to the COMPLEMENT set of verified
+    RandevuDurumu values — every real status EXCEPT the ones named before the
+    exclusion operator. Like `resolve_negated_status_values`, it returns bare
+    values (never a literal '<>'/NOT IN) so the existing equality/IN rendering
+    path handles it unchanged.
+
+    Distinct from `resolve_negated_status_values` (single-word morphological
+    negations like 'gerçekleşmeyen'): this handles the analyst construction
+    where one or more statuses are named POSITIVELY and then excluded with an
+    explicit 'hariç'/'dışında' operator. Returns None when no exclusion
+    operator is present, no status is named, or the complement is empty.
+    """
+    if not any(marker in folded_question for marker in _STATUS_EXCLUSION_MARKERS):
+        return None
+    status_filters = get_view_entry(view_name).get("status_filters", {})
+    if not status_filters:
+        return None
+    excluded: set[str] = set()
+    for term, stored_value in status_filters.items():
+        if fold(term) in folded_question:
+            excluded.add(stored_value)
+    if not excluded:
+        return None
+    complement = [
+        value for value in sorted(set(status_filters.values())) if value not in excluded
+    ]
+    return complement or None
+
+
 def concept_mapping_lines(view_name: str | None = None) -> list[str]:
     """Compact user-language → column lines for the LLM schema grounding block."""
     entry = get_view_entry(view_name)
