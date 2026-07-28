@@ -406,6 +406,17 @@ class DeterministicSQLBuilder:
             # absolute/percentage change) — render a per-entity breakdown.
             return self._entity_breakdown(plan, field_name, all_values)
         values = all_values[:2]
+        # The pair contract below hardcodes a conditional COUNT per side. That
+        # is only the right answer when the comparison is about VOLUME. When the
+        # user asks to compare a RATE/AVERAGE ("Kardiyoloji ile Nöroloji'nin
+        # gelmeme ORANINI karşılaştır"), a count comparison is a confidently
+        # wrong answer (it reported 18615 vs 6483 appointments instead of the
+        # two no-show rates, live 2026-07-28). Delegate any non-count metric to
+        # the per-entity breakdown, which computes the requested metric scoped
+        # to each side — one clean row per department with its own rate.
+        non_count_metrics = [m for m in plan.metrics if m != "appointment_count"]
+        if non_count_metrics:
+            return self._entity_breakdown(plan, field_name, values)
         current_value, baseline_value = values[0], values[1]
         current_condition = self._entity_condition(field_name, current_value)
         baseline_condition = self._entity_condition(field_name, baseline_value)

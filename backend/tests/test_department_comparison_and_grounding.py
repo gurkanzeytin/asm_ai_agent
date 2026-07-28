@@ -414,6 +414,45 @@ class TestEntityComparisonSQL:
         )
         assert result.compliant, result.missing
 
+    def test_rate_metric_pair_compares_rates_not_counts(self):
+        """"Kardiyoloji ile Nöroloji'nin gelmeme ORANINI karşılaştır" must
+        compare the two no-show RATES, not their raw appointment counts (live
+        2026-07-28: the count pair contract reported 18615 vs 6483 appointments
+        for a rate question). A non-count metric delegates to the per-entity
+        breakdown, one row per side with its own rate."""
+        plan = self._pair_plan(
+            question="Kardiyoloji ile Nöroloji'nin gelmeme oranını karşılaştır",
+            metrics=["no_show_rate"],
+            aggregation=None,
+            resolved_filters={
+                "department": ResolvedFilterPlan(
+                    field="department",
+                    values=["Kardiyoloji", "Nöroloji"],
+                    grounded=True,
+                    confidence=0.95,
+                    match_type="comparison_pair",
+                )
+            },
+        )
+        built = DeterministicSQLBuilder().build(plan)
+        assert hasattr(built, "sql"), getattr(built, "reason", "")
+        # Rendered as a per-entity breakdown (DistributionResult), not the
+        # count-based EntityComparisonResult pair contract.
+        assert built.result_schema == "DistributionResult"
+        assert "no_show_rate" in built.sql
+        assert "RandevuDurumu = N'Gelmedi'" in built.sql
+        assert "current_entity_count" not in built.sql
+        # Both departments appear as their own rows.
+        assert "Kardiyoloji" in built.sql
+        assert "Nöroloji" in built.sql
+
+    def test_count_metric_pair_still_uses_count_contract(self):
+        """A volume comparison keeps the absolute/percentage-change pair
+        contract — the rate delegation must not swallow the count case."""
+        built = DeterministicSQLBuilder().build(self._pair_plan())
+        assert built.result_schema == "EntityComparisonResult"
+        assert "current_entity_count" in built.sql
+
     def test_comparison_without_pair_is_unsupported(self):
         plan = self._pair_plan(resolved_filters={})
         built = DeterministicSQLBuilder().build(plan)
