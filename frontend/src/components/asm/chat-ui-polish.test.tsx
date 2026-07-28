@@ -269,9 +269,9 @@ describe("sohbet arayüzü düzenlemeleri", () => {
           id: "assistant-report",
           role: "assistant",
           content: [
-            "# Sorgu Sonucu",
+            "# Sonuçlar",
             "",
-            "2 cinsiyet listelenmiştir.",
+            "2 cinsiyet bulundu.",
             "",
             "| Cinsiyet | Toplam Randevu | Gelmeme Oranı |",
             "| --- | ---: | ---: |",

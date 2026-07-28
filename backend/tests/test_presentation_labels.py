@@ -187,8 +187,8 @@ def test_reasoning_sections_render_turkish_labels_not_raw_ids():
         analytics=analytics,
     )
     report = GeneratedReport(
-        title="Sorgu Sonucu",
-        markdown="# Sorgu Sonucu",
+        title="Sonuçlar",
+        markdown="# Sonuçlar",
         provider="template",
         model="table",
     )
@@ -217,7 +217,7 @@ def test_forbidden_raw_identifiers_never_appear_in_rendered_report():
     )
     state = AgentState(question="detaylı metrik raporu", analytics=analytics)
     report = GeneratedReport(
-        title="Sorgu Sonucu", markdown="# Sorgu Sonucu", provider="template", model="table"
+        title="Sonuçlar", markdown="# Sonuçlar", provider="template", model="table"
     )
 
     updated = node._append_reasoning_sections(report, state)
@@ -242,8 +242,8 @@ def test_reasoning_sections_stay_compact_unless_detail_requested():
     )
     state = AgentState(question="TEST ASM Gebze toplam randevu sayısı kaç?", analytics=analytics)
     report = GeneratedReport(
-        title="Sorgu Sonucu",
-        markdown="# Sorgu Sonucu\n\n**Toplam Randevu:** 27.881",
+        title="Yanıt",
+        markdown="# Yanıt\n\n**Toplam Randevu:** 27.881",
         provider="template",
         model="single_value",
     )

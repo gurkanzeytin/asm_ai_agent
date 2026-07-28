@@ -17,6 +17,7 @@ const DATA_MARKER = /\b(veri\w*|kayit\w*|liste\w*|getir\w*|cek\w*|tablo\w*|sonuc
 const EXECUTION_MARKER = /\b(calistir\w*|cek\w*|getir\w*|listele\w*|sonuc\w*)\b/;
 const VISUAL_MARKER =
   /\b(grafik\w*|grafig\w*|chart|gorsel\w*|ciz\w*|cizgi\w*|bar|sutun\w*|pasta|oranlama)\b/;
+const CONTEXT_NOTICE = "_Önceki cevaptaki kapsam kullanıldı._";
 
 function foldTurkish(text: string): string {
   return text
@@ -69,6 +70,10 @@ export function buildResponseContent(response: ReportResponse, mode: ResponseMod
   if (mode === "sql" || visibleSections(response).includes("sql")) {
     return response.generated_sql?.trim() ?? "Bu soru icin SQL sorgusu uretilemedi.";
   }
-  if (!shouldShowAnswerText(response, mode)) return "";
-  return response.report?.markdown?.trim() ?? "";
+  const contextNotice = response.context_applied ? CONTEXT_NOTICE : "";
+  if (!shouldShowAnswerText(response, mode)) return contextNotice;
+  const markdown = response.report?.markdown?.trim() ?? "";
+  if (!markdown) return contextNotice;
+  if (!contextNotice) return markdown;
+  return `${contextNotice}\n\n${markdown}`;
 }

@@ -6,6 +6,8 @@ yerine kendi Türkçe sunumlarını kullanır. Tüm etiketler ve sayı biçimler
 merkezi sunum katmanından (app/reporting/presentation.py) gelir.
 """
 
+import re
+import unicodedata
 from dataclasses import dataclass
 from numbers import Number
 from typing import Any
@@ -25,9 +27,8 @@ from app.shared.result_window import cap_query_result, result_notice
 
 COMPARISON_CONTRACT_FALLBACK = (
     "# Karşılaştırma Yapılamadı\n\n"
-    "Karşılaştırma için iki ayrı dönem sonucu oluşturulamadı. "
-    "Tarih aralığını daha açık belirtmeyi deneyebilirsiniz "
-    "(örneğin iki takvim ayı veya iki takvim yılı)."
+    "Bu karşılaştırma için iki ayrı dönem sonucu oluşmadı. "
+    "İki takvim ayı veya iki takvim yılı gibi daha net bir aralıkla tekrar sorabilirsiniz."
 )
 
 
@@ -45,26 +46,12 @@ class TemplateReportRenderer:
         self,
         report_type: ReportType,
         query_result: QueryResult,
+        question: str | None = None,
     ) -> TemplateRenderResult | None:
         if report_type == ReportType.ANALYTICAL:
             return None
         if report_type == ReportType.EMPTY:
-            # AG-022 NO_RESULT_GUIDANCE: boş sonuç geçerli bir cevaptır; soru
-            # bağlamına uygun, gerçek view alanlarına dayalı öneriler verilir.
-            markdown = (
-                "# Sonuç Bulunamadı\n\n"
-                "Sorgu başarıyla çalıştı ancak belirtilen kriterlere uygun kayıt bulunamadı. "
-                "Seçtiğiniz tarih aralığında ya da filtrede gerçekten veri olmayabilir.\n\n"
-                "## Deneyebilecekleriniz\n\n"
-                "- Tarih aralığını genişletin (örneğin \"bugün\" yerine \"bu ay\").\n"
-                "- Filtreyi sadeleştirip şube, bölüm veya randevu durumu bazında "
-                "dağılımı isteyin.\n"
-            )
-            return TemplateRenderResult(
-                title="Sonuç Bulunamadı",
-                markdown=markdown,
-                template_name="empty",
-            )
+            return self._render_empty(question)
 
         # Typed deterministic shapes get their own Turkish presentation.
         typed = self._render_typed(query_result)
@@ -72,12 +59,30 @@ class TemplateReportRenderer:
             return typed
 
         if report_type == ReportType.SINGLE_VALUE:
-            return self._render_single_value(query_result)
+            return self._render_single_value(query_result, question)
         if report_type == ReportType.SINGLE_ROW:
             return self._render_single_row(query_result)
         if report_type == ReportType.TABLE:
             return self._render_table(query_result)
         return None
+
+    def _render_empty(self, question: str | None) -> TemplateRenderResult:
+        # AG-022 NO_RESULT_GUIDANCE: boş sonuç geçerli bir cevaptır; soru
+        # bağlamına uygun, gerçek view alanlarına dayalı öneriler verilir.
+        lines = [
+            "# Sonuç Bulunamadı",
+            "",
+            _empty_result_summary(question),
+            "",
+            "## Deneyebilecekleriniz",
+            "",
+        ]
+        lines.extend(f"- {suggestion}" for suggestion in _empty_result_suggestions(question))
+        return TemplateRenderResult(
+            title="Sonuç Bulunamadı",
+            markdown="\n".join(lines),
+            template_name="empty",
+        )
 
     # ── typed presentations ──────────────────────────────────────────────
 
@@ -206,7 +211,7 @@ class TemplateReportRenderer:
         if not increased:
             # Olay yoksa kazanan seçilmez: bunu açıkça söyleriz.
             lines.append(
-                "İncelenen dönemde hiçbir grupta aranan oranda artış tespit edilmedi."
+                "İncelenen dönemde hiçbir grupta aranan oranda artış görülmedi."
             )
         else:
             ranked = sorted(
@@ -230,12 +235,14 @@ class TemplateReportRenderer:
 
     # ── generic shapes ───────────────────────────────────────────────────
 
-    def _render_single_value(self, query_result: QueryResult) -> TemplateRenderResult:
+    def _render_single_value(
+        self, query_result: QueryResult, question: str | None = None
+    ) -> TemplateRenderResult:
         row = query_result.rows[0]
         label, value = next(iter(row.items()))
         rendered_value = _render_cell(label, value)
-        markdown = "# Sorgu Sonucu\n\n" f"**{label_for(label)}:** {rendered_value}"
-        return TemplateRenderResult("Sorgu Sonucu", markdown, "single_value")
+        markdown = "# Yanıt\n\n" + _single_value_sentence(label, rendered_value, question)
+        return TemplateRenderResult("Yanıt", markdown, "single_value")
 
     def _render_single_row(self, query_result: QueryResult) -> TemplateRenderResult:
         # A single row commonly mixes a DIMENSION column with its metric
@@ -244,14 +251,14 @@ class TemplateReportRenderer:
         # dimension column rendered raw title-cased ("Subeadi") instead of
         # its Turkish label ("Şube"). get_column_label() covers both.
         row = query_result.rows[0]
-        lines = ["# Sorgu Sonucu", ""]
+        lines = ["# Yanıt", "", "Bulduğum değerler:", ""]
         for key in query_result.columns:
             if key in row:
                 lines.append(f"- **{get_column_label(key)}:** {_render_cell(key, row[key])}")
         for key, value in row.items():
             if key not in query_result.columns:
                 lines.append(f"- **{get_column_label(key)}:** {_render_cell(key, value)}")
-        return TemplateRenderResult("Sorgu Sonucu", "\n".join(lines), "single_row")
+        return TemplateRenderResult("Yanıt", "\n".join(lines), "single_row")
 
     def _render_table(self, query_result: QueryResult) -> TemplateRenderResult:
         # Table columns are almost always a mix of dimensions and metrics
@@ -270,7 +277,7 @@ class TemplateReportRenderer:
             rows.append("| " + " | ".join(cells) + " |")
         markdown = "\n".join(
             [
-                "# Sorgu Sonucu",
+                "# Sonuçlar",
                 "",
                 result_notice(query_result),
                 "",
@@ -279,7 +286,7 @@ class TemplateReportRenderer:
                 *rows,
             ]
         )
-        return TemplateRenderResult("Sorgu Sonucu", markdown, "table")
+        return TemplateRenderResult("Sonuçlar", markdown, "table")
 
 
 def _columns_from_rows(rows: list[dict[str, Any]]) -> list[str]:
@@ -297,6 +304,131 @@ def _render_cell(column: str, value: Any) -> str:
     if isinstance(value, Number) and not isinstance(value, bool):
         return format_value(column, value)
     return str(value)
+
+
+def _single_value_sentence(label: str, rendered_value: str, question: str | None = None) -> str:
+    display_label = label_for(label)
+    normalized_label = display_label.casefold()
+    normalized_question = (question or "").casefold()
+
+    if "randevu" in normalized_label and (
+        "toplam" in normalized_label
+        or "say" in normalized_label
+        or "kaç" in normalized_question
+    ):
+        if "2025" in normalized_question:
+            return f"2025 yılında toplam **{rendered_value}** randevu alınmış."
+        return f"Toplam randevu sayısı **{rendered_value}**."
+    if "hasta" in normalized_label and (
+        "tekil" in normalized_label or "farklı" in normalized_question
+    ):
+        return f"Farklı hasta sayısı **{rendered_value}**."
+    return f"{display_label}: **{rendered_value}**."
+
+
+_DATE_SCOPE_RE = re.compile(
+    r"\b(20\d{2}|bugun|dun|yarin|tarih|gun|hafta|ay|yil|donem|ocak|subat|mart|"
+    r"nisan|mayis|haziran|temmuz|agustos|eylul|ekim|kasim|aralik)\b"
+)
+
+
+def _fold_turkish(text: str) -> str:
+    folded = text.replace("İ", "i").replace("I", "ı").replace("ı", "i").casefold()
+    normalized = unicodedata.normalize("NFD", folded)
+    return "".join(
+        character for character in normalized if unicodedata.category(character) != "Mn"
+    )
+
+
+def _empty_result_summary(question: str | None) -> str:
+    scopes = _empty_scope_labels(question)
+    if scopes:
+        return (
+            f"{_join_tr(scopes).capitalize()} için eşleşen kayıt bulamadım. "
+            "Seçilen kapsamda kayıt olmayabilir."
+        )
+    return (
+        "Bu kriterlerle eşleşen kayıt bulamadım. Tarih aralığı veya filtreler "
+        "kapsamı fazla daraltmış olabilir."
+    )
+
+
+def _empty_scope_labels(question: str | None) -> list[str]:
+    folded = _fold_turkish(question or "")
+    scopes: list[str] = []
+    if _DATE_SCOPE_RE.search(folded):
+        scopes.append("tarih aralığı")
+    if _contains_any(
+        folded, ("randevu durumu", "durum", "gercekles", "iptal", "gelmedi")
+    ):
+        scopes.append("randevu durumu")
+    if _contains_any(folded, ("bolum", "brans", "poliklinik")):
+        scopes.append("bölüm")
+    if _contains_any(folded, ("sube", "lokasyon", "merkez")):
+        scopes.append("şube")
+    if _contains_any(folded, ("doktor", "hekim")):
+        scopes.append("doktor")
+    if _contains_any(folded, ("hizmet", "islem")):
+        scopes.append("hizmet")
+    if _contains_any(folded, ("kaynak", "kanal")):
+        scopes.append("kaynak")
+    return scopes
+
+
+def _empty_result_suggestions(question: str | None) -> list[str]:
+    folded = _fold_turkish(question or "")
+    suggestions: list[str] = []
+    if _DATE_SCOPE_RE.search(folded):
+        suggestions.append("Tarih aralığını genişletip aynı soruyu yeniden deneyin.")
+    if _contains_any(
+        folded, ("randevu durumu", "durum", "gercekles", "iptal", "gelmedi")
+    ):
+        suggestions.append(
+            "Randevu durumu filtresini kaldırıp önce toplam dağılıma bakın."
+        )
+
+    filter_scopes = [
+        label
+        for label, tokens in (
+            ("bölüm", ("bolum", "brans", "poliklinik")),
+            ("şube", ("sube", "lokasyon", "merkez")),
+            ("doktor", ("doktor", "hekim")),
+            ("hizmet", ("hizmet", "islem")),
+            ("kaynak", ("kaynak", "kanal")),
+        )
+        if _contains_any(folded, tokens)
+    ]
+    if filter_scopes:
+        suggestions.append(
+            f"{_join_tr(filter_scopes).capitalize()} filtresini sadeleştirip sonucu yeniden deneyin."
+        )
+    if _contains_any(folded, ("sadece", "yalniz", "filtre", "haric", "disinda")):
+        suggestions.append("Filtreleri tek tek kaldırarak hangi koşulun sonucu daralttığını kontrol edin.")
+
+    suggestions.append(
+        "Önce aynı kapsamı toplam sayı olarak sorun; sonuç varsa ardından kırılım isteyin."
+    )
+    return _unique(suggestions)[:4]
+
+
+def _contains_any(text: str, tokens: tuple[str, ...]) -> bool:
+    return any(token in text for token in tokens)
+
+
+def _join_tr(items: list[str]) -> str:
+    if len(items) <= 1:
+        return items[0] if items else ""
+    return ", ".join(items[:-1]) + f" ve {items[-1]}"
+
+
+def _unique(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        if item not in seen:
+            result.append(item)
+            seen.add(item)
+    return result
 
 
 def _plain(value: Any) -> str:

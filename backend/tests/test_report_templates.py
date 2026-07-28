@@ -77,6 +77,19 @@ def test_template_renderer_single_value():
     assert "Doktor Sayisi" in rendered.markdown
 
 
+def test_template_renderer_single_value_uses_natural_randevu_sentence():
+    rendered = TemplateReportRenderer().render(
+        ReportType.SINGLE_VALUE,
+        _query_result(["appointment_count"], [{"appointment_count": 213855}]),
+        question="2025 yılında toplam kaç randevu alınmış?",
+    )
+
+    assert rendered is not None
+    assert rendered.title == "Yanıt"
+    assert "2025 yılında toplam **213.855** randevu alınmış." in rendered.markdown
+    assert "Sorgu Sonucu" not in rendered.markdown
+
+
 def test_template_renderer_single_row():
     rendered = TemplateReportRenderer().render(
         ReportType.SINGLE_ROW,
@@ -163,7 +176,22 @@ def test_template_renderer_empty():
 
     assert rendered is not None
     assert rendered.template_name == "empty"
-    assert "uygun kayıt bulunamadı" in rendered.markdown
+    assert "eşleşen kayıt bulamadım" in rendered.markdown
+
+
+def test_template_renderer_empty_uses_question_scope():
+    rendered = TemplateReportRenderer().render(
+        ReportType.EMPTY,
+        _query_result(["id"], []),
+        question="2025 yılında sadece gerçekleşen randevuları göster.",
+    )
+
+    assert rendered is not None
+    assert "Tarih aralığı ve randevu durumu için eşleşen kayıt bulamadım." in rendered.markdown
+    assert "Tarih aralığını genişletip aynı soruyu yeniden deneyin." in rendered.markdown
+    assert "Randevu durumu filtresini kaldırıp önce toplam dağılıma bakın." in rendered.markdown
+    assert "Sorgu Sonucu" not in rendered.markdown
+    assert "listelenmiştir" not in rendered.markdown
 
 
 @pytest.mark.asyncio
@@ -266,7 +294,7 @@ async def test_report_service_bypasses_llm_for_large_list_queries(question, sql,
 
     assert report.provider == "template"
     assert report.model == "table"
-    assert "Toplam 45 kayıt listelenmiştir." in report.markdown
+    assert "45 kayıt bulundu." in report.markdown
     prompt_service.render_report_prompt.assert_not_called()
     generator.generate.assert_not_called()
 

@@ -64,6 +64,11 @@ class TestDimensionNeverBecomesFilterValue:
     def test_no_candidate_extracted_for_grouping_questions(self, question):
         assert extract_candidate_phrases(question) == {}
 
+    def test_plural_context_pronoun_before_dimension_is_not_a_filter_value(self):
+        assert extract_candidate_phrases(
+            "Bunları bölümlere göre ilk 5 olacak şekilde sırala."
+        ) == {}
+
     def test_status_distribution_creates_no_status_filter(self):
         plan = _build_plan("Randevu durumlarının dağılımını göster")
         assert "RandevuDurumu" in plan.dimensions

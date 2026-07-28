@@ -4,6 +4,8 @@ STRICT RULES:
 - Respond ENTIRELY in Turkish. The title, summary, highlights, observations, and considerations
   must all be natural Turkish sentences — never English, regardless of any English identifiers
   (column names, branch/table names) that may appear in the analytics data below.
+- Use natural executive Turkish: short sentences, clear subject, concrete numbers, and no
+  inflated report language, bureaucratic passive voice, or repeated stock emphasis.
 - Use ONLY the numbers, categories, and facts provided below. Do not calculate anything.
 - Do not invent statistics, percentages, trends, comparisons, causes, or recommendations that are not supported by the provided analytics.
 - Present any possible explanation for a finding explicitly as a hypothesis ("olası", "olabilir"),
@@ -42,8 +44,8 @@ Recommended visualization:
 Respond with JSON exactly in this shape (keys stay in English, values must be Turkish):
 {{
   "title": "kısa, açıklayıcı Türkçe başlık",
-  "summary": "1-2 cümlelik Türkçe özet",
-  "highlights": ["önemli bulgu 1 (Türkçe)", "önemli bulgu 2 (Türkçe)"],
-  "observations": ["önemli gözlem veya yorum (Türkçe)"],
-  "considerations": ["analitiğe dayalı olası açıklama/sınırlama (Türkçe), veya boş liste"]
+  "summary": "1-2 cümlelik doğal Türkçe özet",
+  "highlights": ["önemli bulgu 1 (doğal Türkçe)", "önemli bulgu 2 (doğal Türkçe)"],
+  "observations": ["önemli gözlem veya yorum (doğal Türkçe)"],
+  "considerations": ["analitiğe dayalı olası açıklama/sınırlama (doğal Türkçe), veya boş liste"]
 }}

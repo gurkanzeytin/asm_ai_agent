@@ -140,9 +140,22 @@ export interface ReportResponse {
   observations?: ObservationsPayload | null;
   visualization?: VisualizationPayload | null;
   outcome?: string | null;
+  session_id?: string | null;
+  follow_up_detected?: boolean;
+  follow_up_confidence?: number;
+  follow_up_signals?: string[];
+  context_applied?: boolean;
+  inherited_fields?: string[];
+  inherited_context_fields?: string[];
+  overridden_context_fields?: string[];
+  removed_context_fields?: string[];
   pending_clarification_field?: string | null;
   resolved_metrics?: string[];
   resolved_dimensions?: string[];
+  resolved_filters?: Record<string, string[]>;
+  resolved_time_grain?: string | null;
+  resolved_ranking?: string | null;
+  resolved_limit?: number | null;
 }
 
 export type WorkflowStage =
@@ -160,6 +173,19 @@ const reportResponseSchema = z
     question: z.string(),
     response_mode: z.enum(["answer", "sql", "data", "visualization"]).nullable().optional(),
     visible_sections: z.array(z.string()).optional(),
+    session_id: z.string().nullable().optional(),
+    follow_up_detected: z.boolean().optional(),
+    follow_up_confidence: z.number().optional(),
+    follow_up_signals: z.array(z.string()).optional(),
+    context_applied: z.boolean().optional(),
+    inherited_fields: z.array(z.string()).optional(),
+    inherited_context_fields: z.array(z.string()).optional(),
+    overridden_context_fields: z.array(z.string()).optional(),
+    removed_context_fields: z.array(z.string()).optional(),
+    resolved_filters: z.record(z.array(z.string())).optional(),
+    resolved_time_grain: z.string().nullable().optional(),
+    resolved_ranking: z.string().nullable().optional(),
+    resolved_limit: z.number().nullable().optional(),
     generated_sql: z.string().nullable().optional(),
     query_result: z
       .object({

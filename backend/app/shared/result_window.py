@@ -37,11 +37,11 @@ def result_notice(query_result: QueryResult) -> str:
                 f"Toplam {query_result.total_count:,} sonuç bulundu; ilk {shown} sonuç "
                 "gösteriliyor."
             ).replace(",", ".")
-        return f"İlk {shown} sonuç gösteriliyor. Daha fazla sonuç bulunmaktadır."
+        return f"İlk {shown} sonuç gösteriliyor; daha fazla sonuç var."
     if query_result.result_group_count is not None and query_result.columns:
         # Keep the module import-light so it can safely be used during bootstrap.
         from app.reporting.presentation import get_dimension_label
 
         group_label = get_dimension_label(query_result.columns[0]).casefold()
-        return f"{query_result.result_group_count} {group_label} listelenmiştir."
-    return f"Toplam {shown} kayıt listelenmiştir."
+        return f"{query_result.result_group_count} {group_label} bulundu."
+    return f"{shown} kayıt bulundu."

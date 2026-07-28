@@ -1,1 +1,1 @@
-Hello! I am your ASM AI assistant. How can I help you today?
+Merhaba! Ben Med Agent. Randevu verileriyle ilgili sorularınızda size yardımcı olabilirim.

@@ -166,7 +166,7 @@ async def test_report_service_replaces_english_or_missing_title_with_turkish_def
             execution_id="exec-123",
         )
 
-        assert report.title == "Sorgu Sonucu"
+        assert report.title == "Yanıt"
 
 
 @pytest.mark.asyncio

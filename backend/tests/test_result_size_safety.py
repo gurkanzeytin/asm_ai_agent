@@ -156,7 +156,7 @@ def test_grouped_42_row_result_remains_fully_available() -> None:
     assert len(window.rows) == 42
     assert window.result_truncated is False
     assert rendered is not None
-    assert "42 bölüm listelenmiştir." in rendered.markdown.casefold()
+    assert "42 bölüm bulundu." in rendered.markdown.casefold()
 
 
 def test_scalar_result_is_unaffected_and_has_no_pagination_notice() -> None:
@@ -181,7 +181,7 @@ def test_known_source_count_is_never_described_as_listed_rows() -> None:
     notice = result_notice(result)
 
     assert notice == "Toplam 552.240 sonuç bulundu; ilk 100 sonuç gösteriliyor."
-    assert "552.240 kayıt listelenmiştir" not in notice
+    assert "552.240 kayıt bulundu" not in notice
 
 
 def test_unknown_total_uses_has_more_wording() -> None:
@@ -191,9 +191,7 @@ def test_unknown_total_uses_has_more_wording() -> None:
         has_more=True,
     )
 
-    assert result_notice(result) == (
-        "İlk 100 sonuç gösteriliyor. Daha fazla sonuç bulunmaktadır."
-    )
+    assert result_notice(result) == "İlk 100 sonuç gösteriliyor; daha fazla sonuç var."
 
 
 def test_llm_summary_has_at_most_top_and_bottom_ten_rows() -> None:

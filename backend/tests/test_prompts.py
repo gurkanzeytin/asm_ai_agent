@@ -10,7 +10,7 @@ def test_prompt_loader_caching():
 
     # First load reads from disk
     first_load = prompt_loader.get_prompt("system_prompt")
-    assert "ASM AI Agent" in first_load
+    assert "Med Agent" in first_load
 
     # Manually overwrite cache memory data to prove cache hit verification
     prompt_loader._cache["system_prompt.md"] = "CACHE OVERRIDE VALUE"
@@ -22,7 +22,21 @@ def test_prompt_loader_caching():
     # Cleared cache reads from disk again
     prompt_loader.clear_cache()
     reloaded_load = prompt_loader.get_prompt("system_prompt")
-    assert "ASM AI Agent" in reloaded_load
+    assert "Med Agent" in reloaded_load
+
+
+def test_prompts_include_natural_turkish_style_rules():
+    prompt_loader.clear_cache()
+
+    system_prompt = prompt_loader.get_prompt("system_prompt")
+    report_prompt = prompt_loader.get_prompt("report_generation")
+
+    assert "natural" in system_prompt
+    assert "Doğal, kısa ve konuşulur Türkçe kullan" in report_prompt
+    assert "Mekanik rapor kalıpları" in report_prompt
+    assert "Sorgu sonucu" not in report_prompt
+    assert "listelenmiştir" not in report_prompt
+    assert "tespit edilmiştir" not in report_prompt
 
 
 def test_prompt_loader_missing_file():

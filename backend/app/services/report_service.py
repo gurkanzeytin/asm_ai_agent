@@ -18,7 +18,7 @@ from app.shared.result_limits import DEFAULT_GROUPED_RESULT_LIMIT
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_TURKISH_TITLE = "Sorgu Sonucu"
+_DEFAULT_TURKISH_TITLE = "Yanıt"
 
 
 class ReportService(IReportService):
@@ -63,7 +63,9 @@ class ReportService(IReportService):
                 return self._render_insight_report(
                     question, insights, query_result, execution_id, start_time
                 )
-            template_result = self.template_renderer.render(report_type, query_result)
+            template_result = self.template_renderer.render(
+                report_type, query_result, question=question
+            )
             if template_result is not None:
                 latency_ms = (time.perf_counter() - start_time) * 1000
                 self._log_report_telemetry(
@@ -198,7 +200,7 @@ class ReportService(IReportService):
             table_result = self.template_renderer.render(ReportType.TABLE, capped)
 
             lines: list[str] = [f"# {insights.title}", ""]
-            lines += ["## Sorgu Sonucu", insights.summary, ""]
+            lines += ["## Yanıt", insights.summary, ""]
             findings = list(insights.highlights) + list(insights.observations)
             if findings:
                 lines.append("## Öne Çıkan Bulgular")
@@ -273,7 +275,7 @@ class ReportService(IReportService):
             llm_invoked=True,
         )
         return GeneratedReport(
-            title=template_result.title if template_result else "Sorgu Sonucu",
+            title=template_result.title if template_result else "Sonuçlar",
             summary=None,
             markdown=template_result.markdown if template_result else "",
             insights=None,

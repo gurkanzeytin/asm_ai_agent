@@ -75,14 +75,17 @@ def _data_only_report(row_count: int) -> GeneratedReport:
     if row_count == 0:
         return GeneratedReport(
             title="Sonuç Bulunamadı",
-            markdown="İstenen sorgu çalıştı ancak eşleşen kayıt bulunamadı.",
+            markdown=(
+                "Bu kriterlere uygun kayıt bulunamadı. Filtreyi sadeleştirmeyi veya "
+                "tarih aralığını genişletmeyi deneyebilirsiniz."
+            ),
             provider="static",
             model="data_only_output",
             latency_ms=0.0,
         )
     return GeneratedReport(
-        title="Veri Hazır",
-        markdown=f"{row_count} satırlık sonuç hazır.",
+        title="Sonuçlar",
+        markdown=f"{row_count} satır döndü. Tabloyu aşağıda inceleyebilirsiniz.",
         provider="static",
         model="data_only_output",
         latency_ms=0.0,
@@ -91,8 +94,8 @@ def _data_only_report(row_count: int) -> GeneratedReport:
 
 def _visualization_only_report() -> GeneratedReport:
     return GeneratedReport(
-        title="Grafik Hazır",
-        markdown="Grafik için gerekli veri hazır.",
+        title="Grafik",
+        markdown="Grafiği aşağıda inceleyebilirsiniz.",
         provider="static",
         model="visualization_only_output",
         latency_ms=0.0,

@@ -466,6 +466,32 @@ def test_sonucu_is_not_extracted_as_a_doctor_filter_candidate():
 
 
 @pytest.mark.asyncio
+async def test_bunlari_dimension_followup_keeps_session_context():
+    chain = _Chain()
+    first, _ = await chain.turn(
+        "2025 yilinda randevu durumuna gore toplam randevu sayisini goster."
+    )
+    assert first.dimensions == ["RandevuDurumu"]
+    assert _date(first) == ("2025-01-01", "2025-12-31")
+
+    second, _ = await chain.turn("Sadece gerceklesenleri goster.")
+    assert "RandevuDurumu = 'Gerçekleşti'" in second.extra_filters
+    assert _date(second) == ("2025-01-01", "2025-12-31")
+
+    third, resolution = await chain.turn(
+        "Bunlari bolumlere gore ilk 5 olacak sekilde sirala."
+    )
+
+    assert resolution.follow_up_detected is True
+    assert "pronoun_reference" in resolution.follow_up_signals
+    assert third.dimensions == ["GenelRandevuBolumAdi"]
+    assert third.metrics == ["appointment_count"]
+    assert third.limit == 5
+    assert "RandevuDurumu = 'Gerçekleşti'" in third.extra_filters
+    assert _date(third) == ("2025-01-01", "2025-12-31")
+
+
+@pytest.mark.asyncio
 async def test_ayni_kapsami_dimension_followup_keeps_previous_date_scope():
     chain = _Chain()
     await chain.turn("2025 ilk ceyrekte aylik randevu trendini grafik olarak goster.")

@@ -23,9 +23,9 @@ class GenerateClarificationNode(IAgentNode):
                 title = "Netleştirme Gerekli"
             else:
                 clarification_text = (
-                    "I'm not sure what you'd like to know. Could you rephrase your question?"
+                    "Ne öğrenmek istediğinizi tam anlayamadım. Soruyu biraz daha açık yazar mısınız?"
                 )
-                title = "Clarification Required"
+                title = "Netleştirme Gerekli"
 
             report_dto = GeneratedReport(
                 title=title,

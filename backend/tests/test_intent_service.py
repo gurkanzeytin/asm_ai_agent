@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from langgraph.graph.state import CompiledStateGraph
 
 from app.agent.graph import AgentGraphBuilder
+from app.agent.nodes.generate_chat_response import GenerateChatResponseNode
 from app.agent.state import AgentState
 from app.application_models.intent import IntentResult, IntentType
 from app.application_models.workflow_models import QueryResult
@@ -137,6 +138,38 @@ def test_help_service_caching_and_reload(temp_help_file):
         temp_help_file.write_text("### Stale Help Guidance", encoding="utf-8")
         # Should return cached value
         assert service_cached.get_help_markdown() == "### Updated Help Guidance"
+
+
+def test_default_greeting_resource_is_turkish():
+    node = GenerateChatResponseNode(
+        prompt_service=AsyncMock(spec=IPromptService),
+        llm_provider=AsyncMock(spec=ILLMProvider),
+    )
+
+    with patch.object(settings, "DEBUG", True):
+        greeting = node._get_greeting_text()
+
+    assert "Merhaba" in greeting
+    assert "Med Agent" in greeting
+    assert "ASM AI" not in greeting
+    assert "Türkçe olarak" not in greeting
+    assert "Hello" not in greeting
+
+
+def test_greeting_fallback_is_turkish(tmp_path):
+    node = GenerateChatResponseNode(
+        prompt_service=AsyncMock(spec=IPromptService),
+        llm_provider=AsyncMock(spec=ILLMProvider),
+        greetings_file_path=tmp_path / "missing-greetings.md",
+    )
+
+    greeting = node._read_greetings_file()
+
+    assert "Merhaba" in greeting
+    assert "Med Agent" in greeting
+    assert "ASM AI" not in greeting
+    assert "Türkçe olarak" not in greeting
+    assert "Hello" not in greeting
 
 
 @pytest.mark.asyncio

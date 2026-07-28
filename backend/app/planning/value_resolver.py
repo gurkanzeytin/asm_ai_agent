@@ -110,8 +110,11 @@ _QUESTION_WORDS = {
     "bu", "su", "o", "iste",
     "sonuc", "sonucu", "sonucun", "sonuca", "sonucta", "sonuctan",
     "bunu", "bunun", "buna", "bunda", "bundan", "bununla",
+    "bunlar", "bunlari", "bunlarin", "bunlara", "bunlarda", "bunlardan", "bunlarla",
     "sunu", "sunun", "suna", "sunda", "sundan", "sununla",
+    "sunlar", "sunlari", "sunlarin", "sunlara", "sunlarda", "sunlardan", "sunlarla",
     "onu", "onun", "ona", "onda", "ondan", "onunla",
+    "onlar", "onlari", "onlarin", "onlara", "onlarda", "onlardan", "onlarla",
 }
 
 # AI-INTELLIGENCE-017 regression fix: bare domain/dimension nouns (folded

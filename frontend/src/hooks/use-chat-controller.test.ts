@@ -323,7 +323,7 @@ describe("useChatController", () => {
         rows: [{ Id: 1, BaslangicTarihi: "2026-01-01T09:00:00" }],
         row_count: 1,
       },
-      report: { markdown: "Sonuçlar aşağıda listelenmiştir." },
+      report: { markdown: "Tabloyu aşağıda inceleyebilirsiniz." },
     });
     const { result } = renderHook(() => useChatController());
 

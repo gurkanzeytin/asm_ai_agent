@@ -143,6 +143,8 @@ async def test_data_only_workflow_returns_table_without_report_generation():
     assert result.analytics is None
     assert result.generated_report is not None
     assert result.generated_report.model == "data_only_output"
+    assert result.generated_report.title == "Sonuçlar"
+    assert result.generated_report.markdown == "1 satır döndü. Tabloyu aşağıda inceleyebilirsiniz."
 
 
 @pytest.mark.asyncio
@@ -161,3 +163,5 @@ async def test_visualization_only_workflow_returns_chart_metadata_without_llm_re
     assert result.analytics.visualization is not None
     assert result.generated_report is not None
     assert result.generated_report.model == "visualization_only_output"
+    assert result.generated_report.title == "Grafik"
+    assert result.generated_report.markdown == "Grafiği aşağıda inceleyebilirsiniz."

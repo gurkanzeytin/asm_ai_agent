@@ -117,4 +117,7 @@ class GenerateChatResponseNode(IAgentNode):
         try:
             return self._greetings_file_path.read_text(encoding="utf-8").strip()
         except Exception:
-            return "Hello! I am your ASM AI assistant. How can I help you today?"
+            return (
+                "Merhaba! Ben Med Agent. Randevu verileriyle ilgili "
+                "sorularınızda size yardımcı olabilirim."
+            )
