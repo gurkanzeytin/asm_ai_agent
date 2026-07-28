@@ -184,6 +184,40 @@ def test_engine_comparison_on_categorical():
     assert result.visualization.type == VisualizationType.BAR_CHART
 
 
+RATE_CATEGORICAL_RESULT = _query_result(
+    ["CinsiyetId", "no_show_rate"],
+    [
+        {"CinsiyetId": "K", "no_show_rate": 9.42},
+        {"CinsiyetId": "E", "no_show_rate": 8.80},
+    ],
+)
+
+
+def test_rate_metric_has_no_share_distribution():
+    """A rate/average metric column must NOT get a share-of-total distribution —
+    summing per-group rates and computing shares is meaningless and produced a
+    "Toplam 18,2 kayıttan 9,4 tanesi (%51,7)" narrative for two no-show rates
+    (live 2026-07-28)."""
+    engine = AnalyticsEngine()
+
+    result = engine.analyze("Cinsiyete göre gelmeme oranı", RATE_CATEGORICAL_RESULT)
+
+    assert result.data_shape == DataShape.CATEGORICAL
+    assert "distribution" not in result.metrics
+    # Value comparison facts are still available for the narrative.
+    assert result.metrics["top_category"] == "K"
+    assert result.metrics["bottom_category"] == "E"
+
+
+def test_count_metric_keeps_share_distribution():
+    """The additive-count case must keep its share-of-total distribution."""
+    engine = AnalyticsEngine()
+
+    result = engine.analyze("Hangi bölüm daha yoğun?", CATEGORICAL_RESULT)
+
+    assert result.metrics["distribution"]["Psikiyatri"] == 50.0
+
+
 def test_engine_growth_rate_intent():
     engine = AnalyticsEngine()
 

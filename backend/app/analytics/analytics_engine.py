@@ -104,7 +104,9 @@ class AnalyticsEngine:
         labels = self._labels(query_result, label_column or temporal_column)
 
         grain = plan.grouping_granularity if plan else None
-        metrics = self._compute_metrics(data_shape, values, labels, grain)
+        metrics = self._compute_metrics(
+            data_shape, values, labels, grain, metric_column=metric_column
+        )
         insights = self._prepare_insights(data_shape, metrics.scalar, labels, values)
         analytics_type = self._analytics_type(intents, data_shape)
 
@@ -414,6 +416,7 @@ class AnalyticsEngine:
         values: list[float],
         labels: list[str],
         grain: str | None = None,
+        metric_column: str | None = None,
     ) -> "_ComputedMetrics":
         if not values:
             return _ComputedMetrics(scalar={"count": 0}, trend_metrics=None)
@@ -493,13 +496,51 @@ class AnalyticsEngine:
             ]
             metrics["top_category"] = ranked[0][0]
             metrics["bottom_category"] = ranked[-1][0]
+            # A share-of-total distribution is only meaningful for an ADDITIVE
+            # metric (a count/sum). For a rate/average/percentage metric,
+            # summing the per-group values and computing each group's "share"
+            # is nonsense — e.g. two departments' no-show rates 8.9% and 6.7%
+            # were narrated as "Toplam 15,6 kayıttan 8,9 tanesi (%57,1)..."
+            # (live 2026-07-28). Skip the distribution so the narrative falls
+            # back to a value comparison (highest/lowest) instead.
             grand_total = sum(value for _, value in labeled)
-            if grand_total > 0 and len(labeled) <= _MAX_DISTRIBUTION_CATEGORIES:
+            if (
+                grand_total > 0
+                and len(labeled) <= _MAX_DISTRIBUTION_CATEGORIES
+                and self._is_additive_metric(metric_column)
+            ):
                 metrics["distribution"] = {
                     label: round(value / grand_total * 100, 2) for label, value in ranked
                 }
 
         return _ComputedMetrics(scalar=metrics, trend_metrics=trend_metrics)
+
+    # Non-additive metric signals: a value that is itself a rate/ratio/average
+    # cannot be summed across groups, so no share-of-total distribution applies.
+    _NON_ADDITIVE_TOKENS = (
+        "rate",
+        "ratio",
+        "average",
+        "avg",
+        "mean",
+        "oran",
+        "ortalama",
+        "yuzde",
+        "percentage",
+        "percent",
+    )
+
+    def _is_additive_metric(self, metric_column: str | None) -> bool:
+        """True when per-group values may be summed (a count/total).
+
+        Defaults to True for unknown columns — most metrics are counts, and the
+        share narrative is correct for them; only clearly rate/average-shaped
+        column names are treated as non-additive.
+        """
+        if not metric_column:
+            return True
+        folded = metric_column.lower()
+        return not any(token in folded for token in self._NON_ADDITIVE_TOKENS)
 
     # ── Insight preparation (Part 5 — consumed by a future LLM) ───────────────
 
