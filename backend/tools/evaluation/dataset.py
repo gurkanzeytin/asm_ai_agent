@@ -55,8 +55,14 @@ def load_evaluation_dataset(path: str | Path | None = None) -> EvaluationDataset
     return dataset
 
 
+# Derived dimensions the planner produces that are NOT physical view columns
+# (rendered as CASE/computed expressions by the SQL builder). Legitimate as an
+# expected dimension even though they are absent from the column catalog.
+_DERIVED_DIMENSIONS = {"DayType"}
+
+
 def validate_evaluation_dataset(dataset: EvaluationDataset) -> None:
-    known_columns = load_column_catalog().column_names()
+    known_columns = set(load_column_catalog().column_names()) | _DERIVED_DIMENSIONS
     known_metrics = set(load_metric_catalog().by_id())
     known_analysis = SUPPORTED_ANALYSIS_TYPES | EXTRA_ANALYSIS_TYPES
     seen_ids: set[str] = set()
@@ -113,7 +119,11 @@ def select_cases(
         ]
     elif suite == "live":
         selected = [case for case in dataset.cases if case.requires_live_db]
-    else:
+    elif suite == "blind":
         selected = [case for case in dataset.cases if case.blind]
+    else:
+        # Any other named suite matches cases by their own `suite` field
+        # (e.g. "expert" white-box regression cases).
+        selected = [case for case in dataset.cases if case.suite == suite]
     return selected[:limit] if limit else selected
 

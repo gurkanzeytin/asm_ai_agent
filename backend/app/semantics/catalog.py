@@ -291,6 +291,7 @@ _GRANULARITY_TERMS = [
             "ay bazinda",
             "aylara gore",
             "aydan aya",
+            "her ay",
             "ayina gore",
             "ayina ve",
             "ayina gore say",

@@ -72,6 +72,17 @@ def _exit_code(run) -> int:
     ]
     if acceptance_failures:
         return 2
+    # Expert white-box regression cases (EXP-*) lock in shipped capabilities;
+    # ANY failure is a hard gate — the SQL-shape assertions live in the
+    # sql_semantics layer, which the aggregate accuracy thresholds below do not
+    # cover, so they must be checked explicitly.
+    expert_failures = [
+        result.case_id
+        for result in run.results
+        if result.case_id.startswith("EXP-") and not result.passed and not result.skipped
+    ]
+    if expert_failures:
+        return 4
     routing = run.summary.layer_accuracy.get("routing", 100.0)
     sql_generation = run.summary.layer_accuracy.get("sql_generation", 100.0)
     if routing < 95.0 or sql_generation < 95.0:

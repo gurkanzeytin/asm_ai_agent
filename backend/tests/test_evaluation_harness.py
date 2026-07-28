@@ -88,6 +88,56 @@ def test_raw_detail_detector_flags_detail_projection():
     )
 
 
+def test_raw_detail_detector_allows_columns_inside_an_aggregate():
+    """The lead-time metric AVG(CAST(DATEDIFF(day, CreatedDate, BaslangicTarihi)
+    AS FLOAT)) references CreatedDate INSIDE an aggregate — that is not a raw
+    detail leak and must not be flagged (2026-07-28)."""
+    case = [case for case in load_evaluation_dataset().cases if case.id == "E2E-RW-007"][0]
+    stage = score_sql_semantics(
+        case,
+        "SELECT AVG(CAST(DATEDIFF(day, CreatedDate, BaslangicTarihi) AS FLOAT)) "
+        "AS appointment_lead_time_average FROM dbo.vw_RandevuRaporu;",
+    )
+    assert not any(
+        failure.failure_code == FailureCode.RAW_DETAIL_INSTEAD_OF_AGGREGATE
+        for failure in stage.failures
+    )
+
+
+def test_must_include_sql_and_must_not_include_sql_substring_assertions():
+    """The free-form SQL-substring escape hatch (must_include_sql /
+    must_not_include_sql) validates capability-specific SQL shapes."""
+    case = [case for case in load_evaluation_dataset().cases if case.id == "EXP-THRESH-GT-001"][0]
+    # Missing the required HAVING fragment → SQL_SHAPE_MISMATCH.
+    missing = score_sql_semantics(
+        case,
+        "SELECT GenelRandevuBolumAdi, COUNT(*) AS appointment_count FROM dbo.vw_RandevuRaporu "
+        "WHERE BaslangicTarihi >= '2024-01-01' GROUP BY GenelRandevuBolumAdi;",
+    )
+    assert any(f.failure_code == FailureCode.SQL_SHAPE_MISMATCH for f in missing.failures)
+    # The real deterministic SQL for this case satisfies every fragment.
+    from app.database_intelligence.models import ViewMetadata
+    from app.planning.planner import QueryPlanner
+    from app.services.deterministic_sql_builder import DeterministicSQLBuilder
+    from app.services.query_analyzer import QueryAnalyzer
+
+    view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+    plan = QueryPlanner().build_plan(case.question, QueryAnalyzer().analyze(case.question), tables=[], views=[view])
+    built = DeterministicSQLBuilder().build(plan)
+    ok = score_sql_semantics(case, built.sql, plan)
+    assert not any(f.failure_code == FailureCode.SQL_SHAPE_MISMATCH for f in ok.failures), ok.failures
+
+
+def test_expert_suite_selects_only_expert_cases():
+    from tools.evaluation.dataset import select_cases
+
+    dataset = load_evaluation_dataset()
+    expert = select_cases(dataset, suite="expert")
+    assert expert, "expert suite must not be empty"
+    assert all(case.suite == "expert" for case in expert)
+    assert all(case.id.startswith("EXP-") for case in expert)
+
+
 def test_result_contract_and_final_answer_checks():
     run = EvaluationRunner().run(
         case_id="E2E-RW-004",

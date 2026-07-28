@@ -23,6 +23,7 @@ class FailureCode(StrEnum):
     UNKNOWN_COLUMN = "UNKNOWN_COLUMN"
     WRONG_VIEW = "WRONG_VIEW"
     RAW_DETAIL_INSTEAD_OF_AGGREGATE = "RAW_DETAIL_INSTEAD_OF_AGGREGATE"
+    SQL_SHAPE_MISMATCH = "SQL_SHAPE_MISMATCH"
     MISSING_GROUP_BY = "MISSING_GROUP_BY"
     WRONG_RATIO_DENOMINATOR = "WRONG_RATIO_DENOMINATOR"
     STATUS_FILTER_BREAKS_DENOMINATOR = "STATUS_FILTER_BREAKS_DENOMINATOR"
@@ -83,6 +84,13 @@ class SQLRequirements(BaseModel):
     must_include_features: list[str] = Field(default_factory=list)
     must_not_include_features: list[str] = Field(default_factory=list)
     must_not_use_columns: list[str] = Field(default_factory=list)
+    # Free-form, case-insensitive substring assertions on the generated SQL.
+    # A general escape hatch for validating capability-specific SQL shapes that
+    # the fixed feature vocabulary above does not cover (HAVING thresholds,
+    # TOP (N) PERCENT, weekday/weekend CASE, lead-time DATEDIFF, exact date
+    # ranges, etc.).
+    must_include_sql: list[str] = Field(default_factory=list)
+    must_not_include_sql: list[str] = Field(default_factory=list)
 
 
 class AnswerRequirements(BaseModel):

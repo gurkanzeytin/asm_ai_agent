@@ -524,9 +524,18 @@ class QueryAnalyzer:
         )
         explicit_dates = list(explicit_date_pattern.finditer(query_ascii))
         explicit_date_spans = [match.span() for match in explicit_dates]
-        _year_month_matches = list(
-            re.finditer(rf"\b(20\d{{2}}|19\d{{2}})\s+({month_alternatives})\b", query_ascii)
+        # Year then month, tolerating a Turkish possessive connector between
+        # them ("2025 YILININ mayıs ayında"). Without the connector, "2025
+        # yılının mayıs" matched neither the adjacent year+month pattern (the
+        # "yılının" broke adjacency) nor cleanly — the bare-year detector took
+        # "2025" as the whole year AND the bare-month detector took "mayıs"
+        # with today's year, producing TWO conflicting ranges (2025 full year
+        # AND May 2026) that ANDed to an empty result (robustness probe
+        # 2026-07-28).
+        year_month_pattern = (
+            rf"\b(20\d{{2}}|19\d{{2}})\s+(?:yil\w*\s+|nin\s+|in\s+)?({month_alternatives})\b"
         )
+        _year_month_matches = list(re.finditer(year_month_pattern, query_ascii))
         _month_year_matches = list(
             re.finditer(rf"\b({month_alternatives})\s+(20\d{{2}}|19\d{{2}})\b", query_ascii)
         )
@@ -837,10 +846,10 @@ class QueryAnalyzer:
                 self._date_range(match.group(0), date(year, 1, 1), date(year, 12, 31), "year")
             )
 
-        # Explicit month-year pairs resolve as separate ordered periods.
-        for match in re.finditer(
-            rf"\b(20\d{{2}}|19\d{{2}})\s+({month_alternatives})\b", query_ascii
-        ):
+        # Explicit month-year pairs resolve as separate ordered periods. Uses
+        # the same possessive-tolerant year+month pattern as the span detection
+        # above so "2025 yılının mayıs ayında" resolves to May 2025.
+        for match in re.finditer(year_month_pattern, query_ascii):
             if self._overlaps_any(match.span(), explicit_date_spans + month_range_spans):
                 continue
             year, month = int(match.group(1)), months_ascii[match.group(2)]

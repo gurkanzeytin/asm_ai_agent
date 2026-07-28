@@ -73,6 +73,11 @@ def test_query_analyzer_temporal_variants(query, expected_start, expected_end):
         # two ANDed ranges produced an always-empty SQL predicate.
         ("2025 Mayıs ayında kaç randevu oldu?", date(2025, 5, 1), date(2025, 5, 31)),
         ("Mayıs 2025 randevu sayısı", date(2025, 5, 1), date(2025, 5, 31)),
+        # Possessive connector between year and month ("2025 YILININ mayıs
+        # ayında") — used to produce TWO ranges (full 2025 + May of today's
+        # year) that ANDed to empty (robustness probe 2026-07-28).
+        ("2025 yılının Mayıs ayında randevu adedi", date(2025, 5, 1), date(2025, 5, 31)),
+        ("2025 yılı Haziran ayında randevu", date(2025, 6, 1), date(2025, 6, 30)),
     ],
 )
 def test_query_analyzer_year_qualified_month_single_range(query, expected_start, expected_end):

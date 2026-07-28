@@ -190,6 +190,18 @@ def score_sql_semantics(case: EvaluationCase, sql: str | None, plan: QueryPlan |
         where = tree.find(exp.Where)
         if where and "randevudurumu" in where.sql(dialect="tsql").lower():
             failures.append(_failure(case, EvaluationStage.SQL_SEMANTICS, FailureCode.STATUS_FILTER_BREAKS_DENOMINATOR, "conditional numerator", "status WHERE", plan, sql))
+    # General case-insensitive substring assertions — the capability-specific
+    # escape hatch (HAVING thresholds, TOP (N) PERCENT, weekday CASE, exact date
+    # ranges, ...) that the fixed feature vocabulary above does not cover.
+    # Match against BOTH the lowercased and the raw SQL so Turkish-cased string
+    # literals ("N'Hafta İçi'") — where Python's str.lower() inserts a combining
+    # dot on 'İ' — still compare correctly.
+    for fragment in case.sql_requirements.must_include_sql:
+        if fragment.lower() not in sql_lower and fragment not in sql:
+            failures.append(_failure(case, EvaluationStage.SQL_SEMANTICS, FailureCode.SQL_SHAPE_MISMATCH, f"contains {fragment!r}", "missing", plan, sql))
+    for fragment in case.sql_requirements.must_not_include_sql:
+        if fragment.lower() in sql_lower or fragment in sql:
+            failures.append(_failure(case, EvaluationStage.SQL_SEMANTICS, FailureCode.SQL_SHAPE_MISMATCH, f"absent {fragment!r}", "present", plan, sql))
     return _stage(EvaluationStage.SQL_SEMANTICS, failures, start)
 
 
@@ -270,11 +282,19 @@ def _raw_detail_projection(tree: exp.Expression) -> bool:
     if not select:
         return False
     projections = list(select.expressions)
-    has_aggregate = any(any(node for node in proj.find_all(exp.AggFunc)) for proj in projections)
+    has_aggregate = any(proj.find(exp.AggFunc) for proj in projections)
     if not has_aggregate:
         return False
-    rendered = " ".join(proj.sql(dialect="tsql") for proj in projections).lower()
-    return any(column.lower() in rendered for column in RAW_DETAIL_COLUMNS)
+    detail = {column.lower() for column in RAW_DETAIL_COLUMNS}
+    # A raw-detail column is fine INSIDE an aggregate — e.g. the lead-time
+    # metric AVG(CAST(DATEDIFF(day, CreatedDate, BaslangicTarihi) AS FLOAT)).
+    # Only a bare projection of such a column (outside any aggregate) alongside
+    # the aggregates is a genuine raw-detail leak.
+    for proj in projections:
+        for column in proj.find_all(exp.Column):
+            if column.name.lower() in detail and column.find_ancestor(exp.AggFunc) is None:
+                return True
+    return False
 
 
 def _looks_like_raw_dump(text: str) -> bool:

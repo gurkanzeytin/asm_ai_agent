@@ -214,6 +214,20 @@ def test_lead_time_wins_over_duration_for_its_own_phrasing():
     assert "appointment_duration_average" not in matched
 
 
+def test_passive_gelinmeyen_rate_maps_to_no_show_rate():
+    """Passive voice "gelinmeyen ... oranı" (vs active "gelmeyen") must resolve
+    to no_show_rate, not fall back to a plain count (robustness probe
+    2026-07-28)."""
+    matched = catalog.match_metrics(fold("2024 yılında gelinmeyen randevu oranı"))
+    assert "no_show_rate" in matched
+
+
+def test_her_ay_triggers_monthly_granularity():
+    """"her ay kaç randevu" is a monthly breakdown, not a single scalar count
+    (robustness probe 2026-07-28)."""
+    assert catalog.match_granularity(fold("2024 yılında her ay kaç randevu olmuş")) == "month"
+
+
 @pytest.mark.parametrize(
     "question",
     [
