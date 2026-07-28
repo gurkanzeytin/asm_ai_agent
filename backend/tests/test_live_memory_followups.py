@@ -223,6 +223,65 @@ def test_planner_extracts_aggregate_threshold_variants():
         assert plan.aggregate_threshold.value == value, question
 
 
+def test_en_az_threshold_does_not_double_as_a_row_limit():
+    """'en az 500 randevusu olan doktorlar' means at-least-500 (a HAVING), not
+    the TOP 500 rows — the same number must not become a spurious row limit
+    (live UI 2026-07-28)."""
+    analyzer = QueryAnalyzer()
+    planner = QueryPlanner()
+    view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+    question = "2023 yilinda en az 500 randevusu olan doktorlari randevu sayisina gore sirala"
+    analysis = analyzer.analyze(question)
+    plan = planner.build_plan(question, analysis, [], views=[view])
+    assert plan.aggregate_threshold is not None
+    assert plan.aggregate_threshold.operator == ">="
+    assert plan.aggregate_threshold.value == 500
+    assert plan.limit is None
+    built = DeterministicSQLBuilder().build(plan)
+    assert isinstance(built, DeterministicSQL)
+    assert "HAVING COUNT(*) >= 500" in built.sql
+    assert "TOP (500)" not in built.sql
+
+
+def test_daily_average_is_a_scalar_not_a_per_day_series():
+    """'günlük ortalama randevu sayısı' averages over days in its own formula —
+    it must NOT also GROUP BY day (which collapses each group to one date and
+    turns the average into that day's raw count; live UI 2026-07-28)."""
+    analyzer = QueryAnalyzer()
+    planner = QueryPlanner()
+    view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+    question = "2024 yilinda gunluk ortalama randevu sayisi nedir"
+    analysis = analyzer.analyze(question)
+    plan = planner.build_plan(question, analysis, [], views=[view])
+    assert plan.grouping_granularity is None
+    built = DeterministicSQLBuilder().build(plan)
+    assert isinstance(built, DeterministicSQL)
+    assert "GROUP BY" not in built.sql.upper()
+    # A genuine daily SERIES ("günlük randevu sayısı trendi") must still bucket.
+    trend_q = "2024 yilinda gunluk randevu sayisi trendini goster"
+    trend_plan = planner.build_plan(trend_q, analyzer.analyze(trend_q), [], views=[view])
+    assert trend_plan.grouping_granularity == "day"
+
+
+def test_query_analyzer_detects_half_year_and_month_ranges():
+    """'ilk/ikinci/son yarı' and 'Ocak-Haziran arası' are real date ranges, not
+    a whole year or a single month (live UI 2026-07-28)."""
+    analyzer = QueryAnalyzer()
+    cases = {
+        "2024 Ocak-Haziran arasi aylik gelmeme orani trendini goster": ("2024-01-01", "2024-06-30"),
+        "2024 yilinin ilk yarisinda toplam randevu": ("2024-01-01", "2024-06-30"),
+        "2023 ikinci yarisinda toplam randevu": ("2023-07-01", "2023-12-31"),
+        "2024 son yarisinda bolum bazinda randevu": ("2024-07-01", "2024-12-31"),
+        "2024 Mart ile Agustos arasi randevu sayisi": ("2024-03-01", "2024-08-31"),
+    }
+    for question, (start, end) in cases.items():
+        analysis = analyzer.analyze(question)
+        assert len(analysis.detected_dates) == 1, question
+        detected = analysis.detected_dates[0]
+        assert detected.start_date.isoformat() == start, question
+        assert detected.end_date.isoformat() == end, question
+
+
 def test_aggregate_threshold_renders_as_having_on_the_group_aggregate():
     analyzer = QueryAnalyzer()
     planner = QueryPlanner()

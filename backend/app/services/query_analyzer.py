@@ -611,6 +611,62 @@ class QueryAnalyzer:
                 )
             )
 
+        # Calendar-half phrases: "2024'ün ilk yarısı" (Jan-Jun), "2024 ikinci
+        # yarısında" / "2023 son yarısı" (Jul-Dec). Mirrors the quarter detector
+        # (live UI 2026-07-28: this phrasing kept the whole year, no half filter).
+        half_year_matches = list(
+            re.finditer(
+                rf"\b(20\d{{2}}|19\d{{2}})\s+(?:in\s+|nin\s+|un\s+|nun\s+|yil\w*\s+)?"
+                rf"(ilk|birinci|ikinci|son)\s+yari\w*\b",
+                query_ascii,
+                re.IGNORECASE,
+            )
+        )
+        half_year_spans = [match.span() for match in half_year_matches]
+        for match in half_year_matches:
+            year = int(match.group(1))
+            first_month, last_month = (
+                (1, 6) if match.group(2).lower() in ("ilk", "birinci") else (7, 12)
+            )
+            ranges.append(
+                self._date_range(
+                    match.group(0),
+                    date(year, first_month, 1),
+                    date(year, last_month, monthrange(year, last_month)[1]),
+                    "half",
+                )
+            )
+
+        # Month spans within one year: "2024 Ocak-Haziran arası", "2024 Ocak ile
+        # Haziran arası" — a real range, not just the first month (live UI
+        # 2026-07-28: only "Ocak" was detected, the trend ran over January
+        # alone). The year, when stated, precedes the first month.
+        months_lower = {name.lower(): number for name, number in months_ascii.items()}
+        month_range_matches = list(
+            re.finditer(
+                rf"\b(?:(20\d{{2}}|19\d{{2}})\s+(?:in\s+|nin\s+|un\s+|nun\s+|yil\w*\s+)?)?"
+                rf"({month_alternatives})\s*(?:-|–|—|\s+ile\s+|\s+ila\s+|\s+ile\b)\s*"
+                rf"({month_alternatives})\s+aras\w*",
+                query_ascii,
+                re.IGNORECASE,
+            )
+        )
+        month_range_spans = [match.span() for match in month_range_matches]
+        for match in month_range_matches:
+            year = int(match.group(1)) if match.group(1) else (same_sentence_anchor_year or today.year)
+            start_month = months_lower[match.group(2).lower()]
+            end_month = months_lower[match.group(3).lower()]
+            if end_month < start_month:
+                start_month, end_month = end_month, start_month
+            ranges.append(
+                self._date_range(
+                    match.group(0),
+                    date(year, start_month, 1),
+                    date(year, end_month, monthrange(year, end_month)[1]),
+                    "custom",
+                )
+            )
+
         for index in range(0, len(explicit_dates), 2):
             first = explicit_dates[index]
             first_date = date(
@@ -734,7 +790,8 @@ class QueryAnalyzer:
                 rf"\b{self._strip_diacritics(month_name)}\s+ay\w*\b", query_ascii
             ):
                 if self._overlaps_any(
-                    match.span(), explicit_date_spans + month_year_spans
+                    match.span(),
+                    explicit_date_spans + month_year_spans + month_range_spans,
                 ):
                     continue
                 bare_months_seen.add(month)
@@ -756,7 +813,12 @@ class QueryAnalyzer:
         ):
             if self._overlaps_any(
                 match.span(),
-                explicit_date_spans + month_year_spans + partial_year_spans + quarter_spans,
+                explicit_date_spans
+                + month_year_spans
+                + partial_year_spans
+                + quarter_spans
+                + half_year_spans
+                + month_range_spans,
             ):
                 continue
             year = int(match.group(1))
@@ -768,14 +830,14 @@ class QueryAnalyzer:
         for match in re.finditer(
             rf"\b(20\d{{2}}|19\d{{2}})\s+({month_alternatives})\b", query_ascii
         ):
-            if self._overlaps_any(match.span(), explicit_date_spans):
+            if self._overlaps_any(match.span(), explicit_date_spans + month_range_spans):
                 continue
             year, month = int(match.group(1)), months_ascii[match.group(2)]
             ranges.append(self._month_range(match.group(0), year, month))
         for match in re.finditer(
             rf"\b({month_alternatives})\s+(20\d{{2}}|19\d{{2}})\b", query_ascii
         ):
-            if self._overlaps_any(match.span(), explicit_date_spans):
+            if self._overlaps_any(match.span(), explicit_date_spans + month_range_spans):
                 continue
             year, month = int(match.group(2)), months_ascii[match.group(1)]
             ranges.append(self._month_range(match.group(0), year, month))

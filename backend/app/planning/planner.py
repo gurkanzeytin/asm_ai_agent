@@ -404,6 +404,17 @@ class QueryPlanner:
             resolved_limit = analysis.detected_limit
             if resolved_limit and intelligence["analysis_type"] == "time_trend":
                 resolved_limit = None
+            # "en az / en fazla N <noun>" is an aggregate THRESHOLD ("at least N
+            # appointments"), not a row count — but `_detect_limit_and_order`'s
+            # ranking-count branch also grabs that same N as a TOP (N). When the
+            # very same number was captured as the threshold, the row limit is
+            # spurious; drop it so we don't silently cap the group list.
+            if (
+                aggregate_threshold is not None
+                and resolved_limit is not None
+                and float(resolved_limit) == aggregate_threshold.value
+            ):
+                resolved_limit = None
 
             plan = QueryPlan(
                 question=question,
@@ -796,6 +807,15 @@ class QueryPlanner:
                 pattern = primary.analysis_type
             if granularity is None and primary.grouping_granularity:
                 granularity = primary.grouping_granularity
+            # A scalar self-averaging metric ("günlük ortalama randevu sayısı" ->
+            # daily_average_appointment_count) already divides by the distinct
+            # bucket count in its own formula, so it must stay a single row. The
+            # bucket WORD ("günlük") that also matched `match_granularity` would
+            # otherwise GROUP BY day, collapsing each group to one date and
+            # turning the average into that day's raw count. The metric's own
+            # declared granularity (None here) is authoritative for such metrics.
+            if primary.analysis_type == "average" and not primary.grouping_granularity:
+                granularity = None
             if primary.fixed_dimension and primary.fixed_dimension not in dimensions:
                 dimensions = dimensions + [primary.fixed_dimension]
 
