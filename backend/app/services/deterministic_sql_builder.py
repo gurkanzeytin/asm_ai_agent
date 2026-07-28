@@ -13,7 +13,11 @@ from dataclasses import dataclass, field
 
 from app.database_intelligence.value_catalog import FIELD_COLUMNS
 from app.planning.models import QueryPlan
-from app.semantics.catalog import AGE_GROUP_DERIVATION, load_metric_catalog
+from app.semantics.catalog import (
+    AGE_GROUP_DERIVATION,
+    DAY_TYPE_DERIVATION,
+    load_metric_catalog,
+)
 
 SUPPORTED_ANALYSIS_TYPES = {
     "count",
@@ -68,6 +72,10 @@ _DEPARTMENT_SPLIT_ALIAS = "dept_atomic"
 # `_standard`) so the two never drift apart.
 _AGE_GROUP_COLUMN = "DogumTarihi"
 _AGE_GROUP_EXPR = f"(DATEDIFF(year, {_AGE_GROUP_COLUMN}, GETDATE()) / 10) * 10"
+# Sentinel dimension for the weekday/weekend breakdown (catalog.DAY_TYPE_
+# DERIVATION). Not a real column — rendered from the plan's date column via a
+# DATEFIRST/locale-independent CASE (Mon=0..Sun=6, >= 5 == weekend).
+_DAY_TYPE_COLUMN = "DayType"
 FILTER_COLUMNS = {
     *(column for column, _tier in FIELD_COLUMNS.values()),
     "DoktorId",
@@ -140,6 +148,8 @@ class DeterministicSQLBuilder:
         if analysis_type == "variance_analysis":
             return self._variance(plan)
         if analysis_type == "time_trend":
+            if plan.dimensions or len(self._metric_ids(plan, "time_trend")) > 1:
+                return self._standard(plan, analysis_type)
             return self._trend(plan)
         if analysis_type == "list":
             return self._list(plan)
@@ -169,7 +179,7 @@ class DeterministicSQLBuilder:
 
         dimensions = self._dimensions(plan)
         time_bucket_expr = None
-        if plan.grouping_granularity and not dimensions:
+        if plan.grouping_granularity:
             date_column = (plan.date_filters[0].column if plan.date_filters else None) or DATE_COLUMN
             time_bucket_expr = self._time_bucket_expression(plan.grouping_granularity, date_column)
         splits_department = DEPARTMENT_COLUMN in dimensions
@@ -198,11 +208,24 @@ class DeterministicSQLBuilder:
             _AGE_GROUP_COLUMN in dimensions
             and AGE_GROUP_DERIVATION in plan.derived_calculations
         )
+        buckets_day_type = (
+            _DAY_TYPE_COLUMN in dimensions
+            and DAY_TYPE_DERIVATION in plan.derived_calculations
+        )
         output_alias_for = {DEPARTMENT_COLUMN: DEPARTMENT_COLUMN}
         group_expr_for = {DEPARTMENT_COLUMN: f"{_DEPARTMENT_SPLIT_ALIAS}.value"}
         if buckets_age:
             output_alias_for[_AGE_GROUP_COLUMN] = "age_group"
             group_expr_for[_AGE_GROUP_COLUMN] = _AGE_GROUP_EXPR
+        if buckets_day_type:
+            day_type_column = (
+                plan.date_filters[0].column if plan.date_filters else None
+            ) or DATE_COLUMN
+            output_alias_for[_DAY_TYPE_COLUMN] = "day_type"
+            group_expr_for[_DAY_TYPE_COLUMN] = (
+                f"CASE WHEN DATEDIFF(day, '19000101', {day_type_column}) % 7 >= 5 "
+                f"THEN N'Hafta Sonu' ELSE N'Hafta İçi' END"
+            )
         select_parts = [f"{time_bucket_expr} AS period_start"] if time_bucket_expr else []
         group_by_columns = [time_bucket_expr] if time_bucket_expr else []
         expected_aliases = ["period_start"] if time_bucket_expr else []
@@ -225,6 +248,11 @@ class DeterministicSQLBuilder:
         where = self._where(plan)
         if splits_department:
             empty_guard = f"{_DEPARTMENT_SPLIT_ALIAS}.value <> ''"
+            atomic_department_guard = self._atomic_department_guard(
+                self._department_filter_values(plan)
+            )
+            if atomic_department_guard:
+                empty_guard = f"{empty_guard} AND {atomic_department_guard}"
             where = (
                 f"{where.rstrip()} AND {empty_guard}\n" if where else f"WHERE {empty_guard}\n"
             )
@@ -238,16 +266,22 @@ class DeterministicSQLBuilder:
             if time_bucket_expr
             else self._order_by(plan, analysis_type, expected_aliases[-1])
         )
-        top = (
-            f"TOP ({plan.limit}) "
-            if plan.limit
-            and (
-                analysis_type in {"ranking", "top_n", "bottom_n"}
-                or plan.ranking is not None
-                or plan.order is not None
+        # A percentile slice ("en üstteki %10") renders as TOP (N) PERCENT with
+        # the ranking ORDER BY, cutting the top/bottom N% of groups. It needs a
+        # genuine ordering to be meaningful, so it only applies alongside one.
+        if plan.percentile and order_by:
+            top = f"TOP ({plan.percentile}) PERCENT "
+        else:
+            top = (
+                f"TOP ({plan.limit}) "
+                if plan.limit
+                and (
+                    analysis_type in {"ranking", "top_n", "bottom_n"}
+                    or plan.ranking is not None
+                    or plan.order is not None
+                )
+                else ""
             )
-            else ""
-        )
         sql = (
             f"SELECT {top}{', '.join(select_parts)}\n"
             f"{from_clause}"
@@ -717,12 +751,17 @@ class DeterministicSQLBuilder:
 
     def _dimensions(self, plan: QueryPlan) -> list[str]:
         return [
-            dimension for dimension in plan.dimensions[:2] if self._is_safe_identifier(dimension)
+            dimension for dimension in plan.dimensions if self._is_safe_identifier(dimension)
         ]
 
     def _where(self, plan: QueryPlan) -> str:
         clauses: list[str] = []
+        seen_dates: set[tuple[str | None, str, str]] = set()
         for date_filter in plan.date_filters:
+            key = (date_filter.column, date_filter.start_date, date_filter.end_date)
+            if key in seen_dates:
+                continue
+            seen_dates.add(key)
             column = date_filter.column or DATE_COLUMN
             clauses.append(
                 f"{column} >= '{date_filter.start_date}' AND {column} < DATEADD(day, 1, '{date_filter.end_date}')"
@@ -845,6 +884,23 @@ class DeterministicSQLBuilder:
             return predicates[0]
         return "(" + " OR ".join(predicates) + ")"
 
+    def _department_filter_values(self, plan: QueryPlan) -> list[str]:
+        values: list[str] = []
+        if plan.department_filter:
+            values.append(plan.department_filter)
+        resolved = plan.resolved_filters.get("department")
+        if resolved is not None and resolved.grounded:
+            values.extend(resolved.values)
+        return list(dict.fromkeys(value for value in values if value))
+
+    def _atomic_department_guard(self, values: list[str]) -> str:
+        if not values:
+            return ""
+        literals = [self._unicode_literal(value) for value in values]
+        if len(literals) == 1:
+            return f"{_DEPARTMENT_SPLIT_ALIAS}.value = {literals[0]}"
+        return f"{_DEPARTMENT_SPLIT_ALIAS}.value IN ({', '.join(literals)})"
+
     @staticmethod
     def _literal_text(literal: str) -> str | None:
         """Extracts the raw text from an N'...'/'...' literal; None for numbers."""
@@ -898,6 +954,8 @@ class DeterministicSQLBuilder:
                 (expr for metric_id, expr in metric_exprs if metric_id == threshold.metric),
                 None,
             )
+            if expression is None:
+                expression = self._metric_expr(threshold.metric)
         if expression is None:
             expression = metric_exprs[0][1]
         value = threshold.value

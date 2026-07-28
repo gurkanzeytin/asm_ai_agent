@@ -453,7 +453,13 @@
         "randevu alma suresi",
         "randevu alma oncesi sure",
         "randevu olusturma ile",
-        "onceden randevu"
+        "onceden randevu",
+        "olusturulma tarihi arasindaki",
+        "olusturulma arasinda kac gun",
+        "randevu ile olusturulma arasinda",
+        "olusturulma ile randevu arasinda",
+        "tarihi arasindaki gun farki",
+        "tarihleri arasindaki gun farki"
       ],
       "compatible_dimensions_group": "standard",
       "default_time_column": "BaslangicTarihi",

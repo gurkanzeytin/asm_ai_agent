@@ -58,6 +58,11 @@ _SELF_COUNT_DIMENSIONS: dict[str, set[str]] = {
 
 _NEGATION_PATTERN = re.compile(r"\b(olmayan|bulunmayan|almayan)\w*\b|\bhic\b")
 
+# Sentinel dimension name for the weekday/weekend derived grouping — not a real
+# view column; the SQL builder renders it as a DATEDIFF-based CASE expression
+# gated on catalog.DAY_TYPE_DERIVATION (mirrors the DogumTarihi age-group gate).
+_DAY_TYPE_DIMENSION = "DayType"
+
 # Bare single-sided gender reference ("kadin hasta orani") - distinct from the
 # two-word "kadin erkek orani" phrasing already covered by the CinsiyetId
 # dimension synonym list.
@@ -86,7 +91,20 @@ _GROUP_BY_PATTERN = re.compile(r"(\w+)\s+(?:baz(?:inda|li)\b|gore\b)")
 # stripping block in _resolve_intelligence).
 _STATUS_GROUPING_WORDS = {"durum", "duruma", "durumu", "durumuna", "durumda"}
 
-_ASCENDING_MARKERS = ("en az", "en dusuk", "en seyrek")
+_ASCENDING_MARKERS = (
+    "artan sirala",
+    "artan olarak sirala",
+    "en az",
+    "en dusuk",
+    "en seyrek",
+)
+_ORDER_ASC_MARKERS = ("artan sirala", "artan olarak sirala", "kucukten buyuge")
+_ORDER_DESC_MARKERS = (
+    "azalan sirala",
+    "azalan olarak sirala",
+    "buyukten kucuge",
+    "coktan aza",
+)
 
 _DESCRIPTIVE_PRIORITY = ("ad_soyad", "bolum_adi", "sirket_adi", "test_adi", "name", "title")
 
@@ -159,6 +177,13 @@ class QueryPlanner:
         aggregation = self._aggregation(analysis)
         ranking, order = self._ranking(analysis, signals.analysis_type, folded)
         aggregate_threshold = self._aggregate_threshold(folded)
+        percentile = self._percentile(question, folded)
+        compound_secondary = self._compound_secondary_clause(question, folded)
+        if compound_secondary:
+            scope_assumptions = scope_assumptions + [
+                "Bu soru birden fazla bölüm içeriyor; yalnızca ilk kısmı yanıtlandı. "
+                f"Şunu ayrıca sorabilirsiniz: “{compound_secondary}”."
+            ]
         extra_filters = self._extra_filters(folded)
         raw_list_request = self._raw_list_request(analysis, folded)
 
@@ -275,6 +300,32 @@ class QueryPlanner:
                 department_column=view_mapping.concept_column("Department", view_name),
                 status_column=view_mapping.status_column(view_name),
             )
+            if aggregate_threshold is not None and intelligence["metrics"]:
+                aggregate_threshold = aggregate_threshold.model_copy(
+                    update={"metric": intelligence["metrics"][0]}
+                )
+                if (
+                    intelligence["analysis_type"] == "bottom_n"
+                    and aggregate_threshold.operator in {">", ">="}
+                ):
+                    intelligence["analysis_type"] = "ranking"
+                    ranking = "DESC"
+                    order = "DESC"
+            # A percentile slice ("en üstteki %10") is a ranked TOP (N) PERCENT
+            # cut. Its N was also mis-detected as a plain row limit — drop that.
+            # The bottom direction ("en alttaki/en düşük %10") sorts ascending.
+            if percentile is not None:
+                if analysis.detected_limit == percentile:
+                    analysis = analysis.model_copy(update={"detected_limit": None})
+                is_bottom = any(
+                    marker in folded
+                    for marker in ("en alttaki", "alttaki", "en dusuk", "en az")
+                )
+                direction = "ASC" if is_bottom else "DESC"
+                ranking = direction
+                order = direction
+                if intelligence["analysis_type"] in (None, "count", "distribution"):
+                    intelligence["analysis_type"] = "ranking"
             # In an exclusion ("Beklemede ve İşlem Sürmekte olanları hariç tut"),
             # the named statuses also match their conditional metrics via the
             # catalog (beklemede -> waiting_count, işlem sürmekte ->
@@ -477,6 +528,7 @@ class QueryPlanner:
                 aggregation=aggregation,
                 ranking=ranking,
                 limit=resolved_limit,
+                percentile=percentile,
                 aggregate_threshold=aggregate_threshold,
                 order=order,
                 analysis_type=signals_type,
@@ -524,6 +576,7 @@ class QueryPlanner:
             aggregation=aggregation,
             ranking=ranking,
             limit=analysis.detected_limit,
+            percentile=percentile,
             aggregate_threshold=aggregate_threshold,
             order=order,
             analysis_type=signals.analysis_type,
@@ -761,6 +814,12 @@ class QueryPlanner:
             derived.append(catalog.AGE_GROUP_DERIVATION)
             if "DogumTarihi" not in dimensions:
                 dimensions = dimensions + ["DogumTarihi"]
+        if catalog.detect_day_type_request(folded):
+            derived.append(catalog.DAY_TYPE_DERIVATION)
+            if _DAY_TYPE_DIMENSION not in dimensions:
+                dimensions = dimensions + [_DAY_TYPE_DIMENSION]
+            if metrics == []:
+                metrics = ["appointment_count"]
 
         # Structural upgrades: two grouping dimensions mean a cross analysis, a
         # time bucket means a trend, and a detected period comparison overrides
@@ -874,15 +933,21 @@ class QueryPlanner:
         if (
             primary is not None
             and primary.formula_type == "count_distinct"
-            and not any(
-                marker in folded
-                for marker in ("gore", "bazinda", "bazli", "kirilim", "dagilim")
-            )
         ):
             self_columns = set(primary.required_columns) | _SELF_COUNT_DIMENSIONS.get(
                 primary.id, set()
             )
-            dimensions = [d for d in dimensions if d not in self_columns]
+            explicit_self_breakdown = any(
+                marker in folded
+                for marker in (
+                    "hasta bazinda",
+                    "hastaya gore",
+                    "doktor id",
+                    "doktor bazinda doktor",
+                )
+            )
+            if not explicit_self_breakdown:
+                dimensions = [d for d in dimensions if d not in self_columns]
             scalar_distinct_count = not dimensions
 
         # The final metric catalog definition is the sole source of truth for
@@ -1123,12 +1188,105 @@ class QueryPlanner:
         folded_question: str,
     ) -> tuple[str | None, str | None]:
         order = analysis.detected_order
+        explicit_direction = self._explicit_sort_direction(folded_question)
+        if explicit_direction is not None:
+            return explicit_direction, explicit_direction
         if analysis_type == "ranking":
             direction = (
                 "ASC" if any(marker in folded_question for marker in _ASCENDING_MARKERS) else "DESC"
             )
             return direction, order
         return (order, order) if order else (None, None)
+
+    def _explicit_sort_direction(self, folded_question: str) -> str | None:
+        if "sirala" not in folded_question and "siralay" not in folded_question:
+            return None
+        if any(marker in folded_question for marker in _ORDER_ASC_MARKERS):
+            return "ASC"
+        if any(marker in folded_question for marker in _ORDER_DESC_MARKERS):
+            return "DESC"
+        return "DESC"
+
+    # Strong interrogatives — each marks an INDEPENDENT question. Requiring one
+    # on BOTH sides of "ve"/"ayrıca" is what separates a genuine compound
+    # question ("toplam kaç randevu var VE en yoğun ay hangisiydi") from a mere
+    # coordinated noun phrase ("hafta içi ve hafta sonu", "kadın ve erkek",
+    # "Kadın Doğum ve Çocuk Sağlığı") — those carry no question word per side.
+    _COMPOUND_QUESTION_WORDS = (
+        "kac ",
+        "kaci",
+        "hangi",
+        "hangisi",
+        "nedir",
+        "ne kadar",
+        "kim ",
+        "kimin",
+        "kimdir",
+        "en yogun",
+        "en cok",
+        "en fazla",
+        "en yuksek",
+        "en dusuk",
+        "en az",
+    )
+
+    def _compound_secondary_clause(self, question: str, folded_question: str) -> str | None:
+        """Detects a two-part compound question and returns the secondary clause.
+
+        The planner produces exactly one QueryPlan, so a compound question
+        ("toplam kaç randevu var ve en yoğun ay hangisiydi") is answered only
+        for its first clause. Rather than silently drop the rest, return the
+        second question-bearing clause so the caller can state it was not
+        answered. Conservative by design: a clause counts only if it carries a
+        strong interrogative of its own, so coordinated noun phrases joined by
+        "ve" never trip it.
+        """
+        raw_parts = re.split(r"\s+(?:ve|ayrica|ayrıca)\s+", question, flags=re.IGNORECASE)
+        if len(raw_parts) < 2:
+            return None
+        question_parts = [
+            part.strip()
+            for part in raw_parts
+            if any(word in self._extractor.fold(part) for word in self._COMPOUND_QUESTION_WORDS)
+        ]
+        if len(question_parts) < 2:
+            return None
+        return question_parts[1]
+
+    def _percentile(self, question: str, folded_question: str) -> int | None:
+        """Detects a top/bottom percentile slice ("en üstteki %10'u göster").
+
+        The "%" sign is stripped by both normalization AND folding, so a "%N"
+        percentile is indistinguishable from a plain count once folded (and its
+        N is even misread as a TOP (N) row limit). Detect it from the RAW
+        question, where "%" survives; "yüzde N" (spelled) is caught on the
+        folded text. Only a top/bottom RANKING context qualifies, so a ratio
+        value ("gelmeme oranı %10") never triggers a percentile slice.
+        """
+        match = re.search(r"%\s*(\d{1,3})", question)
+        if match is None:
+            match = re.search(r"\byuzde\s+(\d{1,3})\b", folded_question)
+        if match is None:
+            return None
+        value = int(match.group(1))
+        if not 1 <= value <= 99:
+            return None
+        ranking_context = (
+            "en ustteki",
+            "en alttaki",
+            "ustteki",
+            "alttaki",
+            "en yuksek",
+            "en dusuk",
+            "en cok",
+            "en fazla",
+            "dilim",
+            "luk",
+            "lik",
+        )
+        if not any(marker in folded_question for marker in ranking_context):
+            return None
+        return value
 
     def _aggregate_threshold(self, folded_question: str) -> AggregateThreshold | None:
         """Extracts a HAVING-style bound on the grouped aggregate value.

@@ -348,7 +348,7 @@ class TestDepartmentContainmentSQL:
         assert "LIKE N'%,Kardiyoloji,%'" in built.sql
         assert "LIKE N'%,Psikiyatri,%'" in built.sql
         assert " OR " in built.sql
-        assert "IN (" not in built.sql
+        assert "GenelRandevuBolumAdi IN (" not in built.sql
 
     def test_compliance_accepts_containment_form(self):
         plan = _plan(

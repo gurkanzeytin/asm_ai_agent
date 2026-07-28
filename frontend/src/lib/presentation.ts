@@ -95,6 +95,7 @@ export const DIMENSION_LABELS_TR: Record<string, string> = {
   DogumTarihi: "Doğum Tarihi",
   CreatedDate: "Oluşturulma Tarihi",
   age_group: "Yaş Grubu",
+  day_type: "Gün Tipi",
   // Üç ve daha fazla varlığın karşılaştırıldığı kırılımın etiket sütunu
   // (backend deterministic_sql_builder._entity_breakdown). Karşılaştırılan
   // taraflar bölüm de şube de olabildiği için jenerik bir etiket kullanılır.

@@ -119,7 +119,11 @@
           "column": "CreatedDate",
           "terms": [
             "olusturulan",
+            "olusturulma",
+            "olusturma",
             "olusturuldu",
+            "kayit",
+            "kayit tarihi",
             "kaydedilen",
             "kaydedildi",
             "eklenen"

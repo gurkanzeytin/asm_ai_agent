@@ -12,6 +12,7 @@ from app.planning.value_resolver import (
     extract_candidate_phrases,
     extract_comparison_entities,
     extract_comparison_pair,
+    extract_filter_only_phrase,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,6 +87,22 @@ class ResolveFilterValuesNode(IAgentNode):
                 branch_filters = list(values)
 
         candidates = extract_candidate_phrases(plan.question)
+        short_filter_phrase = extract_filter_only_phrase(plan.question)
+        if short_filter_phrase:
+            retained_dimension_fields = {
+                "GenelRandevuBolumAdi": "department",
+                "SubeAdi": "branch",
+                "GenelRandevuKaynakAdi": "doctor",
+                "DoktorId": "doctor",
+                "HizmetAdi": "service",
+                "KategoriAdi": "category",
+                "RandevuTipiAdi": "appointment_type",
+            }
+            for dimension in plan.dimensions:
+                field_name = retained_dimension_fields.get(dimension)
+                if field_name and field_name not in candidates:
+                    candidates[field_name] = [short_filter_phrase]
+                    break
         if plan.scope == "all":
             # Organization-wide scope: never resolve a branch-family filter,
             # regardless of any capitalized-looking token near the phrase.

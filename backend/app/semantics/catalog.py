@@ -270,13 +270,33 @@ _PREVIOUS_PERIOD_PHRASES = (
     "onceki doneme gore",
 )
 
-_ASC_MARKERS = ("en dusuk", "en az", "en seyrek", "en alttaki", "en kisa")
+_ASC_MARKERS = (
+    "artan sirala",
+    "artan olarak sirala",
+    "en dusuk",
+    "en az",
+    "en seyrek",
+    "en alttaki",
+    "en kisa",
+)
 
 _GRANULARITY_TERMS = [
     ("hour", ("saatlik", "saat bazinda", "saatlere gore")),
     ("day", ("gunluk", "gun bazinda", "gunlere gore", "gun gun", "gune gore")),
     ("week", ("haftalik", "hafta bazinda", "haftalara gore", "haftaya gore dagilim")),
-    ("month", ("aylik", "ay bazinda", "aylara gore", "aydan aya")),
+    (
+        "month",
+        (
+            "aylik",
+            "ay bazinda",
+            "aylara gore",
+            "aydan aya",
+            "ayina gore",
+            "ayina ve",
+            "ayina gore say",
+            "ayina gore goster",
+        ),
+    ),
 ]
 
 _AGE_GROUP_TERMS = ("yas grubu", "yas gruplarina", "yas dagilimi", "yaslara gore", "yas araligi")
@@ -284,6 +304,26 @@ _AGE_GROUP_TERMS = ("yas grubu", "yas gruplarina", "yas dagilimi", "yaslara gore
 AGE_GROUP_DERIVATION = (
     "age_group = (DATEDIFF(year, DogumTarihi, GETDATE()) / 10) * 10 (10'luk yaş grupları)"
 )
+
+# Weekday/weekend breakdown. The derivation is DATEFIRST/locale independent:
+# 1900-01-01 was a Monday, so DATEDIFF(day, '19000101', <date>) % 7 gives
+# Mon=0..Sun=6, and >= 5 (Sat/Sun) is the weekend.
+DAY_TYPE_DERIVATION = (
+    "day_type = CASE WHEN DATEDIFF(day, '19000101', <date>) % 7 >= 5 "
+    "THEN N'Hafta Sonu' ELSE N'Hafta İçi' END (hafta içi / hafta sonu)"
+)
+
+
+def detect_day_type_request(folded_question: str) -> bool:
+    """True when the question wants a weekday-vs-weekend BREAKDOWN.
+
+    Triggers on an explicit "gün tipi" or on both "hafta içi" AND "hafta sonu"
+    appearing together (the comparison phrasing). A bare single side is a value
+    filter, not a grouping dimension, and is intentionally not matched here.
+    """
+    if "gun tipi" in folded_question or "gunun tipi" in folded_question:
+        return True
+    return "hafta ici" in folded_question and "hafta sonu" in folded_question
 
 
 # Light Turkish inflectional suffix stripper (after diacritic folding). Both the
@@ -480,6 +520,16 @@ def match_metrics(folded_question: str) -> list[str]:
                 and by_id[mid].formula == "COUNT(*)"
             )
         ]
+    if any(by_id[mid].formula_type != "count_rows_grouped" for mid in matched):
+        matched = [
+            mid
+            for mid in matched
+            if not (
+                by_id[mid].formula_type == "count_rows_grouped"
+                and by_id[mid].formula == "COUNT(*)"
+                and by_id[mid].fixed_dimension
+            )
+        ]
     return matched
 
 
@@ -638,7 +688,34 @@ def match_pattern(folded_question: str, detected_date_ranges: int = 0) -> str | 
         if pattern_id in ("period_comparison", "percentage_change"):
             # Comparing periods needs a genuine two-period signal, not just 'karşılaştır'.
             change_triggers = [t for t in pattern.triggers if t not in ("karsilastir", "kiyasla")]
-            triggered = any(_term_in(folded_question, t, False) for t in change_triggers)
+            triggered_terms = [
+                t for t in change_triggers if _term_in(folded_question, t, False)
+            ]
+            if pattern_id == "percentage_change":
+                # Bare "azalan/artan sirala" is an ORDER BY request, not a
+                # period-change analysis. Keep the change pattern for genuine
+                # change wording such as "gecen aya gore ... azalan" or
+                # "dusus/artis orani".
+                if any(t in {"azalan", "artan"} for t in triggered_terms) and (
+                    "sirala" in folded_question
+                    or not any(
+                        marker in folded_question
+                        for marker in (
+                            "gecen",
+                            "onceki",
+                            "degisim",
+                            "degisti",
+                            "artis",
+                            "dusus",
+                            "orani",
+                            "oran",
+                        )
+                    )
+                ):
+                    triggered_terms = [
+                        t for t in triggered_terms if t not in {"azalan", "artan"}
+                    ]
+            triggered = bool(triggered_terms)
             generic_compare = any(
                 _term_in(folded_question, t, False) for t in ("karsilastir", "kiyasla")
             )

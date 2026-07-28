@@ -182,6 +182,11 @@ class QueryPlan(BaseModel):
         default=None, description="Required ranking direction: DESC or ASC."
     )
     limit: int | None = Field(default=None, description="Explicit LIMIT requested.")
+    percentile: int | None = Field(
+        default=None,
+        description="Top/bottom percentile slice requested ('en üstteki %10') — "
+        "rendered as T-SQL TOP (N) PERCENT with the ranking ORDER BY. 1-99.",
+    )
     aggregate_threshold: AggregateThreshold | None = Field(
         default=None,
         description="HAVING-style filter on the grouped aggregate value "

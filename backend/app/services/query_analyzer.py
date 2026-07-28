@@ -642,6 +642,14 @@ class QueryAnalyzer:
         # 2026-07-28: only "Ocak" was detected, the trend ran over January
         # alone). The year, when stated, precedes the first month.
         months_lower = {name.lower(): number for name, number in months_ascii.items()}
+        bare_space_month_range_matches = list(
+            re.finditer(
+                rf"\b(?:(20\d{{2}}|19\d{{2}})\s+(?:in\s+|nin\s+|un\s+|nun\s+|yil\w*\s+)?)?"
+                rf"({month_alternatives})\s+({month_alternatives})\s+aras\w*",
+                query_ascii,
+                re.IGNORECASE,
+            )
+        )
         month_range_matches = list(
             re.finditer(
                 rf"\b(?:(20\d{{2}}|19\d{{2}})\s+(?:in\s+|nin\s+|un\s+|nun\s+|yil\w*\s+)?)?"
@@ -651,6 +659,7 @@ class QueryAnalyzer:
                 re.IGNORECASE,
             )
         )
+        month_range_matches = bare_space_month_range_matches + month_range_matches
         month_range_spans = [match.span() for match in month_range_matches]
         for match in month_range_matches:
             year = int(match.group(1)) if match.group(1) else (same_sentence_anchor_year or today.year)
@@ -811,6 +820,8 @@ class QueryAnalyzer:
             rf"(?!\s+(?:{month_alternatives})\b)",
             query_ascii,
         ):
+            if self._year_candidate_is_aggregate_threshold(query_ascii, match):
+                continue
             if self._overlaps_any(
                 match.span(),
                 explicit_date_spans
@@ -851,6 +862,17 @@ class QueryAnalyzer:
 
     def _overlaps_any(self, span: tuple[int, int], occupied: list[tuple[int, int]]) -> bool:
         return any(span[0] < end and start < span[1] for start, end in occupied)
+
+    def _year_candidate_is_aggregate_threshold(self, query: str, match: re.Match) -> bool:
+        suffix = query[match.end() : match.end() + 32]
+        if re.match(
+            r"\s*(?:'?d[ae]n|'?dan|'?den)?\s*"
+            r"(?:az|fazla|cok|buyuk|kucuk|alti|altinda|ustu|ustunde|uzeri|uzerinde)\b",
+            suffix,
+        ):
+            return True
+        prefix = query[max(0, match.start() - 16) : match.start()]
+        return bool(re.search(r"\ben\s+(?:az|fazla|cok)\s*$", prefix))
 
     def _expression_position(self, query: str, expression: str) -> int:
         position = query.find(self._strip_diacritics(expression))

@@ -13,6 +13,7 @@ from app.database_intelligence.models import (
     ColumnMetadata,
     ForeignKeyMetadata,
     TableMetadata,
+    ViewMetadata,
 )
 from app.planning.compliance import PlanComplianceValidator
 from app.planning.planner import QueryPlanner, format_plan_for_prompt
@@ -302,3 +303,40 @@ class TestPerformance:
             tables,
         )
         assert plan.planner_ms < 50.0
+
+
+_VIEW = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+
+
+def _view_plan(planner: QueryPlanner, question: str):
+    analysis = QueryAnalyzer().analyze(question)
+    return planner.build_plan(question, analysis, tables=[], views=[_VIEW])
+
+
+class TestCompoundQuestion:
+    def test_two_part_question_is_acknowledged(self, planner):
+        """A compound question ("toplam kaç randevu var ve en yoğun ay
+        hangisiydi") is answered only for its first clause; the plan must carry
+        an assumption naming the unanswered second clause instead of silently
+        dropping it (live 2026-07-28)."""
+        plan = _view_plan(
+            planner, "2024 yılında toplam kaç randevu var ve en yoğun ay hangisiydi"
+        )
+        acks = [a for a in plan.assumptions if "birden fazla" in a]
+        assert acks, plan.assumptions
+        assert "en yoğun ay hangisiydi" in acks[0]
+
+    @pytest.mark.parametrize(
+        "question",
+        [
+            "2024 yılında hafta içi ve hafta sonu randevu sayısını karşılaştır",
+            "2024 yılında Kadın Doğum ve Çocuk Sağlığı ve Hastalıkları randevu sayısı",
+            "2024 yılında kadın ve erkek gelmeme oranını göster",
+            "2024 yılında beklemede ve işlem sürmekte olanları hariç tut bölüm bazında say",
+        ],
+    )
+    def test_coordinated_noun_phrases_are_not_compound(self, planner, question):
+        """A single "ve" between coordinated nouns/values is NOT a compound
+        question — neither side carries an independent interrogative."""
+        plan = _view_plan(planner, question)
+        assert not any("birden fazla" in a for a in plan.assumptions)

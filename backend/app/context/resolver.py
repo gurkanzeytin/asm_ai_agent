@@ -95,6 +95,8 @@ _CONSTRAINT_EDIT_MARKERS = (
     "dan fazla",
     "ustunde",
     "altinda",
+    "ayni filtre",
+    "ayni filtreyle",
 )
 
 _OUTPUT_ACTION_FOLLOWUP_MARKERS = (

@@ -139,6 +139,33 @@ def test_generic_negation_hint_routes_to_llm_not_literal_sql():
     assert "negation" in built.reason.lower()
 
 
+def test_top_percentile_renders_top_n_percent():
+    """"en üstteki %10'u göster" is a TOP (N) PERCENT slice, not TOP N rows and
+    not an unfiltered dump of every group (live 2026-07-28: returned all
+    doctors, the %10 was ignored/mis-read as a row limit)."""
+    plan = _plan("2024 yilinda doktorlar arasinda randevu sayisi en ustteki %10 u goster")
+    assert plan.percentile == 10
+    assert plan.limit is None
+    built = DeterministicSQLBuilder().build(plan)
+    assert not isinstance(built, UnsupportedPlan)
+    assert "TOP (10) PERCENT" in built.sql
+    assert "ORDER BY" in built.sql.upper()
+
+
+def test_bottom_percentile_orders_ascending():
+    plan = _plan("2024 yilinda en alttaki %10 doktoru goster")
+    assert plan.percentile == 10
+    built = DeterministicSQLBuilder().build(plan)
+    assert "TOP (10) PERCENT" in built.sql
+    assert "ASC" in built.sql.upper()
+
+
+def test_ratio_percent_is_not_a_percentile_slice():
+    """A ratio value ("gelmeme oranı %10") must not become a TOP (N) PERCENT."""
+    plan = _plan("2024 yilinda gelmeme orani %10 olan bolumler")
+    assert plan.percentile is None
+
+
 def test_variance_sql_generation_uses_cte_summary():
     built = DeterministicSQLBuilder().build(_plan("Doktorlar arasinda cok fark var mi?"))
     assert not isinstance(built, UnsupportedPlan)

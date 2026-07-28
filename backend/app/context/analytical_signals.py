@@ -379,6 +379,18 @@ def _union(left: list, right: list) -> list:
     return merged
 
 
+def _dedupe_date_filters(date_filters: list) -> list:
+    deduped = []
+    seen_dates: set[tuple[str | None, str, str]] = set()
+    for date_filter in date_filters:
+        key = (date_filter.column, date_filter.start_date, date_filter.end_date)
+        if key in seen_dates:
+            continue
+        seen_dates.add(key)
+        deduped.append(date_filter)
+    return deduped
+
+
 def _filter_family(predicate: str) -> str | None:
     """Returns the constrained column for a simple structured predicate."""
     match = re.match(r"\s*\[?([A-Za-z_][A-Za-z0-9_]*)\]?\s*(?:=|LIKE|IN\s*\()", predicate, re.I)
@@ -399,13 +411,7 @@ def _normalize_query_plan(plan: "QueryPlan", raw_question: str) -> "QueryPlan":
 
     updates: dict = {}
 
-    date_filters = []
-    seen_dates: set[tuple[str | None, str, str]] = set()
-    for date_filter in plan.date_filters:
-        key = (date_filter.column, date_filter.start_date, date_filter.end_date)
-        if key not in seen_dates:
-            seen_dates.add(key)
-            date_filters.append(date_filter)
+    date_filters = _dedupe_date_filters(plan.date_filters)
     if date_filters != plan.date_filters:
         updates["date_filters"] = date_filters
 
@@ -537,6 +543,7 @@ def merge_query_plans(
         current.analysis_type == "list"
         and current.projection
         and "ayni tablo" not in folded
+        and "ayni filtre" not in folded
     ):
         return current
     merged = retained.model_copy(deep=True)
@@ -754,7 +761,12 @@ def merge_query_plans(
     # attach to the inherited GROUP BY. An explicit new threshold replaces any
     # prior one on the same conversational result.
     if current.aggregate_threshold is not None:
-        updates["aggregate_threshold"] = current.aggregate_threshold
+        threshold = current.aggregate_threshold
+        if threshold.metric is None:
+            metrics_for_threshold = updates.get("metrics") or retained.metrics or current.metrics
+            if metrics_for_threshold:
+                threshold = threshold.model_copy(update={"metric": metrics_for_threshold[0]})
+        updates["aggregate_threshold"] = threshold
     if current.analysis_type in {"ranking", "top_n", "bottom_n"} and (
         current.limit is not None or current.ranking is not None
     ):
@@ -825,4 +837,6 @@ def merge_query_plans(
         retained.required_columns, current.required_columns
     )
     updates["assumptions"] = _union(retained.assumptions, current.assumptions)
+    if "date_filters" in updates:
+        updates["date_filters"] = _dedupe_date_filters(updates["date_filters"])
     return merged.model_copy(update=updates)

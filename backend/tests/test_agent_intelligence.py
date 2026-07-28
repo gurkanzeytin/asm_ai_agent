@@ -215,6 +215,23 @@ def test_lead_time_wins_over_duration_for_its_own_phrasing():
 
 
 @pytest.mark.parametrize(
+    "question",
+    [
+        "randevu tarihi ile oluşturulma tarihi arasındaki ortalama gün farkı nedir",
+        "randevu ile oluşturulma arasında kaç gün geçiyor",
+        "oluşturulma tarihi arasındaki ortalama süre",
+    ],
+)
+def test_two_date_day_difference_maps_to_lead_time(question):
+    """"İki tarih arasındaki gün farkı" phrasings (randevu tarihi vs oluşturulma
+    tarihi) must resolve to appointment_lead_time_average — previously matched
+    nothing and fell back to COUNT(*) (live 2026-07-28)."""
+    matched = catalog.match_metrics(fold(question))
+    assert "appointment_lead_time_average" in matched
+    assert "appointment_count" not in matched
+
+
+@pytest.mark.parametrize(
     "question,expected_dimension",
     [
         ("şube bazında dağılım", "SubeAdi"),
@@ -581,6 +598,37 @@ def test_direct_birth_date_grouping_is_not_bucketed_by_age():
     assert hasattr(built, "sql"), getattr(built, "reason", None)
     assert "GROUP BY DogumTarihi" in built.sql
     assert "DATEDIFF(year," not in built.sql
+
+
+def test_weekday_weekend_breakdown_derives_a_day_type_dimension(planner, analyzer):
+    """"hafta içi ve hafta sonu ... karşılaştır" groups by a derived weekday/
+    weekend dimension instead of returning a single total (live 2026-07-28:
+    the day-type split was ignored)."""
+    from app.services.deterministic_sql_builder import DeterministicSQLBuilder
+    from app.planning.compliance import PlanComplianceValidator
+
+    plan = plan_for(
+        planner, analyzer, "2024 yılında hafta içi ve hafta sonu randevu sayısını karşılaştır"
+    )
+    assert "DayType" in plan.dimensions
+    assert plan.metrics == ["appointment_count"]
+    built = DeterministicSQLBuilder().build(plan)
+    assert hasattr(built, "sql"), getattr(built, "reason", None)
+    # DATEFIRST/locale-independent weekend test (Mon=0..Sun=6, >= 5 == weekend).
+    assert "DATEDIFF(day, '19000101'" in built.sql
+    assert "AS day_type" in built.sql
+    assert "Hafta Sonu" in built.sql and "Hafta İçi" in built.sql
+    compliance = PlanComplianceValidator().check(
+        built.sql, plan, expected_aliases=built.expected_aliases, deterministic=True
+    )
+    assert compliance.compliant, (compliance.missing, compliance.missing_metrics)
+
+
+def test_weekly_granularity_is_not_a_day_type_breakdown(planner, analyzer):
+    """Regression guard: "haftalık randevu trendi" is a weekly time series, not
+    a weekday/weekend split."""
+    plan = plan_for(planner, analyzer, "2024 yılında haftalık randevu trendini göster")
+    assert "DayType" not in plan.dimensions
 
 
 def test_required_columns_are_always_real(planner, analyzer):

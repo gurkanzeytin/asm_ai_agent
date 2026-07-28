@@ -180,7 +180,17 @@ class ContextManager:
                 context.source_filters = merged.source_filters
 
                 if query_plan is not None:
-                    context.query_plan_snapshot = query_plan.model_dump(mode="json")
+                    snapshot = query_plan.model_dump(mode="json")
+                    if (
+                        resolution.follow_up_detected
+                        and not snapshot.get("date_filters")
+                        and context.query_plan_snapshot
+                        and context.query_plan_snapshot.get("date_filters")
+                    ):
+                        snapshot["date_filters"] = list(
+                            context.query_plan_snapshot["date_filters"]
+                        )
+                    context.query_plan_snapshot = snapshot
 
                 # A successful new turn always supersedes any stale pending
                 # clarification, whether or not it was the answer to it.

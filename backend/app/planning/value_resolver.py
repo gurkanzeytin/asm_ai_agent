@@ -522,6 +522,39 @@ def extract_candidate_phrases(question: str) -> dict[str, list[str]]:
     return results
 
 
+def extract_filter_only_phrase(question: str) -> str | None:
+    """Extracts a terse follow-up value after "sadece/yalniz".
+
+    Used only by callers that already know the retained grouping dimension, so
+    this does not guess which database field the value belongs to.
+    """
+    folded_question = fold(question)
+    if not any(marker in folded_question for marker in ("sadece", "yalniz", "yalnizca")):
+        return None
+
+    tokens = question.split()
+    cleaned = [
+        _APOSTROPHE_SUFFIX.sub("", token).strip(_STRIP_CHARS) for token in tokens
+    ]
+    folded_tokens = [fold(token) for token in cleaned]
+    markers = {"sadece", "yalniz", "yalnizca"}
+    for index, folded_token in enumerate(folded_tokens):
+        if folded_token not in markers:
+            continue
+        phrase: list[str] = []
+        cursor = index + 1
+        while (
+            cursor < len(cleaned)
+            and len(phrase) < _MAX_PHRASE_TOKENS
+            and _is_entity_candidate(cleaned[cursor], folded_tokens[cursor])
+        ):
+            phrase.append(cleaned[cursor])
+            cursor += 1
+        if phrase:
+            return " ".join(phrase)
+    return None
+
+
 # Wording that marks an explicit two-value comparison ("X ile Y'yi
 # karşılaştır", "hangisi daha yoğun: X mi Y mi"). Folded substrings.
 _COMPARISON_CONTEXT_MARKERS: tuple[str, ...] = (
@@ -680,6 +713,23 @@ def extract_comparison_pair(question: str) -> tuple[str, str] | None:
             right = _phrase_back(second - 1)
             if left and right:
                 return left, right
+
+    # Pattern C: "<X...> ve <Y...> bolumlerini ... karsilastir".
+    # This is still grounded all-or-nothing by the caller, so real names that
+    # contain "ve" are dropped if the split fragments do not both resolve.
+    cue_roots = tuple(root for roots in _FIELD_CUE_ROOTS.values() for root in roots)
+    for index, folded_token in enumerate(folded_tokens):
+        if folded_token != "ve" or index == 0 or index >= len(cleaned) - 2:
+            continue
+        left = _phrase_back(index - 1)
+        right = _phrase_forward(index + 1)
+        if not left or not right:
+            continue
+        after_right = index + 1 + len(right.split())
+        if after_right < len(folded_tokens) and any(
+            folded_tokens[after_right].startswith(root) for root in cue_roots
+        ):
+            return left, right
 
     return None
 

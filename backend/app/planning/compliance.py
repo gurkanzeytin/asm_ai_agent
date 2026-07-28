@@ -10,6 +10,13 @@ from app.planning.models import ComplianceResult, QueryPlan
 
 logger = logging.getLogger(__name__)
 
+# Derived-dimension sentinels that are NOT real view columns — the SQL builder
+# renders them as a CASE/computed expression and validates them through their
+# SELECT alias, so a literal column-name presence check does not apply. (age
+# group's DogumTarihi is a real column that appears inside its CASE, so it is
+# NOT listed here.) Keep in sync with deterministic_sql_builder._DAY_TYPE_COLUMN.
+_DERIVED_DIMENSION_SENTINELS = frozenset({"DayType"})
+
 _FOLD_TABLE = str.maketrans(
     {
         "ı": "i",
@@ -205,6 +212,10 @@ class PlanComplianceValidator:
             if "nullif" not in folded_sql:
                 missing.append("ratio division-by-zero protection (NULLIF)")
         for dimension in plan.dimensions:
+            if dimension in _DERIVED_DIMENSION_SENTINELS:
+                # Validated via its SELECT alias (expected_aliases below); the
+                # GROUP BY carries the full CASE expression, not the sentinel.
+                continue
             if not re.search(rf"\b{re.escape(dimension.lower())}\b", folded_sql):
                 missing.append(f"dimension column {dimension}")
             if self._requires_grouping(plan) and not self._group_by_contains(folded_sql, dimension):
@@ -287,7 +298,7 @@ class PlanComplianceValidator:
         ):
             missing.append(f"row bound TOP ({plan.limit})")
 
-        if plan.projection:
+        if plan.projection and plan.projection[0] not in _DERIVED_DIMENSION_SENTINELS:
             select_clause = self._select_clause(folded_sql)
             if select_clause and plan.projection[0].lower() not in select_clause:
                 missing.append(f"projection column {plan.projection[0]}")
@@ -346,7 +357,8 @@ class PlanComplianceValidator:
             {
                 dimension
                 for dimension in plan.dimensions
-                if not re.search(rf"\b{re.escape(dimension.lower())}\b", folded_sql)
+                if dimension not in _DERIVED_DIMENSION_SENTINELS
+                and not re.search(rf"\b{re.escape(dimension.lower())}\b", folded_sql)
             }
         )
 
@@ -568,7 +580,8 @@ class PlanComplianceValidator:
         # this, the lead-time metric's OWN correct formula was rejected as
         # "raw detail projection in aggregate analysis" the first time it
         # was live-tested (2026-07-27), never having been exercised before.
-        remainder = self._strip_balanced_calls(select_clause, agg_funcs)
+        safe_expression_funcs = (*agg_funcs, "datefromparts(")
+        remainder = self._strip_balanced_calls(select_clause, safe_expression_funcs)
         return any(marker in remainder for marker in raw_markers)
 
     @staticmethod
