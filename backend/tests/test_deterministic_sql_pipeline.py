@@ -126,6 +126,19 @@ def test_anomaly_sql_generation_without_having():
     assert "HAVING" not in built.sql.upper()
 
 
+def test_generic_negation_hint_routes_to_llm_not_literal_sql():
+    """A generic negation ("uyruğu Türkiye olmayan") is carried as an
+    unstructured "NEGATION: ..." planner hint for the LLM. The deterministic
+    builder must NOT render that hint verbatim into the WHERE clause (which
+    produced a SQL syntax error live 2026-07-28) — it hands the plan to the
+    LLM instead."""
+    built = DeterministicSQLBuilder().build(
+        _plan("2024 yilinda uyrugu Turkiye olmayan hastalarin randevu sayisi")
+    )
+    assert isinstance(built, UnsupportedPlan)
+    assert "negation" in built.reason.lower()
+
+
 def test_variance_sql_generation_uses_cte_summary():
     built = DeterministicSQLBuilder().build(_plan("Doktorlar arasinda cok fark var mi?"))
     assert not isinstance(built, UnsupportedPlan)

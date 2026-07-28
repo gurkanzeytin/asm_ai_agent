@@ -110,6 +110,17 @@ class DeterministicSQLBuilder:
     ) -> DeterministicSQL | UnsupportedPlan:
         if not plan.answerable:
             return UnsupportedPlan(plan.answerability_reason or "plan is marked unanswerable")
+        # A generic negation ("uyruğu Türkiye OLMAYAN", "randevusu BULUNMAYAN")
+        # is carried as an unstructured planner HINT ("NEGATION: exclude ...")
+        # meant for the LLM, not a real T-SQL predicate. The deterministic
+        # builder cannot render it (it has no grounded target column/value), so
+        # routing it here previously leaked the literal hint into the WHERE
+        # clause and crashed the query (live 2026-07-28). Hand these plans to
+        # the LLM path, which reads the hint and renders a NOT EXISTS/<> filter.
+        if any(
+            extra.strip().upper().startswith("NEGATION:") for extra in plan.extra_filters
+        ):
+            return UnsupportedPlan("unstructured negation hint requires LLM rendering")
         analysis_type = self._analysis_type(plan)
         if analysis_type not in SUPPORTED_ANALYSIS_TYPES:
             return UnsupportedPlan(f"unsupported analysis type: {analysis_type}")
