@@ -71,6 +71,23 @@ class PlannedDimension(BaseModel):
     )
 
 
+class AggregateThreshold(BaseModel):
+    """A HAVING-style threshold on the aggregated metric value.
+
+    Captures "belirli bir sayıdan az/fazla olanları göster" wording — a filter
+    on the grouped aggregate (COUNT/SUM/AVG), NOT on a raw column. Only
+    meaningful when the plan groups by at least one dimension; a threshold
+    without a GROUP BY has nothing to filter and is ignored by the builder.
+    """
+
+    operator: str = Field(..., description="Comparison operator: one of <, <=, >, >=.")
+    value: float = Field(..., description="Right-hand numeric bound the aggregate is compared against.")
+    metric: str | None = Field(
+        default=None,
+        description="Metric id the threshold applies to; None means the plan's primary metric.",
+    )
+
+
 class ResolvedFilterPlan(BaseModel):
     """One field's grounded filter resolution (AI-INTELLIGENCE-016).
 
@@ -165,6 +182,11 @@ class QueryPlan(BaseModel):
         default=None, description="Required ranking direction: DESC or ASC."
     )
     limit: int | None = Field(default=None, description="Explicit LIMIT requested.")
+    aggregate_threshold: AggregateThreshold | None = Field(
+        default=None,
+        description="HAVING-style filter on the grouped aggregate value "
+        "('200'den az randevusu olan bölümler'). Applied only when the plan groups.",
+    )
     order: str | None = Field(default=None, description="Explicit ordering direction.")
     analysis_type: str | None = Field(
         default=None, description="ranking | comparison | trend | count | list."

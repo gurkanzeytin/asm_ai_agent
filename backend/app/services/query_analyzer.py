@@ -592,7 +592,7 @@ class QueryAnalyzer:
         quarter_matches = list(
             re.finditer(
                 rf"\b(20\d{{2}}|19\d{{2}})\s+(?:in\s+|nin\s+|yil\w*\s+)?"
-                rf"(ilk|birinci|1|ikinci|2|ucuncu|3|dorduncu|4)\s+ceyrek\w*\b",
+                rf"(ilk|birinci|1|ikinci|2|ucuncu|3|dorduncu|4)\s+ceyre[kg]\w*\b",
                 query_ascii,
             )
         )

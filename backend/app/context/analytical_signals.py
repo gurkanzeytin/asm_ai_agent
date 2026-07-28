@@ -748,6 +748,13 @@ def merge_query_plans(
         updates["order"] = current.order
     if current.limit is not None:
         updates["limit"] = current.limit
+    # A numeric aggregate threshold ("200'den az/fazla olanları göster") is a
+    # constraint EDIT on the retained grouped result — it carries no metric or
+    # dimension of its own, so it must ride in on the current turn's plan and
+    # attach to the inherited GROUP BY. An explicit new threshold replaces any
+    # prior one on the same conversational result.
+    if current.aggregate_threshold is not None:
+        updates["aggregate_threshold"] = current.aggregate_threshold
     if current.analysis_type in {"ranking", "top_n", "bottom_n"} and (
         current.limit is not None or current.ranking is not None
     ):

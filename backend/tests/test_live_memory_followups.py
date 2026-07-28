@@ -18,6 +18,7 @@ from app.context.session_store import SessionStore
 from app.database_intelligence.models import DatabaseContext, ViewMetadata
 from app.planning.models import QueryPlan
 from app.services.query_analyzer import QueryAnalyzer
+from app.planning.planner import QueryPlanner
 from app.planning.value_resolver import resolve_value
 from app.services.deterministic_sql_builder import (
     DeterministicSQL,
@@ -179,6 +180,107 @@ def test_query_analyzer_resolves_year_quarter_before_bare_year():
     assert detected.start_date.isoformat() == "2025-01-01"
     assert detected.end_date.isoformat() == "2025-03-31"
     assert detected.granularity == "quarter"
+
+
+def test_query_analyzer_resolves_possessive_quarter_form():
+    """'yilinin ilk ceyreginde' consonant-mutates ceyrek -> ceyreg (k->g
+    softening before a vowel-initial suffix, live UI 2026-07-28: this
+    phrasing silently fell back to a full-year range, no quarter filter at
+    all)."""
+    analysis = QueryAnalyzer().analyze(
+        "2025 yilinin ilk ceyreginde bolum bazinda randevu sayilarini tablo olarak goster"
+    )
+
+    assert len(analysis.detected_dates) == 1
+    detected = analysis.detected_dates[0]
+    assert detected.start_date.isoformat() == "2025-01-01"
+    assert detected.end_date.isoformat() == "2025-03-31"
+    assert detected.granularity == "quarter"
+
+
+def test_planner_extracts_aggregate_threshold_variants():
+    """Numeric aggregate thresholds ('200'den az', '500'den fazla', 'en az
+    1000', '100'ün altında') are captured as a HAVING-style bound, not
+    silently dropped (live UI 2026-07-28: '200'den az' returned all 62
+    departments, the threshold never applied)."""
+    analyzer = QueryAnalyzer()
+    planner = QueryPlanner()
+    view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+
+    cases = {
+        "2025 mayis ayinda bolum bazinda 200 den az randevusu olan bolumler": ("<", 200),
+        "2025 mayis ayinda bolum bazinda 500 den fazla randevusu olan bolumler": (">", 500),
+        "2025 mayis ayinda en az 1000 randevusu olan bolumler": (">=", 1000),
+        "2025 mayis ayinda en fazla 300 randevusu olan bolumler": ("<=", 300),
+        "2025 mayis ayinda 100 un altinda randevusu olan bolumler": ("<", 100),
+        "2025 mayis ayinda 800 in uzerinde randevusu olan bolumler": (">", 800),
+    }
+    for question, (operator, value) in cases.items():
+        analysis = analyzer.analyze(question)
+        plan = planner.build_plan(question, analysis, [], views=[view])
+        assert plan.aggregate_threshold is not None, question
+        assert plan.aggregate_threshold.operator == operator, question
+        assert plan.aggregate_threshold.value == value, question
+
+
+def test_aggregate_threshold_renders_as_having_on_the_group_aggregate():
+    analyzer = QueryAnalyzer()
+    planner = QueryPlanner()
+    view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+    question = "2025 mayis ayinda bolum bazinda 200 den az randevusu olan bolumler"
+    analysis = analyzer.analyze(question)
+    plan = planner.build_plan(question, analysis, [], views=[view])
+
+    built = DeterministicSQLBuilder().build(plan)
+    assert isinstance(built, DeterministicSQL)
+    assert "HAVING COUNT(*) < 200" in built.sql
+    # A row-level WHERE would compare the raw column, not the group total.
+    assert "GROUP BY" in built.sql
+    assert PlanComplianceValidator().check(built.sql, plan).compliant
+
+
+def test_aggregate_threshold_ignored_without_a_group_by():
+    """A threshold phrase with no dimension has no aggregate to bound — it must
+    not leak a HAVING into an ungrouped scalar count."""
+    analyzer = QueryAnalyzer()
+    planner = QueryPlanner()
+    view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+    question = "2025 mayis ayinda 200 den az randevu"
+    analysis = analyzer.analyze(question)
+    plan = planner.build_plan(question, analysis, [], views=[view])
+    built = DeterministicSQLBuilder().build(plan)
+    if isinstance(built, DeterministicSQL):
+        assert "HAVING" not in built.sql.upper()
+
+
+@pytest.mark.asyncio
+async def test_threshold_followup_reattaches_to_prior_grouped_table():
+    """The Chain-A live scenario: a grouped department table, then a chart
+    follow-up, then 'tabloda 200'den az randevusu olan bölümleri göster'. The
+    threshold must reattach to the inherited GROUP BY as a HAVING and keep the
+    prior date scope, not return every group (live UI 2026-07-28)."""
+    chain = _Chain()
+    first, _ = await chain.turn(
+        "2025 yilinin ilk ceyreginde bolum bazinda randevu sayilarini tablo olarak goster"
+    )
+    assert first.dimensions == ["GenelRandevuBolumAdi"]
+    assert _date(first) == ("2025-01-01", "2025-03-31")
+
+    await chain.turn("bunu grafik olarak goster")
+
+    third, resolution = await chain.turn(
+        "tabloda 200 den az randevusu olan bolumleri goster"
+    )
+    assert resolution.follow_up_detected is True
+    assert third.aggregate_threshold is not None
+    assert third.aggregate_threshold.operator == "<"
+    assert third.aggregate_threshold.value == 200
+    # Prior Q1 scope survives the intervening chart turn.
+    assert _date(third) == ("2025-01-01", "2025-03-31")
+
+    built = DeterministicSQLBuilder().build(third)
+    assert isinstance(built, DeterministicSQL)
+    assert "HAVING COUNT(*) < 200" in built.sql
 
 
 @pytest.mark.asyncio

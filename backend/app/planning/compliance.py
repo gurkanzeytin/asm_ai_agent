@@ -265,6 +265,20 @@ class PlanComplianceValidator:
         if plan.ranking and "order by" not in folded_sql:
             missing.append(f"ranking (ORDER BY ... {plan.ranking})")
 
+        # An aggregate threshold ("200'den az/fazla olan gruplar") must render as
+        # HAVING on the grouped aggregate — never as a WHERE row filter, which
+        # would compare the threshold against each raw row instead of the group
+        # total. Only meaningful when the SQL actually groups.
+        if (
+            plan.aggregate_threshold is not None
+            and "group by" in folded_sql
+            and "having" not in folded_sql
+        ):
+            missing.append(
+                f"aggregate threshold (HAVING ... {plan.aggregate_threshold.operator} "
+                f"{plan.aggregate_threshold.value:g})"
+            )
+
         # SQL Server bounds results with TOP (n) / OFFSET-FETCH; LIMIT is legacy syntax.
         if plan.limit and not re.search(
             rf"\btop\s*\(?\s*{plan.limit}\s*\)?|\bfetch\s+next\s+{plan.limit}\s+rows"

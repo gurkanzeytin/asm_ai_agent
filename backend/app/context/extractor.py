@@ -57,11 +57,11 @@ _DATE_PATTERNS = [
     (rf"\bonceki\s+{_NUMBER_WORD}\s+(?:gun|hafta|ay|yil)\w*", None),
     (
         r"\b(?:19|20)\d{2}\s+(?:in\s+|nin\s+|yil\w*\s+)?"
-        r"(?:ilk|birinci|1|ikinci|2|ucuncu|3|dorduncu|4)\s+ceyrek\w*\b",
+        r"(?:ilk|birinci|1|ikinci|2|ucuncu|3|dorduncu|4)\s+ceyre[kg]\w*\b",
         None,
     ),
     (
-        r"\b(?:ilk|birinci|1|ikinci|2|ucuncu|3|dorduncu|4)\s+ceyrek\w*"
+        r"\b(?:ilk|birinci|1|ikinci|2|ucuncu|3|dorduncu|4)\s+ceyre[kg]\w*"
         r"\s+(?:19|20)\d{2}\b",
         None,
     ),

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from app.application_models.query_analysis import QueryAnalysis
 from app.context.extractor import ContextExtractor
 from app.planning.models import (
+    AggregateThreshold,
     DateFilterPlan,
     JoinStep,
     PeriodPlan,
@@ -157,6 +158,7 @@ class QueryPlanner:
         date_filters = self._date_filters(analysis, fact_table or output_table, table_map)
         aggregation = self._aggregation(analysis)
         ranking, order = self._ranking(analysis, signals.analysis_type, folded)
+        aggregate_threshold = self._aggregate_threshold(folded)
         extra_filters = self._extra_filters(folded)
         raw_list_request = self._raw_list_request(analysis, folded)
 
@@ -419,6 +421,7 @@ class QueryPlanner:
                 aggregation=aggregation,
                 ranking=ranking,
                 limit=resolved_limit,
+                aggregate_threshold=aggregate_threshold,
                 order=order,
                 analysis_type=signals_type,
                 join_path=join_path,
@@ -465,6 +468,7 @@ class QueryPlanner:
             aggregation=aggregation,
             ranking=ranking,
             limit=analysis.detected_limit,
+            aggregate_threshold=aggregate_threshold,
             order=order,
             analysis_type=signals.analysis_type,
             join_path=join_path,
@@ -1061,6 +1065,47 @@ class QueryPlanner:
             return direction, order
         return (order, order) if order else (None, None)
 
+    def _aggregate_threshold(self, folded_question: str) -> AggregateThreshold | None:
+        """Extracts a HAVING-style bound on the grouped aggregate value.
+
+        "200'den az / 500'den fazla / 100'ün altında / 1000'in üzerinde
+        randevusu olan bölümler" — a filter on the aggregate COUNT/SUM/AVG per
+        group, distinct from a row LIMIT ("ilk 5") or a ranking direction. The
+        builder only renders it when the plan actually groups by a dimension;
+        without a GROUP BY there is no aggregate to bound.
+        """
+        # "N'den az/küçük", "N'den fazla/çok/büyük" — the apostrophe/suffix
+        # ('den/'dan/den/dan) is normalized away, so match an optional gap.
+        less = re.search(
+            r"\b(\d[\d.]*)\s*(?:'?d[ae]n|'?nin|'?in|'?un|'?nun)?\s*(az|kucuk|kucugu|asagi|alti|altinda)\b",
+            folded_question,
+        )
+        more = re.search(
+            r"\b(\d[\d.]*)\s*(?:'?d[ae]n|'?nin|'?in|'?un|'?nun)?\s*(fazla|cok|buyuk|buyugu|ustu|ustunde|uzeri|uzerinde)\b",
+            folded_question,
+        )
+        # "en az N" / "en fazla N" — inclusive bounds ("at least/at most N").
+        at_least = re.search(r"\ben\s+az\s+(\d[\d.]*)\b", folded_question)
+        at_most = re.search(r"\ben\s+(?:cok|fazla)\s+(\d[\d.]*)\b", folded_question)
+
+        def _num(token: str) -> float | None:
+            cleaned = token.replace(".", "")
+            return float(cleaned) if cleaned.isdigit() else None
+
+        if at_least:
+            value = _num(at_least.group(1))
+            return AggregateThreshold(operator=">=", value=value) if value is not None else None
+        if at_most:
+            value = _num(at_most.group(1))
+            return AggregateThreshold(operator="<=", value=value) if value is not None else None
+        if less:
+            value = _num(less.group(1))
+            return AggregateThreshold(operator="<", value=value) if value is not None else None
+        if more:
+            value = _num(more.group(1))
+            return AggregateThreshold(operator=">", value=value) if value is not None else None
+        return None
+
     def _extra_filters(self, folded_question: str) -> list[str]:
         filters: list[str] = []
         if _NEGATION_PATTERN.search(folded_question):
@@ -1313,6 +1358,13 @@ def format_plan_for_prompt(plan: QueryPlan) -> str:
         lines.append(f"- Order: {plan.ranking} (ORDER BY required)")
     if plan.limit:
         lines.append(f"- Limit: {plan.limit} rows (T-SQL: SELECT TOP ({plan.limit}) ...)")
+    if plan.aggregate_threshold is not None:
+        threshold = plan.aggregate_threshold
+        lines.append(
+            f"- Aggregate threshold: keep only groups whose aggregate "
+            f"{threshold.operator} {threshold.value:g} (T-SQL: HAVING on the aggregate, "
+            f"never a WHERE row filter)"
+        )
     if plan.question_goal:
         lines.extend(
             reasoning.format_strategy_for_prompt(

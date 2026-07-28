@@ -221,6 +221,7 @@ class DeterministicSQLBuilder:
         if splits_department:
             from_clause += self._department_split_cross_apply()
         group_by = f"\nGROUP BY {', '.join(group_by_columns)}" if group_by_columns else ""
+        having = self._having(plan, group_by_columns, metric_exprs)
         order_by = (
             "\nORDER BY period_start ASC"
             if time_bucket_expr
@@ -241,6 +242,7 @@ class DeterministicSQLBuilder:
             f"{from_clause}"
             f"{where}"
             f"{group_by}"
+            f"{having}"
             f"{order_by};"
         )
         return DeterministicSQL(
@@ -848,6 +850,37 @@ class DeterministicSQLBuilder:
 
     def _unicode_literal(self, value: str) -> str:
         return "N'" + value.replace("'", "''") + "'"
+
+    def _having(
+        self,
+        plan: QueryPlan,
+        group_by_columns: list[str],
+        metric_exprs: list[tuple[str, str]],
+    ) -> str:
+        """Renders a HAVING clause for an aggregate threshold, or "".
+
+        Only emitted when the query genuinely groups (a HAVING without GROUP BY
+        has no aggregate to bound) and a metric aggregate expression is present.
+        The bound is applied to the requested metric's aggregate expression
+        directly — SQL Server does not allow the SELECT alias in HAVING — so a
+        threshold on "randevu sayısı" becomes `HAVING COUNT(*) < 200`.
+        """
+        threshold = plan.aggregate_threshold
+        if threshold is None or not group_by_columns or not metric_exprs:
+            return ""
+        if threshold.operator not in {"<", "<=", ">", ">="}:
+            return ""
+        expression = None
+        if threshold.metric is not None:
+            expression = next(
+                (expr for metric_id, expr in metric_exprs if metric_id == threshold.metric),
+                None,
+            )
+        if expression is None:
+            expression = metric_exprs[0][1]
+        value = threshold.value
+        rendered = int(value) if float(value).is_integer() else value
+        return f"\nHAVING {expression} {threshold.operator} {rendered}"
 
     def _order_by(self, plan: QueryPlan, analysis_type: str, metric_alias: str) -> str:
         if (
