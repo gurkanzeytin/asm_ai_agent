@@ -26,9 +26,11 @@ from app.analytics.models import (
 from app.analytics.trend_analysis import TrendMetrics, compute_trend_metrics
 from app.analytics.visualization_selector import VisualizationSelector
 from app.application_models.workflow_models import QueryResult
+from app.reporting.output_policy import detect_requested_visualization
 from app.reporting.presentation import (
     build_column_metadata,
     get_analysis_type_label,
+    get_column_label,
     get_metric_label,
 )
 
@@ -111,12 +113,18 @@ class AnalyticsEngine:
         analytics_type = self._analytics_type(intents, data_shape)
 
         category_count = len(set(labels)) if labels else 0
+        requested_visualization = (
+            detect_requested_visualization(self.intent_detector._fold(question))
+            if question
+            else None
+        )
         visualization = self.visualization_selector.select(
             data_shape=data_shape,
             intents=intents,
             row_count=query_result.row_count,
             category_count=category_count,
             metric_count=len(plan.metrics) if plan else 1,
+            requested_type=requested_visualization,
         )
 
         metric_summaries = self._compute_metric_summaries(
@@ -144,10 +152,17 @@ class AnalyticsEngine:
             comparison_category_count = category_count
             comparison_sufficient = category_count >= 2
             if category_count == 1:
-                comparison_limitation_reason = (
-                    "Seçilen kapsamda yalnızca bir kategori bulunduğu için "
-                    "kategoriler arası karşılaştırma yapılamadı."
-                )
+                dimension_label = get_column_label(label_column or "").casefold()
+                if dimension_label == "şube":
+                    comparison_limitation_reason = (
+                        "Seçilen kapsamda yalnızca bir şube bulunduğu için "
+                        "şubeler arası karşılaştırma yapılamadı."
+                    )
+                else:
+                    comparison_limitation_reason = (
+                        "Seçilen kapsamda yalnızca bir kategori bulunduğu için "
+                        "kategoriler arası karşılaştırma yapılamadı."
+                    )
 
         duration_ms = (time.perf_counter() - start_time) * 1000
         result = AnalyticsResult(

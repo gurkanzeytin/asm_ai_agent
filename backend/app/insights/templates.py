@@ -8,7 +8,7 @@ doğal Türkçedir; sayı biçimleri merkezi sunum katmanından gelir.
 
 from app.analytics.models import AnalyticsResult
 from app.insights.models import InsightNarrative, InsightRule
-from app.reporting.presentation import format_number
+from app.reporting.presentation import format_number, get_column_label
 
 INSUFFICIENT_EVIDENCE_SUMMARY = "Analiz için yeterli veri bulunamadı."
 
@@ -56,6 +56,13 @@ def safe_ratio_percentage(numerator: float, denominator: float) -> str | None:
     if not denominator:
         return None
     return format_percentage(numerator / denominator * 100)
+
+
+def _dimension_noun(label_column: str | None) -> str:
+    label = get_column_label(label_column or "").casefold() if label_column else ""
+    if label == "şube":
+        return "şube"
+    return "kategori"
 
 
 def classify_change(difference: float | None) -> str:
@@ -158,6 +165,7 @@ def build_deterministic_narrative(
     if isinstance(distribution, dict) and distribution:
         ranked_shares = sorted(distribution.items(), key=lambda item: item[1], reverse=True)
         leading_label, leading_share = ranked_shares[0]
+        dimension_noun = _dimension_noun(analytics.label_column)
 
         # Concrete counts (not just percentages), when the ranking metric is
         # available — e.g. "Toplam 13 kayıttan 8 tanesi (%61,5) 'Beklemede'
@@ -173,9 +181,14 @@ def build_deterministic_narrative(
             }
         leading_count = counts_by_label.get(leading_label)
         if leading_count is not None and total:
+            leading_suffix = (
+                f"'{leading_label}' şubesine ait"
+                if dimension_noun == "şube"
+                else f"'{leading_label}' durumunda"
+            )
             distribution_summary = (
                 f"Toplam {format_number(total)} kayıttan {format_number(leading_count)} "
-                f"tanesi ({format_percentage(leading_share)}) '{leading_label}' durumunda."
+                f"tanesi ({format_percentage(leading_share)}) {leading_suffix}."
             )
             remaining_entries = [
                 (label, counts_by_label[label])

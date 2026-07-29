@@ -222,6 +222,96 @@ def test_passive_gelinmeyen_rate_maps_to_no_show_rate():
     assert "no_show_rate" in matched
 
 
+@pytest.mark.parametrize(
+    ("question", "metric"),
+    [
+        ("2024 yılında kaç değişik doktor çalışmış", "unique_doctor_count"),
+        ("2024 yılında kaç değişik hasta var", "unique_patient_count"),
+    ],
+)
+def test_degisik_maps_to_distinct_count(question, metric):
+    """"kaç DEĞİŞİK doktor/hasta" (a synonym of farklı/tekil) must resolve to
+    the distinct-count metric, not a plain appointment count (robustness probe
+    round 2, 2026-07-28)."""
+    matched = catalog.match_metrics(fold(question))
+    assert metric in matched
+    assert "appointment_count" not in matched
+
+
+@pytest.mark.parametrize(
+    ("question", "metric", "forbidden"),
+    [
+        # Passive "gelinmiyor"/"en çok gelinmiyor" (no-show) must not fall back
+        # to a plain appointment count (robustness probe round 3, 2026-07-29).
+        ("2024 hangi 5 bölümde en çok gelinmiyor", "no_show_count", "appointment_count"),
+        # "yüzde kaçı protokole dönüştü" / "protokol açılan randevu oranı" ->
+        # the conversion RATE, not a count or a plain appointment count.
+        ("2024 randevuların yüzde kaçı protokole dönüştü", "protocol_conversion_rate", "appointment_count"),
+        ("2024 protokol açılan randevu oranı", "protocol_conversion_rate", "protocol_created_count"),
+    ],
+)
+def test_passive_noshow_and_conversion_phrasings(question, metric, forbidden):
+    matched = catalog.match_metrics(fold(question))
+    assert metric in matched
+    assert forbidden not in matched
+
+
+@pytest.mark.parametrize(
+    ("question", "expected_dim"),
+    [
+        ("2024 bolm bazinda randevu sayisi", "GenelRandevuBolumAdi"),
+        ("2024 doktr bazinda randevu sayisi", "GenelRandevuKaynakAdi"),
+    ],
+)
+def test_single_char_typo_in_grouping_word_recovers_dimension(question, expected_dim):
+    """A one-letter typo in the grouping word ("bolm/doktr bazında") must not
+    silently collapse the breakdown to a scalar total — a one-insertion/
+    deletion fuzzy match recovers the dimension (robustness probe round 4,
+    2026-07-29)."""
+    view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+    plan = QueryPlanner().build_plan(question, QueryAnalyzer().analyze(question), tables=[], views=[view])
+    assert expected_dim in plan.dimensions
+
+
+def test_substitution_typo_does_not_false_match_a_dimension():
+    """Substitutions are deliberately NOT tolerated — "süre bazında" must not
+    fuzzy-match "şube" (SubeAdi)."""
+    view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+    plan = QueryPlanner().build_plan(
+        "2024 sure bazinda randevu", QueryAnalyzer().analyze("2024 sure bazinda randevu"),
+        tables=[], views=[view],
+    )
+    assert "SubeAdi" not in plan.dimensions
+
+
+@pytest.mark.parametrize(
+    ("question", "predicate"),
+    [
+        ("2024 yılında 40 yaş üstü hastaların randevu sayısı", "> 40"),
+        ("2024 yılında 18 yaşından küçük hastaların randevu sayısı", "< 18"),
+        ("2024 yılında 30-40 yaş arası hasta randevuları", "BETWEEN 30 AND 40"),
+        ("2024 yılında 65 yaş ve üzeri hasta sayısı", ">= 65"),
+    ],
+)
+def test_age_range_filter_is_a_where_predicate_not_a_breakdown(question, predicate):
+    """"40 yaş üstü" filters (WHERE on derived age), it does NOT bucket by age
+    decade. "yaş" is a DogumTarihi synonym so it otherwise became a GROUP BY
+    dimension (#4 ileri filtreler, 2026-07-29)."""
+    from app.database_intelligence.models import ViewMetadata
+    from app.services.deterministic_sql_builder import DeterministicSQLBuilder
+
+    view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+    plan = QueryPlanner().build_plan(question, QueryAnalyzer().analyze(question), [], views=[view])
+    assert "DogumTarihi" not in plan.dimensions
+    built = DeterministicSQLBuilder().build(plan)
+    assert hasattr(built, "sql"), getattr(built, "reason", None)
+    assert f"DATEDIFF(year, DogumTarihi, GETDATE()) {predicate}" in built.sql
+    # A genuine age-group breakdown must still bucket by decade.
+    grp = "2024 yılında yaş gruplarına göre randevu dağılımı"
+    grp_plan = QueryPlanner().build_plan(grp, QueryAnalyzer().analyze(grp), [], views=[view])
+    assert "DogumTarihi" in grp_plan.dimensions
+
+
 def test_her_ay_triggers_monthly_granularity():
     """"her ay kaç randevu" is a monthly breakdown, not a single scalar count
     (robustness probe 2026-07-28)."""

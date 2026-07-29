@@ -433,6 +433,18 @@
       ]
     },
     {
+      "pattern": "daha iyi",
+      "question": "\"Daha iyi\" için hangi kriteri kullanmamı istersiniz?",
+      "options": [
+        "Toplam randevu hacmi",
+        "Gerçekleşme oranı",
+        "Düşük gelmeme oranı",
+        "Protokole dönüşüm oranı",
+        "Başka bir kriter"
+      ],
+      "resolvable_by_metrics": true
+    },
+    {
       "pattern": "en kotu",
       "question": "\"En kötü\" için hangi kriteri kullanmamı istersiniz?",
       "options": [

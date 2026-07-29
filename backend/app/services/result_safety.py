@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -43,6 +44,12 @@ _PII_COLUMN = re.compile(
     r"hasta|patient|tc|kimlik|telefon|phone|email|adres|address|ad_soyad|name",
     re.IGNORECASE,
 )
+_SENSITIVE_DETAIL_COLUMN = re.compile(
+    r"^(hasta_?id|patient_?id|hastaid|patientid|hastaadi|hastasoyadi|hasta_ad[ıi]|"
+    r"hasta_soyad[ıi]|ad_soyad|adsoyad|tc|tc.*kimlik|kimlik|telefon|phone|email|"
+    r"adres|address|dogumtarihi|birth_?date)$",
+    re.IGNORECASE,
+)
 
 _GROUPED_RESULT_SHAPES = {
     "grouped_rows",
@@ -66,6 +73,61 @@ class ApiResultWindow:
 
 def has_identifier_columns(columns: list[str]) -> bool:
     return any(_IDENTIFIER_COLUMN.search(column) for column in columns)
+
+
+def has_sensitive_detail_columns(columns: list[str]) -> bool:
+    """Detect raw patient/contact identity fields, not aggregate metric aliases."""
+    return any(_SENSITIVE_DETAIL_COLUMN.search(column) for column in columns)
+
+
+def _fold_text(text: str) -> str:
+    folded = text.replace("İ", "i").replace("I", "ı").replace("ı", "i").casefold()
+    normalized = unicodedata.normalize("NFD", folded)
+    return "".join(
+        character for character in normalized if unicodedata.category(character) != "Mn"
+    )
+
+
+def _asks_for_patient_identity_detail(text: str | None) -> bool:
+    folded = _fold_text(text or "")
+    has_patient = "hasta" in folded or "patient" in folded
+    has_identity = any(
+        token in folded for token in ("kimlik", "hasta id", "hastaid", "patient id", "tc")
+    )
+    has_detail_action = any(
+        token in folded
+        for token in ("tek tek", "listele", "listesi", "goster", "getir", "ver")
+    )
+    has_aggregate_intent = any(
+        token in folded for token in ("sayisi", "kac", "toplam", "oran", "uyusmayan")
+    )
+    return has_patient and has_identity and has_detail_action and not has_aggregate_intent
+
+
+def is_sensitive_detail_output(
+    query_result: QueryResult,
+    plan: QueryPlan | None,
+    question: str | None = None,
+) -> bool:
+    """Block row-level patient/contact identity output at every presentation boundary."""
+    if not query_result.rows:
+        return False
+    if _asks_for_patient_identity_detail(question) or _asks_for_patient_identity_detail(
+        plan.question if plan is not None else None
+    ):
+        return True
+    if not has_sensitive_detail_columns(query_result.columns):
+        return False
+    if plan is None:
+        return True
+    if (plan.analysis_type or "").casefold() == "list":
+        return True
+    projected_sensitive = any(
+        has_sensitive_detail_columns([column]) for column in plan.projection
+    )
+    if projected_sensitive:
+        return True
+    return True
 
 
 def is_unsafe_analytical_detail(

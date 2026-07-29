@@ -308,23 +308,26 @@ def test_explicit_multi_metric_department_comparison_routes_to_database_query():
     assert plan.dimensions
 
 
-def test_single_metric_period_comparison_with_dimension_drops_it_and_builds_sql():
-    """The deterministic period-comparison SQL builder renders a single row
-    (current vs baseline period totals) with no GROUP BY support at all -
-    unlike the multi-metric case above (which already falls through to the
-    LLM path regardless), a single-metric plan IS handled deterministically,
-    so a dimension surviving from "bolum bazinda" must be dropped or
-    PlanComplianceValidator rejects the SQL as missing that column entirely
-    (2026-07-24, live multi-turn testing: SAFE_ERROR on "2025 Mart ile 2025
-    Nisan ayini bolum bazinda randevu sayisi olarak kiyasla")."""
+def test_single_metric_period_comparison_with_dimension_builds_grouped_breakdown():
+    """A single-metric VOLUME period comparison with "bölüm bazında" now keeps
+    the department dimension and renders a per-department breakdown (one row per
+    department: current-period count, baseline-period count, signed difference),
+    instead of dropping the dimension to a single two-period total (2026-07-29,
+    live UI month-comparison findings; superseded the earlier drop-it behavior
+    from 2026-07-24)."""
     question = "2025 Mart ile 2025 Nisan ayını bölüm bazında randevu sayısı olarak kıyasla"
     _, plan = _build_plan(question)
 
     assert plan.analysis_type == "period_comparison"
-    assert plan.dimensions == []
+    assert plan.dimensions == ["GenelRandevuBolumAdi"]
 
     result = DeterministicSQLBuilder().build(plan)
     assert hasattr(result, "sql"), getattr(result, "reason", None)
+    # Per-department breakdown: grouped, with both period counts and the diff.
+    assert "current_period_count" in result.sql
+    assert "baseline_period_count" in result.sql
+    assert "absolute_change" in result.sql
+    assert "GROUP BY" in result.sql
     compliance = PlanComplianceValidator().check(result.sql, plan, result.expected_aliases)
     assert compliance.compliant, compliance.missing
 

@@ -25,7 +25,11 @@ _METRIC_REPLACE_MARKERS = ("yerine", "gore yap")
 # replace-on-new-metric behavior. Bigrams only (never a bare "de"/"da"/"olsun"
 # alone) — each of these is common/generic Turkish on its own and would
 # false-positive on unrelated independent sentences.
-_METRIC_ADD_MARKERS = ("bir de", "ayrica", "de ekle", "da ekle", "de olsun", "da olsun")
+# NOTE: a bare "ekle" is unsafe — it is a substring of "gerçekleşen"
+# (folded: gercekl-EKLE-sen), which would wrongly mark a realized-status
+# question as additive. The leading space requires a word boundary so only a
+# genuine trailing "... ekle" ("oranını ekle") matches.
+_METRIC_ADD_MARKERS = ("bir de", "ayrica", "de ekle", "da ekle", "de olsun", "da olsun", " ekle")
 _METRIC_ADD_CONJUNCTION = " ve "
 
 

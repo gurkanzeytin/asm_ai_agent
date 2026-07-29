@@ -15,3 +15,8 @@ OVERSIZED_ANALYTICAL_RESULT_MESSAGE = (
     "bazında bir kırılım kullanılabilir."
 )
 
+SENSITIVE_DETAIL_RESULT_MESSAGE = (
+    "Hasta kimliği veya kişisel veri içeren satır bazlı sonuçlar güvenlik "
+    "nedeniyle gösterilemez. Aynı kapsamı toplam sayı, oran veya bölüm/doktor/"
+    "tarih bazında özet olarak isteyebilirsiniz."
+)

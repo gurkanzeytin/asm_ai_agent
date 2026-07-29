@@ -209,3 +209,35 @@ def test_zero_baseline_percentage_is_null_safe_and_contract_complete():
     )
     assert result.is_complete()
     assert result.percentage_change is None
+
+
+def test_period_comparison_grouped_by_department_renders_per_department_breakdown():
+    """"Ocak ile Şubat'ı bölüm bazında karşılaştır" keeps the department
+    dimension and renders one row per department (current, baseline, diff),
+    ordered by |difference| so the biggest movers lead (2026-07-29)."""
+    _, plan, built = _pipeline(
+        "2025 Ocak ile Subat ayi randevu sayilarini bolum bazinda karsilastir"
+    )
+    assert plan.analysis_type == "period_comparison"
+    assert plan.dimensions == ["GenelRandevuBolumAdi"]
+    assert built.result_schema == "DistributionResult"
+    sql = built.sql
+    assert "GROUP BY" in sql
+    assert "current_period_count" in sql and "baseline_period_count" in sql
+    assert "AS absolute_change" in sql
+    assert "ORDER BY ABS(" in sql
+    # The atomic-split empty-department guard must apply to BOTH period sides:
+    # the period disjunction stays parenthesized so a trailing AND cannot bind
+    # to the baseline side alone and leak empty-department rows.
+    assert "WHERE ((" in sql
+    compliance = PlanComplianceValidator().check(sql, plan, built.expected_aliases)
+    assert compliance.compliant, compliance.missing
+
+
+def test_period_comparison_grouped_breakdown_honours_top_n_limit():
+    _, plan, built = _pipeline(
+        "2025 Ocak ile Subat en cok fark olan ilk 5 bolumu bolum bazinda karsilastir"
+    )
+    assert plan.analysis_type == "period_comparison"
+    assert plan.limit == 5
+    assert "SELECT TOP (5)" in built.sql

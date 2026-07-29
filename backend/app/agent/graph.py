@@ -11,6 +11,7 @@ from app.agent.nodes.generate_clarification import GenerateClarificationNode
 from app.agent.nodes.generate_help import GenerateHelpNode
 from app.agent.nodes.generate_insights import GenerateInsightsNode
 from app.agent.nodes.generate_observations import GenerateObservationsNode
+from app.agent.nodes.generate_conversation_memory import GenerateConversationMemoryNode
 from app.agent.nodes.generate_out_of_scope import GenerateOutOfScopeNode
 from app.agent.nodes.generate_report import GenerateReportNode
 from app.agent.nodes.generate_sql import GenerateSQLNode
@@ -37,6 +38,12 @@ def route_by_intent(state: AgentState) -> str:
     Falls back to 'database_query' if the confidence is below the configured threshold,
     and logs structured observability metrics including the workflow ID and timing details.
     """
+    # A meta-question ABOUT the conversation ("Son sorumda hangi kırılımı
+    # istemiştim?") is answered deterministically from retained context — no
+    # SQL, no intent classification. ReportingService precomputes the answer.
+    if state.conversation_memory_answer:
+        return "conversation_memory"
+
     intent_res = state.intent
     if not intent_res:
         return "unknown" if state.ambiguity is not None else "database_query"
@@ -196,6 +203,7 @@ class AgentGraphBuilder:
         help_node = GenerateHelpNode(self.help_service)
         clarification_node = GenerateClarificationNode()
         out_of_scope_node = GenerateOutOfScopeNode()
+        conversation_memory_node = GenerateConversationMemoryNode()
 
         retrieve_node = RetrieveContextNode(self.prompt_service)
         resolve_values_node = ResolveFilterValuesNode()
@@ -272,6 +280,10 @@ class AgentGraphBuilder:
         workflow.add_node(
             "generate_out_of_scope", with_progress("reporting", out_of_scope_node.execute)
         )
+        workflow.add_node(
+            "generate_conversation_memory",
+            with_progress("reporting", conversation_memory_node.execute),
+        )
 
         workflow.add_node("retrieve_context", with_progress("preparing_sql", retrieve_node.execute))
         workflow.add_node(
@@ -303,6 +315,7 @@ class AgentGraphBuilder:
                 "help": "generate_help",
                 "unknown": "generate_clarification",
                 "out_of_scope": "generate_out_of_scope",
+                "conversation_memory": "generate_conversation_memory",
             },
         )
 
@@ -310,6 +323,7 @@ class AgentGraphBuilder:
         workflow.add_edge("generate_chat_response", END)
         workflow.add_edge("generate_help", END)
         workflow.add_edge("generate_clarification", END)
+        workflow.add_edge("generate_conversation_memory", END)
         workflow.add_edge("generate_out_of_scope", END)
 
         # Standard SQL execution pipeline

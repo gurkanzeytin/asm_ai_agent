@@ -558,6 +558,37 @@ def extract_filter_only_phrase(question: str) -> str | None:
     return None
 
 
+_EXCLUSION_MARKERS = frozenset({"haric", "haricinde", "disinda", "disaridaki"})
+
+
+def extract_exclusion_phrase(question: str) -> str | None:
+    """Extracts a value EXCLUDED with "hariç"/"dışında" ("Kardiyoloji hariç
+    bölüm bazında ..."). Returns the capitalized value-phrase run that
+    immediately PRECEDES the exclusion marker, or None. The caller grounds it
+    against real values, so a mis-read never invents a filter.
+    """
+    tokens = question.split()
+    cleaned = [
+        _APOSTROPHE_SUFFIX.sub("", token).strip(_STRIP_CHARS) for token in tokens
+    ]
+    folded_tokens = [fold(token) for token in cleaned]
+    for index, folded_token in enumerate(folded_tokens):
+        if folded_token not in _EXCLUSION_MARKERS:
+            continue
+        phrase: list[str] = []
+        cursor = index - 1
+        while (
+            cursor >= 0
+            and len(phrase) < _MAX_PHRASE_TOKENS
+            and _is_entity_candidate(cleaned[cursor], folded_tokens[cursor])
+        ):
+            phrase.insert(0, cleaned[cursor])
+            cursor -= 1
+        if phrase:
+            return " ".join(phrase)
+    return None
+
+
 # Wording that marks an explicit two-value comparison ("X ile Y'yi
 # karşılaştır", "hangisi daha yoğun: X mi Y mi"). Folded substrings.
 _COMPARISON_CONTEXT_MARKERS: tuple[str, ...] = (
@@ -596,7 +627,20 @@ def extract_comparison_entities(question: str) -> list[str]:
     so the enumeration is silently dropped rather than half-applied.
     """
     folded_question = fold(question)
-    if not any(marker in folded_question for marker in _COMPARISON_CONTEXT_MARKERS):
+    # A 3+-value enumeration is a comparison ("... karşılaştır") OR a multi-value
+    # FILTER ("Kardiyoloji, Nöroloji ve Ortopedi BÖLÜMLERİNDE toplam randevu").
+    # The filter form carries a field cue (bölüm/şube/hizmet...) instead of a
+    # comparison verb; accept either. The caller's all-or-nothing grounding
+    # keeps this loose gate safe — a spurious enumeration whose fragments don't
+    # all ground on one field is dropped whole (#4 ileri filtreler, 2026-07-29).
+    _field_cue = any(
+        root in folded_question
+        for roots in _FIELD_CUE_ROOTS.values()
+        for root in roots
+    )
+    if not _field_cue and not any(
+        marker in folded_question for marker in _COMPARISON_CONTEXT_MARKERS
+    ):
         return []
 
     raw_tokens = question.split()

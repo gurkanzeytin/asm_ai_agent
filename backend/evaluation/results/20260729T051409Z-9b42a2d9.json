@@ -1,0 +1,335 @@
+{
+  "run_id": "20260729T051409Z-9b42a2d9",
+  "generated_at": "2026-07-29T05:14:09.522387+00:00",
+  "suite": "EXP-DISTINCT-DEGISIK-001",
+  "mode": "sql-generation",
+  "environment": {
+    "sql_dialect": "tsql",
+    "database_provider": "mssql",
+    "live_db_available": true
+  },
+  "summary": {
+    "total_cases": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "layer_accuracy": {
+      "routing": 100.0,
+      "query_plan": 0.0,
+      "sql_generation": 100.0,
+      "sql_semantics": 100.0
+    },
+    "failure_counts": {
+      "WRONG_ANALYSIS_TYPE": 1
+    },
+    "p50_ms": 45.65460002049804,
+    "p95_ms": 45.65460002049804,
+    "max_ms": 45.65460002049804,
+    "deterministic_sql_avg_ms": 45.65460002049804,
+    "llm_sql_avg_ms": 0.0,
+    "live_execution_avg_ms": 0.0,
+    "timeout_rate": 0.0
+  },
+  "results": [
+    {
+      "case_id": "EXP-DISTINCT-DEGISIK-001",
+      "question": "2024 yilinda kac degisik doktor calismis",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": false,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "CountResult",
+      "row_count": null,
+      "total_ms": 45.65460002049804,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.00200001522898674,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": false,
+          "skipped": false,
+          "duration_ms": 0.030399998649954796,
+          "failures": [
+            {
+              "case_id": "EXP-DISTINCT-DEGISIK-001",
+              "stage": "query_plan",
+              "failure_code": "WRONG_ANALYSIS_TYPE",
+              "expected": "distinct_count",
+              "actual": "count",
+              "component": "QueryPlanner",
+              "generated_plan": {
+                "question": "2024 yilinda kac degisik doktor calismis",
+                "output_entity": "Doctor",
+                "fact_entity": "Doctor",
+                "output_table": "dbo.vw_RandevuRaporu",
+                "fact_table": "dbo.vw_RandevuRaporu",
+                "date_filters": [
+                  {
+                    "expression": "2024 yilinda",
+                    "start_date": "2024-01-01",
+                    "end_date": "2024-12-31",
+                    "column": "BaslangicTarihi"
+                  }
+                ],
+                "periods": [],
+                "department_filter": null,
+                "scope": "filtered",
+                "branch_filters": [],
+                "generic_scope_phrase_detected": null,
+                "resolved_filters": {},
+                "extra_filters": [],
+                "aggregation": "COUNT(DISTINCT DoktorId)",
+                "ranking": null,
+                "limit": null,
+                "percentile": null,
+                "aggregate_threshold": null,
+                "order": null,
+                "analysis_type": "count",
+                "join_path": [],
+                "projection": [],
+                "distinct": false,
+                "metrics": [
+                  "unique_doctor_count"
+                ],
+                "dimensions": [],
+                "planned_metrics": [
+                  {
+                    "metric_id": "unique_doctor_count",
+                    "expression": null,
+                    "alias": null,
+                    "aggregation_type": "count_distinct",
+                    "format_type": "integer",
+                    "conditional_filter": null,
+                    "source_columns": [
+                      "DoktorId"
+                    ]
+                  }
+                ],
+                "planned_dimensions": [],
+                "numerator": null,
+                "denominator": null,
+                "grouping_granularity": null,
+                "comparisons": [],
+                "derived_calculations": [],
+                "required_columns": [
+                  "DoktorId"
+                ],
+                "answerable": true,
+                "answerability_reason": null,
+                "confidence": 0.8,
+                "matched_examples": [
+                  "COUNT-022",
+                  "COUNT-001",
+                  "COUNT-003"
+                ],
+                "question_goal": null,
+                "current_period": null,
+                "baseline_period": null,
+                "cohort": null,
+                "minimum_sample_size": null,
+                "assumptions": [],
+                "planner_ms": 24.792300071567297
+              },
+              "generated_sql": null,
+              "result_shape": null,
+              "exception_type": null,
+              "duration_ms": 0.0
+            }
+          ]
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.2872999757528305,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.27540000155568123,
+          "failures": []
+        }
+      ],
+      "failures": [
+        {
+          "case_id": "EXP-DISTINCT-DEGISIK-001",
+          "stage": "query_plan",
+          "failure_code": "WRONG_ANALYSIS_TYPE",
+          "expected": "distinct_count",
+          "actual": "count",
+          "component": "QueryPlanner",
+          "generated_plan": {
+            "question": "2024 yilinda kac degisik doktor calismis",
+            "output_entity": "Doctor",
+            "fact_entity": "Doctor",
+            "output_table": "dbo.vw_RandevuRaporu",
+            "fact_table": "dbo.vw_RandevuRaporu",
+            "date_filters": [
+              {
+                "expression": "2024 yilinda",
+                "start_date": "2024-01-01",
+                "end_date": "2024-12-31",
+                "column": "BaslangicTarihi"
+              }
+            ],
+            "periods": [],
+            "department_filter": null,
+            "scope": "filtered",
+            "branch_filters": [],
+            "generic_scope_phrase_detected": null,
+            "resolved_filters": {},
+            "extra_filters": [],
+            "aggregation": "COUNT(DISTINCT DoktorId)",
+            "ranking": null,
+            "limit": null,
+            "percentile": null,
+            "aggregate_threshold": null,
+            "order": null,
+            "analysis_type": "count",
+            "join_path": [],
+            "projection": [],
+            "distinct": false,
+            "metrics": [
+              "unique_doctor_count"
+            ],
+            "dimensions": [],
+            "planned_metrics": [
+              {
+                "metric_id": "unique_doctor_count",
+                "expression": null,
+                "alias": null,
+                "aggregation_type": "count_distinct",
+                "format_type": "integer",
+                "conditional_filter": null,
+                "source_columns": [
+                  "DoktorId"
+                ]
+              }
+            ],
+            "planned_dimensions": [],
+            "numerator": null,
+            "denominator": null,
+            "grouping_granularity": null,
+            "comparisons": [],
+            "derived_calculations": [],
+            "required_columns": [
+              "DoktorId"
+            ],
+            "answerable": true,
+            "answerability_reason": null,
+            "confidence": 0.8,
+            "matched_examples": [
+              "COUNT-022",
+              "COUNT-001",
+              "COUNT-003"
+            ],
+            "question_goal": null,
+            "current_period": null,
+            "baseline_period": null,
+            "cohort": null,
+            "minimum_sample_size": null,
+            "assumptions": [],
+            "planner_ms": 24.792300071567297
+          },
+          "generated_sql": null,
+          "result_shape": null,
+          "exception_type": null,
+          "duration_ms": 0.0
+        }
+      ],
+      "generated_sql": "SELECT COUNT(DISTINCT DoktorId) AS unique_doctor_count\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31')\n;",
+      "plan_summary": {
+        "analysis_type": "count",
+        "metrics": [
+          "unique_doctor_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    }
+  ],
+  "previous_comparison": {
+    "previous_run_id": "20260728T112920Z-36915548",
+    "passed_delta": -51,
+    "failed_delta": -34,
+    "new_failure_types": [],
+    "resolved_failure_types": [
+      "CLARIFICATION_MISSED",
+      "CLARIFICATION_UNNECESSARY",
+      "DETERMINISTIC_BUILDER_NOT_SELECTED",
+      "INVALID_SQL",
+      "PLAN_NOT_ANSWERABLE",
+      "RESULT_ALIAS_MISSING",
+      "RESULT_CONTRACT_MISMATCH",
+      "UNKNOWN_COLUMN",
+      "WRONG_COHORT",
+      "WRONG_DIMENSION",
+      "WRONG_METRIC"
+    ],
+    "regression_case_ids": [
+      "EXP-DISTINCT-DEGISIK-001"
+    ],
+    "resolved_case_ids": [
+      "BLIND-CAS-001",
+      "BLIND-CAS-002",
+      "BLIND-CAS-006",
+      "BLIND-CAS-008",
+      "BLIND-CAS-009",
+      "BLIND-CLAR-003",
+      "BLIND-COH-002",
+      "BLIND-COH-004",
+      "BLIND-COH-005",
+      "BLIND-COH-006",
+      "BLIND-COH-008",
+      "BLIND-CROSS-005",
+      "BLIND-DQ-002",
+      "BLIND-DQ-003",
+      "BLIND-DQ-005",
+      "BLIND-DQ-006",
+      "BLIND-DQ-007",
+      "BLIND-DQ-008",
+      "BLIND-DQ-009",
+      "BLIND-PER-003",
+      "BLIND-PER-004",
+      "BLIND-PER-009",
+      "BLIND-PERF-002",
+      "BLIND-PERF-007",
+      "BLIND-PERF-010",
+      "BLIND-RATE-001",
+      "BLIND-RATE-002",
+      "BLIND-RATE-005",
+      "BLIND-RATE-007",
+      "BLIND-RATE-009",
+      "BLIND-UNANS-001",
+      "BLIND-UNANS-002",
+      "BLIND-UNANS-003",
+      "BLIND-UNANS-004",
+      "BLIND-UNANS-005"
+    ],
+    "p95_delta_ms": 16.813000082038343
+  }
+}

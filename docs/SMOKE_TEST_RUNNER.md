@@ -57,9 +57,10 @@ değerindeki senaryoları da aynı oturum zincirinde çalıştırır. Backend ca
 
 ## Senaryo kataloğu
 
-Senaryolar `tests/evaluation/smoke_scenarios.json` dosyasındadır. Katalog 12 senaryo
-ve 15 tur içerir; additive follow-up, dimension override ve year-only follow-up
-senaryoları iki turludur. JSON seçilmesinin nedeni ek YAML bağımlılığı gerektirmemesidir.
+Senaryolar `tests/evaluation/smoke_scenarios.json` dosyasındadır. Katalog 14 senaryo
+ve 21 tur içerir; additive follow-up, dimension override, year-only follow-up,
+ardışık memory zinciri ve netleştirme sonrası memory tamamlama senaryoları çok turludur.
+JSON seçilmesinin nedeni ek YAML bağımlılığı gerektirmemesidir.
 
 Yeni senaryo eklerken benzersiz `id`, `title`, `category`, `question`, `session_group`
 ve beklenen alanları tanımlayın. Çok turlu akışlarda `turns` dizisi kullanılır; her tur
@@ -118,4 +119,3 @@ New-Item -ItemType Directory -Force .tmp | Out-Null
 Testler katalog parse'ı, assertion türleri ve sınıflandırma, çok turlu session reuse,
 redaction, güvenli row metadata çıkarımı, timeout/HTTP hata davranışı ve dört artifact
 formatını kapsar.
-

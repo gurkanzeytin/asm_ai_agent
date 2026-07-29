@@ -365,8 +365,15 @@ _DIMENSION_ADD_MARKERS = (
     "kirilim ekle",
     "bir de",
     "ayrica",
+    # Leading space keeps the additive "... de/da kır" PARTICLE from matching
+    # the locative suffix of an ordinary grouping phrase: "şube bazın-DA KIR"
+    # folds to "...bazinda kir", whose "da kir" substring is NOT an additive
+    # "also break down by" request — it is a plain re-grouping (2026-07-29,
+    # exposed once a period comparison began keeping its department dimension).
+    " de kir",
+    " da kir",
 )
-_FILTER_ONLY_MARKERS = ("sadece", "sinirla", "sinirlandir", "filtrele")
+_FILTER_ONLY_MARKERS = ("sadece", "yalniz", "yalnizca", "sinirla", "sinirlandir", "filtrele")
 _SAME_ANALYSIS_MARKERS = ("aynisi", "aynisini")
 _DIMENSION_DEFAULT_METRICS = {"appointment_count", "appointments_per_type"}
 

@@ -367,7 +367,7 @@ def test_single_value_never_renders_comparison_template():
     )
     assert rendered is not None
     assert rendered.template_name == "comparison_fallback"
-    assert "iki ayrı dönem sonucu oluşturulamadı" in rendered.markdown
+    assert "iki ayrı dönem sonucu oluşmadı" in rendered.markdown
 
 
 def test_complete_comparison_renders_turkish_summary():

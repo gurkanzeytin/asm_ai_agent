@@ -173,6 +173,7 @@ class ReportingService:
         pipeline_question = question
         seeded_ambiguity = None
         memory_expired = False
+        conversation_memory_answer = None
         if session_id is not None:
             memory_expired = self._context_manager.is_expired_or_absent(session_id)
             resolution = self._context_manager.resolve(question, session_id)
@@ -184,6 +185,13 @@ class ReportingService:
                 )
             else:
                 pipeline_question = resolution.resolved_question
+                # Meta-question ABOUT the conversation ("Son sorumda hangi
+                # kırılımı istemiştim?"): answered from retained context, never
+                # SQL. Computed before the graph so route_by_intent can
+                # short-circuit to GenerateConversationMemoryNode.
+                conversation_memory_answer = self._context_manager.conversation_memory_answer(
+                    question, session_id
+                )
 
         answerability_context_signals: list[str] = []
         answerability_input_source = "raw_question"
@@ -241,6 +249,7 @@ class ReportingService:
             context_follow_up_detected=(
                 resolution.follow_up_detected if resolution is not None else False
             ),
+            conversation_memory_answer=conversation_memory_answer,
         )
 
         # ContextVar keeps progress request-scoped while the graph is shared.

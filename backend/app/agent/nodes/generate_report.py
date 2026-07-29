@@ -8,7 +8,10 @@ from app.application_models.outcome import AgentOutcome
 from app.reporting.output_policy import should_render_expanded_answer
 from app.reporting.presentation import get_metric_label
 from app.services.interfaces import IWorkflowService
-from app.shared.result_limits import OVERSIZED_ANALYTICAL_RESULT_MESSAGE
+from app.shared.result_limits import (
+    OVERSIZED_ANALYTICAL_RESULT_MESSAGE,
+    SENSITIVE_DETAIL_RESULT_MESSAGE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +58,17 @@ class GenerateReportNode(IAgentNode):
                     ),
                     provider="deterministic",
                     model="result_size_guard",
+                )
+            elif state.analytics_blocked_reason == SENSITIVE_DETAIL_RESULT_MESSAGE:
+                report_dto = GeneratedReport(
+                    title="Hassas veri gösterilemez",
+                    summary=SENSITIVE_DETAIL_RESULT_MESSAGE,
+                    markdown=(
+                        "## Hassas veri gösterilemez\n\n"
+                        f"{SENSITIVE_DETAIL_RESULT_MESSAGE}"
+                    ),
+                    provider="deterministic",
+                    model="sensitive_detail_guard",
                 )
             else:
                 report_dto = GeneratedReport(

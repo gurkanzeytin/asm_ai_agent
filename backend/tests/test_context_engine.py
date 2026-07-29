@@ -316,6 +316,20 @@ class TestSessions:
         assert not resolution.applied
         assert resolution.resolved_question == "Doktorları listele"
 
+    def test_inline_context_reset_clears_memory_for_remaining_question(self, manager):
+        ask(manager, "2025 yilinda subelere gore randevu sayisini goster")
+
+        resolution = ask(
+            manager,
+            "Onceki baglami unut. Beklemede randevu sayisini goster",
+            "s1",
+        )
+
+        assert resolution.context_applied is False
+        assert resolution.resolved_question == "Beklemede randevu sayisini goster"
+        assert "branch" not in resolution.resolved_signals.dimensions
+        assert resolution.retained_query_plan_snapshot is None
+
     def test_small_talk_does_not_become_anchor(self, manager):
         ask(manager, "Bu ay bölümlere göre randevuları karşılaştır")
         ask(manager, "Teşekkürler")

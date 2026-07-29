@@ -20,6 +20,7 @@ from app.services.execution_service import ExecutionService
 from app.services.prompt_service import PromptService
 from app.services.result_safety import (
     api_result_window,
+    is_sensitive_detail_output,
     is_unsafe_analytical_detail,
     llm_safe_rows,
     result_notice,
@@ -31,6 +32,7 @@ from app.shared.result_limits import (
     MAX_DATABASE_FETCH_ROWS,
     MAX_UI_ROWS_PER_PAGE,
     OVERSIZED_ANALYTICAL_RESULT_MESSAGE,
+    SENSITIVE_DETAIL_RESULT_MESSAGE,
 )
 
 
@@ -110,6 +112,44 @@ def test_oversized_identifier_analytical_result_is_classified_unsafe() -> None:
     assert is_unsafe_analytical_detail(result, plan) is True
 
 
+def test_patient_identifier_detail_result_is_classified_sensitive_for_list_plan() -> None:
+    result = _query_result(
+        [{"HastaId": index} for index in range(100)],
+        columns=["HastaId"],
+    )
+    plan = QueryPlan(
+        question="hasta kimliklerini listele",
+        analysis_type="list",
+        projection=["HastaId"],
+    )
+
+    assert is_sensitive_detail_output(result, plan) is True
+
+
+def test_patient_identifier_detail_question_blocks_generic_raw_rows() -> None:
+    result = _query_result(
+        [{"Id": 8054306, "BaslangicTarihi": "2025-11-24", "DoktorAdi": "Dr X"}],
+        columns=["Id", "BaslangicTarihi", "DoktorAdi"],
+    )
+    plan = QueryPlan(
+        question="2025 randevu verilerinden hasta kimliklerini tek tek listele",
+        analysis_type="list",
+    )
+
+    assert is_sensitive_detail_output(result, plan) is True
+
+
+def test_patient_aggregate_metric_is_not_classified_sensitive_detail() -> None:
+    result = _query_result([{"unique_patient_count": 42}])
+    plan = QueryPlan(
+        question="tekil hasta sayisini goster",
+        analysis_type="count",
+        metrics=["unique_patient_count"],
+    )
+
+    assert is_sensitive_detail_output(result, plan) is False
+
+
 def test_unsafe_analytical_detail_is_not_forwarded_to_api() -> None:
     result = _query_result(
         [{"HastaId": index, "metric": index} for index in range(1000)],
@@ -140,6 +180,25 @@ async def test_oversized_analytical_guard_returns_exact_safe_message_without_llm
     assert result.generated_report is not None
     assert OVERSIZED_ANALYTICAL_RESULT_MESSAGE in result.generated_report.markdown
     assert result.generated_report.provider == "deterministic"
+    assert result.outcome == "SAFE_ERROR"
+    workflow_service.execute_report_generation.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_sensitive_detail_guard_returns_exact_safe_message_without_llm() -> None:
+    workflow_service = MagicMock()
+    workflow_service.execute_report_generation = AsyncMock()
+    state = AgentState(
+        question="hasta kimliklerini listele",
+        analytics_blocked_reason=SENSITIVE_DETAIL_RESULT_MESSAGE,
+    )
+
+    result = await GenerateReportNode(workflow_service).execute(state)
+
+    assert result.generated_report is not None
+    assert SENSITIVE_DETAIL_RESULT_MESSAGE in result.generated_report.markdown
+    assert result.generated_report.provider == "deterministic"
+    assert result.generated_report.model == "sensitive_detail_guard"
     assert result.outcome == "SAFE_ERROR"
     workflow_service.execute_report_generation.assert_not_awaited()
 

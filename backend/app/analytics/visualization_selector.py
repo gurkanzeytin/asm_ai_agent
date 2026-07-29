@@ -35,13 +35,54 @@ class VisualizationSelector:
         row_count: int,
         category_count: int = 0,
         metric_count: int = 1,
+        requested_type: str | None = None,
     ) -> VisualizationRecommendation:
         recommendation = self._select(data_shape, intents, row_count, category_count, metric_count)
+        # An EXPLICIT user chart request ("pasta grafik olarak göster") overrides
+        # the shape-based default — but only when the data can actually be drawn
+        # that way, so an impossible request (a pie of 40 categories, any chart
+        # of an empty/single-value result) still degrades gracefully instead of
+        # emitting a broken chart (2026-07-29, live UI findings).
+        honored = self._honor_requested(
+            requested_type, data_shape, row_count, category_count
+        )
+        if honored is not None and honored != recommendation.type:
+            recommendation = recommendation.model_copy(
+                update={
+                    "type": honored,
+                    "reason": f"Kullanıcının açıkça istediği grafik türü ({honored.value})",
+                }
+            )
         # Presentation metadata only: attach the Türkçe etiket, canonical
         # `type` is untouched and remains what all switching logic uses.
         return recommendation.model_copy(
             update={"type_label": get_visualization_label(recommendation.type.value)}
         )
+
+    def _honor_requested(
+        self,
+        requested_type: str | None,
+        data_shape: DataShape,
+        row_count: int,
+        category_count: int,
+    ) -> VisualizationType | None:
+        """Resolves an explicit chart request to a drawable type, or None when
+        the data cannot support it (caller then keeps the shape-based default)."""
+        if not requested_type:
+            return None
+        try:
+            wanted = VisualizationType(requested_type)
+        except ValueError:
+            return None
+        # Nothing categorical/temporal to plot — a chart would be empty or
+        # meaningless; keep the card/table default.
+        if data_shape in (DataShape.EMPTY, DataShape.SINGLE_VALUE, DataShape.SINGLE_ROW):
+            return None
+        if wanted == VisualizationType.PIE_CHART:
+            # A pie needs a small, positive number of parts to stay legible.
+            if not 0 < category_count <= self.max_pie_categories:
+                return None
+        return wanted
 
     def _select(
         self,

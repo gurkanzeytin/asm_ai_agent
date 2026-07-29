@@ -94,7 +94,7 @@ def _assertion(severity: Severity, passed: bool) -> AssertionResult:
 
 def _turn_result(verdict: Verdict = Verdict.PASS) -> TurnResult:
     return TurnResult(
-        timestamp="2026-07-22T10:00:00+03:00",
+        timestamp="2025-07-22T10:00:00+03:00",
         scenario_id="01_basic_distribution",
         scenario_title="Temel dağılım",
         category="core",
@@ -132,12 +132,14 @@ def _turn_result(verdict: Verdict = Verdict.PASS) -> TurnResult:
 def test_scenario_catalog_parses_all_required_scenarios_and_turns() -> None:
     scenarios = ScenarioCatalog.load(DEFAULT_CATALOG)
 
-    assert len(scenarios) == 12
-    assert sum(len(scenario.turns) for scenario in scenarios) == 15
+    assert len(scenarios) == 14
+    assert sum(len(scenario.turns) for scenario in scenarios) == 21
     assert {scenario.id for scenario in scenarios if len(scenario.turns) > 1} == {
         "07_additive_followup",
         "08_dimension_override",
         "09_year_only_followup",
+        "13_memory_chain_2025",
+        "14_clarification_memory_completion",
     }
     assert all(scenario.session_group for scenario in scenarios)
 
@@ -160,9 +162,7 @@ def test_updated_scenario_expectations_remain_separate_and_semantic() -> None:
 
     assert grounded.expected_analysis_type == "count|summary|list|trend|time_series"
     assert grounded.expected_provider == "template|deterministic"
-    assert any(
-        spec.kind == "sql_recent_day_window" for spec in grounded.turns[0].expectations.assertions
-    )
+    assert any(spec.kind == "sql_year_window" for spec in grounded.turns[0].expectations.assertions)
     assert any(
         spec.kind == "trend_language_consistency"
         for spec in monthly.turns[0].expectations.assertions
@@ -175,7 +175,7 @@ def test_updated_scenario_expectations_remain_separate_and_semantic() -> None:
     ] == [2025, 2024]
 
 
-def test_grounded_provider_mismatch_is_major_and_sql_window_still_passes() -> None:
+def test_grounded_provider_mismatch_is_major_and_year_window_still_passes() -> None:
     grounded = next(
         scenario
         for scenario in ScenarioCatalog.load(DEFAULT_CATALOG)
@@ -187,8 +187,8 @@ def test_grounded_provider_mismatch_is_major_and_sql_window_still_passes() -> No
             "outcome": "EXECUTE_SQL",
             "generated_sql": (
                 "SELECT COUNT(*) FROM t WHERE branch = 'TEST ASM Gebze' "
-                "AND d >= '2026-06-23' "
-                "AND d < DATEADD(day, 1, '2026-07-22')"
+                "AND d >= '2025-01-01' "
+                "AND d < DATEADD(day, 1, '2025-12-31')"
             ),
             "resolved_dimensions": [],
         }
@@ -208,7 +208,7 @@ def test_grounded_provider_mismatch_is_major_and_sql_window_still_passes() -> No
 
     assert not by_kind["provider_model"].passed
     assert by_kind["provider_model"].severity == Severity.MAJOR
-    assert by_kind["sql_recent_day_window"].passed
+    assert by_kind["sql_year_window"].passed
 
 
 def test_reusable_assertion_types_and_turkish_critical_text_detection() -> None:
@@ -220,7 +220,7 @@ def test_reusable_assertion_types_and_turkish_critical_text_detection() -> None:
     assert engine.subset("x", ["a", "b"], ["a"], Severity.MAJOR, "").passed
     assert engine.numeric_threshold("x", 1.5, 2.0, Severity.MAJOR, "").passed
     assert engine.boolean("x", True, True, Severity.MAJOR, "").passed
-    assert engine.sql_clause("SELECT * FROM t WHERE year = 2026", "year = 2026", True).passed
+    assert engine.sql_clause("SELECT * FROM t WHERE year = 2025", "year = 2025", True).passed
     false_claim = engine.visible_text("Kayıt sayısı: 1", "Kayıt sayısı: 1", False)
     assert not false_claim.passed
     assert false_claim.severity == Severity.CRITICAL
@@ -239,15 +239,15 @@ def test_custom_guidance_assertion() -> None:
 @pytest.mark.parametrize(
     "sql",
     [
-        ("BaslangicTarihi >= '2026-06-23' AND BaslangicTarihi < DATEADD(day, 1, '2026-07-22')"),
-        "BaslangicTarihi >= '2026-06-23' AND BaslangicTarihi < '2026-07-23'",
-        ("BaslangicTarihi >= DATEADD(day, -30, '2026-07-23') AND BaslangicTarihi < '2026-07-23'"),
+        ("BaslangicTarihi >= '2025-06-23' AND BaslangicTarihi < DATEADD(day, 1, '2025-07-22')"),
+        "BaslangicTarihi >= '2025-06-23' AND BaslangicTarihi < '2025-07-23'",
+        ("BaslangicTarihi >= DATEADD(day, -30, '2025-07-23') AND BaslangicTarihi < '2025-07-23'"),
         (
-            "baslangictarihi  >=  '2026-06-23' and baslangictarihi < "
-            "dateadd ( dd , 1 , '2026-07-22' )"
+            "baslangictarihi  >=  '2025-06-23' and baslangictarihi < "
+            "dateadd ( dd , 1 , '2025-07-22' )"
         ),
         ("BaslangicTarihi >= '2024-01-31' AND BaslangicTarihi < DATEADD(DAY, 1, '2024-02-29')"),
-        ("BaslangicTarihi >= '2025-12-10' AND BaslangicTarihi < DATEADD(day, 1, '2026-01-08')"),
+        ("BaslangicTarihi >= '2024-12-10' AND BaslangicTarihi < DATEADD(day, 1, '2025-01-08')"),
     ],
     ids=[
         "inclusive-30-days",
@@ -270,11 +270,11 @@ def test_recent_day_window_accepts_semantic_30_day_equivalents(sql: str) -> None
     ("sql", "covered_days"),
     [
         (
-            "d >= '2026-06-24' AND d < DATEADD(day, 1, '2026-07-22')",
+            "d >= '2025-06-24' AND d < DATEADD(day, 1, '2025-07-22')",
             29,
         ),
         (
-            "d >= '2026-06-22' AND d < DATEADD(day, 1, '2026-07-22')",
+            "d >= '2025-06-22' AND d < DATEADD(day, 1, '2025-07-22')",
             31,
         ),
     ],
@@ -595,5 +595,5 @@ def test_meeting_preset_and_free_text_filters() -> None:
     meeting = filter_scenarios(scenarios, [], "meeting")
     year_only = filter_scenarios(scenarios, ["year-only"], None)
 
-    assert len(meeting) == 6
+    assert len(meeting) == 8
     assert [scenario.id for scenario in year_only] == ["09_year_only_followup"]

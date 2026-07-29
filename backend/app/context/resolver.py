@@ -81,6 +81,8 @@ CONFIDENCE_NEGATION_FOLLOWUP = 0.93
 # entirely and returned the grand total).
 _CONSTRAINT_EDIT_MARKERS = (
     "sadece",
+    "yalniz",
+    "yalnizca",
     "sinirla",
     "sinirlandir",
     "filtrele",
@@ -105,9 +107,19 @@ _OUTPUT_ACTION_FOLLOWUP_MARKERS = (
     "calistir",
     "tabloya cevir",
     "tablo olarak getir",
+    # "... olarak/halinde göster/ver/sun" presentation verbs were missing next
+    # to the "getir"/"yap"/"çevir" ones above, so a plain "Tablo olarak göster"
+    # follow-up fell through to OUT_OF_SCOPE and dropped the whole prior
+    # analysis (2026-07-29, live UI multi-turn format conversion).
+    "tablo olarak goster",
+    "tablo olarak ver",
+    "tablo halinde",
+    "tabloda goster",
     "tablo yap",
     "tabloyu getir",
     "tablo getir",
+    "grafikle goster",
+    "grafik olarak ver",
     "grafik yap",
     "grafik ciz",
     "grafigi ciz",
@@ -123,6 +135,9 @@ _OUTPUT_ACTION_FOLLOWUP_MARKERS = (
     # OUT_OF_SCOPE (2026-07-24, real UI bug report).
     "grafikte goster",
     "grafik olarak goster",
+    "gorsel olarak goster",
+    "gorsel yap",
+    "gorsellestir",
     "sql olarak ver",
     "sql sorgusunu",
     "sql ini ver",
@@ -132,6 +147,19 @@ _OUTPUT_ACTION_FOLLOWUP_MARKERS = (
 )
 _CONVERSATIONAL_CONTINUATION_MARKERS = ("o zaman", "peki")
 _COMPARISON_FOLLOWUP_MARKERS = ("kiyasla", "karsilastir", "farki", "farkini")
+# "Aynı analizi/sorguyu 2024 için yap", "Aynısını doktor bazında göster" — a
+# same-analysis replay that re-runs the prior analysis, optionally swapping in a
+# new date or overlaying a new dimension/metric. Broader than the strict
+# date-only branch, which only fires for a bare date fragment.
+_SAME_ANALYSIS_REPLAY_MARKERS = (
+    "ayni analiz",
+    "ayni sorgu",
+    "ayni raporu",
+    "ayni sekilde",
+    "ayni seyi",
+    "aynisini",
+    "ayni tabloyu",
+)
 
 _CLARIFICATION_MULTIPLE = (
     "Daha önce birden fazla konu konuşuldu. Hangisini kastettiğinizi belirtir misiniz?"
@@ -266,6 +294,45 @@ class ContextResolver:
             result.confidence = CONFIDENCE_DATE_FOLLOWUP
             result.applied = True
             result.follow_up_signals.append("date_only_followup")
+            return self._finalize(result, question, context, signals)
+
+        # Same-analysis replay ("Aynı analizi 2024 için yap", "Aynısını doktor
+        # bazında göster"): re-run the previous analysis, swapping in a new date
+        # when one is present. The retained plan supplies the inherited
+        # dimension/metric downstream; any NEW analytical content the current
+        # turn states is layered on top by the signal merge, so we only need to
+        # mark this a follow-up and hand the planner a self-contained question.
+        if (
+            signals.date_expression
+            and any(
+                marker in self._extractor.fold(question)
+                for marker in _SAME_ANALYSIS_REPLAY_MARKERS
+            )
+            and context.last_question
+            # A same-analysis replay only needs an inheritable analysis to
+            # continue — a metric, a breakdown, or a named analysis type. Unlike
+            # the strict date-only branch it does NOT require entity_types, which
+            # a rate/ranking-only prior turn ("... oranına göre sırala") may have
+            # cleared even though the analysis itself is fully inheritable. Gated
+            # on a NEW date so a same-analysis phrase that instead layers a fresh
+            # filter/dimension ("Sadece gelmeyenler için aynı tabloyu göster")
+            # falls through to the pronoun/additive machinery, which preserves
+            # that new content rather than replacing the whole question.
+            and (context.metrics or context.dimensions or context.analysis_type)
+        ):
+            new_date = self._resolve_relative_year(
+                signals.date_expression, context.date_expression
+            )
+            result.resolved_question = self._anchor_bare_month_year(
+                self._swap_date(context.last_question, new_date),
+                signals.date_expression,
+                context.date_expression,
+            )
+            result.inherited["date"] = new_date
+            result.inherited["previous_question"] = context.last_question
+            result.confidence = CONFIDENCE_DATE_FOLLOWUP
+            result.applied = True
+            result.follow_up_signals.append("same_analysis_replay")
             return self._finalize(result, question, context, signals)
 
         # A date fragment is conversationally incomplete, not out of domain.
@@ -456,7 +523,7 @@ class ContextResolver:
             and not context.is_empty()
             and any(marker in folded_question for marker in _COMPARISON_FOLLOWUP_MARKERS)
             and "onceki" not in folded_question
-            and (signals.date_expression or current_signals.is_empty())
+            and current_signals.is_empty()
         ):
             result.follow_up_signals.append("comparison_followup")
 
@@ -472,6 +539,20 @@ class ContextResolver:
             and bool(context.metrics)
         ):
             result.follow_up_signals.append("implicit_metric_ranking_followup")
+
+        # A re-sort/re-rank continuation ("Şimdi en düşük gerçekleşme oranına
+        # göre sırala") supplies a new sort metric/direction but names NO
+        # breakdown dimension — it continues the prior per-dimension breakdown
+        # with a different ordering. Inherit only when the prior turn actually
+        # had a dimension to re-sort, so a fully independent scalar ranking (its
+        # own dimension, or none in context) stays untouched.
+        if (
+            not result.follow_up_signals
+            and bool(context.dimensions)
+            and not current_signals.dimensions
+            and current_signals.ranking is not None
+        ):
+            result.follow_up_signals.append("resort_continuation")
 
         # AI-INTELLIGENCE-018 (item 1): a strong-marker additive/replacement
         # follow-up must become SELF-CONTAINED text, the same way the

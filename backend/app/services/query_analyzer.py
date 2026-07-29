@@ -524,6 +524,105 @@ class QueryAnalyzer:
         )
         explicit_dates = list(explicit_date_pattern.finditer(query_ascii))
         explicit_date_spans = [match.span() for match in explicit_dates]
+
+        # Purely-numeric date formats. Sözel forms ("Mayıs 2024", "1 mayıs 2024
+        # ile ...") are handled below; these add ISO "YYYY-MM" (the dash
+        # survives normalization) and "DD.MM.YYYY" (whose dots normalization
+        # turned into spaces, so they read as "01 05 2024"), including a
+        # "... - ..." range (robustness probe round 7, 2026-07-29).
+        # Full ISO dates "YYYY-MM-DD", including a "date1 ile date2" range. Must
+        # run BEFORE the YYYY-MM month detector, which would otherwise match
+        # only the year+month of each full date and silently drop the day —
+        # turning a single day-level range ("2025-01-15 ile 2025-01-20") into
+        # two identical month ranges that read as a bogus two-period comparison
+        # (2026-07-29, live UI exact-date-range test).
+        iso_date_matches = list(
+            re.finditer(
+                r"\b(20\d{2}|19\d{2})-(0?[1-9]|1[0-2])-(0?[1-9]|[12]\d|3[01])\b", query_ascii
+            )
+        )
+        iso_date_spans = [match.span() for match in iso_date_matches]
+
+        def _iso_date(match: "re.Match[str]") -> "date | None":
+            try:
+                return date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+            except ValueError:
+                return None  # e.g. 2025-02-31 — an impossible calendar date
+
+        for index in range(0, len(iso_date_matches), 2):
+            first_date = _iso_date(iso_date_matches[index])
+            if first_date is None:
+                continue
+            if index + 1 >= len(iso_date_matches):
+                ranges.append(
+                    self._date_range(iso_date_matches[index].group(0), first_date, first_date, "day")
+                )
+                continue
+            second_date = _iso_date(iso_date_matches[index + 1])
+            if second_date is None:
+                ranges.append(
+                    self._date_range(iso_date_matches[index].group(0), first_date, first_date, "day")
+                )
+                continue
+            if second_date < first_date:
+                first_date, second_date = second_date, first_date
+            expression = query_ascii[
+                iso_date_matches[index].start() : iso_date_matches[index + 1].end()
+            ]
+            ranges.append(self._date_range(expression, first_date, second_date, "custom"))
+
+        iso_month_matches = list(
+            re.finditer(r"\b(20\d{2}|19\d{2})-(0?[1-9]|1[0-2])\b", query_ascii)
+        )
+        # Skip a "YYYY-MM" that is really the head of an already-consumed
+        # "YYYY-MM-DD" full date.
+        iso_month_matches = [
+            match
+            for match in iso_month_matches
+            if not any(start <= match.start() < end for start, end in iso_date_spans)
+        ]
+        iso_month_spans = [match.span() for match in iso_month_matches]
+        for match in iso_month_matches:
+            ranges.append(
+                self._month_range(match.group(0), int(match.group(1)), int(match.group(2)))
+            )
+
+        numeric_dmy_matches = [
+            match
+            for match in re.finditer(
+                r"\b(0?[1-9]|[12]\d|3[01])\s+(0?[1-9]|1[0-2])\s+(20\d{2}|19\d{2})\b",
+                query_ascii,
+            )
+        ]
+        numeric_dmy_spans = [match.span() for match in numeric_dmy_matches]
+
+        def _numeric_dmy(match: "re.Match[str]") -> "date | None":
+            try:
+                return date(int(match.group(3)), int(match.group(2)), int(match.group(1)))
+            except ValueError:
+                return None  # e.g. 31.02.2024 — an impossible calendar date
+
+        for index in range(0, len(numeric_dmy_matches), 2):
+            first_date = _numeric_dmy(numeric_dmy_matches[index])
+            if first_date is None:
+                continue
+            if index + 1 >= len(numeric_dmy_matches):
+                ranges.append(
+                    self._date_range(numeric_dmy_matches[index].group(0), first_date, first_date, "day")
+                )
+                continue
+            second_date = _numeric_dmy(numeric_dmy_matches[index + 1])
+            if second_date is None:
+                ranges.append(
+                    self._date_range(numeric_dmy_matches[index].group(0), first_date, first_date, "day")
+                )
+                continue
+            if second_date < first_date:
+                first_date, second_date = second_date, first_date
+            expression = query_ascii[
+                numeric_dmy_matches[index].start() : numeric_dmy_matches[index + 1].end()
+            ]
+            ranges.append(self._date_range(expression, first_date, second_date, "custom"))
         # Year then month, tolerating a Turkish possessive connector between
         # them ("2025 YILININ mayıs ayında"). Without the connector, "2025
         # yılının mayıs" matched neither the adjacent year+month pattern (the
@@ -821,6 +920,65 @@ class QueryAnalyzer:
                 ranges.append(self._month_range(match.group(0), anchor_year, month))
                 break
 
+        # Bare month names WITHOUT an "ay" suffix, recovered ONLY in an explicit
+        # comparison context. "2025 nisan ve mayıs kıyasla" / "2025 mayısta
+        # nisana göre değişim" / "2025 mayıs nisan farkı" — the second month
+        # carries no "ay" suffix (and may be inflected: mayısta/nisana), so the
+        # detectors above miss it and the comparison silently collapses to a
+        # single period. Gated on BOTH a comparison marker AND an anchor year
+        # (a sibling year+month pair, else a standalone year in the sentence) so
+        # an incidental month-like word never becomes a spurious date
+        # (robustness probe round 3, 2026-07-29).
+        query_lower = query_ascii.lower()
+        # A real comparison verb only — deliberately NOT " ve " (which merely
+        # LISTS two months, e.g. "mayıs ve haziran bölüm bazında randevu"; that
+        # is not a comparison and adding a 2nd date range there would AND two
+        # disjoint months into an empty result). All genuine comparison
+        # phrasings carry one of these verbs.
+        _comparison_markers = ("kiyasla", "karsilastir", "gore", "fark", "degisim")
+        comparison_anchor_year_spans: list[tuple[int, int]] = []
+        if any(marker in query_lower for marker in _comparison_markers):
+            standalone_year_match = re.search(r"\b(20\d{2}|19\d{2})\b", query_ascii)
+            comparison_anchor_year = same_sentence_anchor_year or (
+                int(standalone_year_match.group(1)) if standalone_year_match else None
+            )
+            if comparison_anchor_year is not None:
+                occupied_spans = (
+                    explicit_date_spans
+                    + month_year_spans
+                    + month_range_spans
+                    + quarter_spans
+                    + half_year_spans
+                    + partial_year_spans
+                )
+                added_comparison_month = False
+                for month_name, month in _MONTHS.items():
+                    if month in bare_months_seen:
+                        continue
+                    folded_month = self._strip_diacritics(month_name)
+                    for match in re.finditer(rf"\b{folded_month}\w*\b", query_ascii):
+                        if self._overlaps_any(match.span(), occupied_spans):
+                            continue
+                        bare_months_seen.add(month)
+                        added_comparison_month = True
+                        ranges.append(
+                            self._month_range(
+                                match.group(0), comparison_anchor_year, month
+                            )
+                        )
+                        break
+                # When a STANDALONE year (no sibling year+month pair) anchored
+                # these comparison months, it is only the shared year context —
+                # not its own full-year filter. Suppress it below so the two
+                # months are the only ranges (else a spurious 2025 full-year
+                # range ANDs with them, breaking the comparison).
+                if (
+                    added_comparison_month
+                    and same_sentence_anchor_year is None
+                    and standalone_year_match is not None
+                ):
+                    comparison_anchor_year_spans.append(standalone_year_match.span())
+
         # Full calendar years, including Turkish case/possessive forms used by
         # short follow-ups (``2024 yılının``, ``2024 yılı``, ``2024 için``,
         # ``2024'te``).  Query normalization has already removed apostrophes.
@@ -838,7 +996,11 @@ class QueryAnalyzer:
                 + partial_year_spans
                 + quarter_spans
                 + half_year_spans
-                + month_range_spans,
+                + month_range_spans
+                + comparison_anchor_year_spans
+                + iso_month_spans
+                + iso_date_spans
+                + numeric_dmy_spans,
             ):
                 continue
             year = int(match.group(1))

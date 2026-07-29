@@ -12,7 +12,9 @@ from app.planning.value_resolver import (
     extract_candidate_phrases,
     extract_comparison_entities,
     extract_comparison_pair,
+    extract_exclusion_phrase,
     extract_filter_only_phrase,
+    fold,
 )
 
 logger = logging.getLogger(__name__)
@@ -183,26 +185,60 @@ class ResolveFilterValuesNode(IAgentNode):
                 )
                 if field_name == "branch":
                     branch_filters = values
-                # The question IS an entity comparison: align the plan so the
-                # deterministic builder's entity path applies (conditional
-                # counts, no GROUP BY over composite text) — a pair renders one
-                # comparison row, three or more a per-entity breakdown.
-                # `projection` must be cleared alongside `dimensions`: an
-                # entity comparison selects entity labels and counts, never a
-                # raw display column, so a leftover concept column from the
-                # bare "bölüm" mention would fail PlanComplianceValidator's
-                # projection check and kill the whole answer (same failure
-                # class as the Phase 10 scalar-projection bug).
-                pair_plan_updates = {
-                    "analysis_type": "comparison",
-                    "dimensions": [],
-                    "planned_dimensions": [],
-                    "projection": [],
-                }
-                plan = plan.model_copy(update=pair_plan_updates)
+                # A multi-value enumeration is either a COMPARISON ("X, Y ve Z'yi
+                # karşılaştır" -> per-entity breakdown) or a plain multi-value
+                # FILTER ("X, Y ve Z bölümlerinde toplam kaç randevu" -> a single
+                # containment-OR total, keeping the requested aggregation).
+                # Only a real comparison verb switches the plan to the entity
+                # comparison path; otherwise the grounded values stay as an
+                # ordinary IN/containment filter (#4 ileri filtreler,
+                # 2026-07-29).
+                wants_comparison = any(
+                    marker in fold(plan.question)
+                    for marker in ("karsilastir", "kiyasla", " vs ", "versus", "hangisi")
+                )
+                if wants_comparison:
+                    # An entity comparison selects entity labels and counts,
+                    # never a raw display column; `projection` must be cleared
+                    # alongside `dimensions` or a leftover concept column from
+                    # the bare "bölüm" mention fails compliance's projection
+                    # check (same failure class as the Phase 10 scalar bug).
+                    plan = plan.model_copy(
+                        update={
+                            "analysis_type": "comparison",
+                            "dimensions": [],
+                            "planned_dimensions": [],
+                            "projection": [],
+                        }
+                    )
                 break
 
-        plan = plan.model_copy(
-            update={"resolved_filters": resolved_filters, "branch_filters": branch_filters}
-        )
+        # Department EXCLUSION ("Kardiyoloji hariç bölüm bazında ..."): ground
+        # the excluded name and carry it on the plan so the builder renders an
+        # atomic NOT IN / NOT-containment filter (#4 ileri filtreler,
+        # 2026-07-29). Grounded all-or-nothing, exactly like the value filters.
+        excluded_departments = list(plan.excluded_departments)
+        cleared_department_filter = False
+        if not excluded_departments and "department" not in forced_overrides:
+            exclusion_phrase = extract_exclusion_phrase(plan.question)
+            if exclusion_phrase:
+                grounded = await self.resolver.resolve("department", exclusion_phrase)
+                if grounded.grounded and grounded.matched_value:
+                    excluded_departments = [grounded.matched_value]
+                    # "Kardiyoloji hariç ..." mis-parses as a positive department
+                    # filter during planning (the bare name reads like a value
+                    # cue). Drop that positive filter when it names the SAME value
+                    # we are excluding, or filter and exclusion cancel to 0 rows.
+                    if plan.department_filter in excluded_departments:
+                        cleared_department_filter = True
+                        resolved_filters.pop("department", None)
+
+        update = {
+            "resolved_filters": resolved_filters,
+            "branch_filters": branch_filters,
+            "excluded_departments": excluded_departments,
+        }
+        if cleared_department_filter:
+            update["department_filter"] = None
+        plan = plan.model_copy(update=update)
         return plan, ambiguity

@@ -90,6 +90,64 @@ def test_query_analyzer_year_qualified_month_single_range(query, expected_start,
     assert analysis.detected_dates[0].end_date == expected_end
 
 
+@pytest.mark.parametrize(
+    ("query", "start", "end"),
+    [
+        # Numeric date formats — sözel forms already worked; these add ISO
+        # "YYYY-MM" and "DD.MM.YYYY" (single + range) (robustness probe round 7,
+        # 2026-07-29).
+        ("2024-05 bolum bazinda randevu", date(2024, 5, 1), date(2024, 5, 31)),
+        ("01.05.2024 - 31.05.2024 arasi randevu", date(2024, 5, 1), date(2024, 5, 31)),
+        ("15.03.2024 tarihinde kac randevu", date(2024, 3, 15), date(2024, 3, 15)),
+    ],
+)
+def test_numeric_date_formats(query, start, end):
+    analyzer = QueryAnalyzer(today=date(2026, 7, 10))
+    analysis = analyzer.analyze(query)
+    assert len(analysis.detected_dates) == 1, query
+    assert analysis.detected_dates[0].start_date == start, query
+    assert analysis.detected_dates[0].end_date == end, query
+
+
+def test_thousands_separator_number_is_not_a_numeric_date():
+    """Regression guard: "1.000" (→ "1 000") near a threshold must NOT be
+    misread as a DD.MM date — its middle group '000' is not a valid month."""
+    analyzer = QueryAnalyzer(today=date(2026, 7, 10))
+    analysis = analyzer.analyze("2024 bolum bazinda 1.000 den fazla randevu")
+    assert [(d.start_date, d.end_date) for d in analysis.detected_dates] == [
+        (date(2024, 1, 1), date(2024, 12, 31))
+    ]
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        # Second month carries no "ay" suffix (and may be inflected) — used to
+        # be dropped, collapsing the comparison to a single period (robustness
+        # probe round 3, 2026-07-29).
+        "2025 nisan ve mayıs randevu sayılarını kıyasla",
+        "2025 mayısta nisana göre randevu değişimi",
+        "2025 mayıs nisan farkı nedir",
+    ],
+)
+def test_comparison_recovers_bare_month_without_ay_suffix(query):
+    analyzer = QueryAnalyzer(today=date(2026, 7, 10))
+    analysis = analyzer.analyze(query)
+    months = {(d.start_date.month, d.start_date.year) for d in analysis.detected_dates}
+    assert (4, 2025) in months and (5, 2025) in months
+    # Exactly the two months — no spurious full-year 2025 range alongside them.
+    assert len(analysis.detected_dates) == 2
+
+
+def test_listing_two_months_without_a_comparison_verb_is_not_two_periods():
+    """"mayıs ve haziran bölüm bazında" merely LISTS months (no comparison
+    verb) — it must NOT gain a spurious 2nd date range that ANDs two disjoint
+    months into an empty result."""
+    analyzer = QueryAnalyzer(today=date(2026, 7, 10))
+    analysis = analyzer.analyze("2025 mayıs ve haziran bölüm bazında randevu")
+    assert len(analysis.detected_dates) == 1
+
+
 def test_query_analyzer_bare_month_deduplicates_diacritic_variants():
     # _MONTHS holds both "mayıs" and "mayis"; a bare-month mention must not
     # produce two identical ranges.
@@ -202,6 +260,30 @@ class TestPartialCalendarYear:
         assert self.analyzer.analyze("ilk 50 randevuyu getir").detected_limit == 50
         assert self.analyzer.analyze("son 100 randevuyu getir").detected_limit == 100
         assert self.analyzer.analyze("en yoğun 5 doktoru göster").detected_limit == 5
+
+    def test_iso_full_date_range_is_a_single_span_not_two_month_periods(self):
+        # "2025-01-15 ile 2025-01-20" is ONE day-level range, not two identical
+        # 2025-01 month ranges (which read as a bogus two-period comparison),
+        # and the bare-year detector must not add stray 2025 full-year ranges.
+        analysis = self.analyzer.analyze(
+            "2025-01-15 ile 2025-01-20 arasindaki gunluk randevu sayilarini goster"
+        )
+        assert len(analysis.detected_dates) == 1
+        assert analysis.detected_dates[0].start_date == date(2025, 1, 15)
+        assert analysis.detected_dates[0].end_date == date(2025, 1, 20)
+
+    def test_iso_single_full_date_is_a_single_day(self):
+        analysis = self.analyzer.analyze("2025-01-15 gunu kac randevu var")
+        assert len(analysis.detected_dates) == 1
+        assert analysis.detected_dates[0].start_date == date(2025, 1, 15)
+        assert analysis.detected_dates[0].end_date == date(2025, 1, 15)
+
+    def test_iso_year_month_still_resolves_as_a_month_period(self):
+        # The YYYY-MM month detector must survive the full-date detector.
+        analysis = self.analyzer.analyze("2025-05 bolum bazinda randevu sayisi")
+        assert len(analysis.detected_dates) == 1
+        assert analysis.detected_dates[0].start_date == date(2025, 5, 1)
+        assert analysis.detected_dates[0].end_date == date(2025, 5, 31)
 
 
 @pytest.mark.parametrize(

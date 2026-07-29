@@ -71,7 +71,9 @@
         "hasta dagilimi",
         "kac ayri hasta",
         "hastalarin orani",
-        "hastalarin yuzdesi"
+        "hastalarin yuzdesi",
+        "degisik hasta",
+        "kac degisik hasta"
       ],
       "compatible_dimensions_group": "standard",
       "default_time_column": "BaslangicTarihi",
@@ -99,7 +101,9 @@
         "kac hekim",
         "hekim sayisi",
         "kac uzman",
-        "toplam doktor"
+        "toplam doktor",
+        "degisik doktor",
+        "kac degisik doktor"
       ],
       "compatible_dimensions_group": "standard",
       "default_time_column": "BaslangicTarihi",
@@ -654,7 +658,11 @@
         "gelmedi",
         "gelmeyen hasta",
         "gelmeme sayisi",
-        "gelmeme"
+        "gelmeme",
+        "gelinmiyor",
+        "gelinmeyen",
+        "gelinmedi",
+        "en cok gelinmiyor"
       ],
       "compatible_dimensions_group": "standard",
       "default_time_column": "BaslangicTarihi",
@@ -734,7 +742,11 @@
         "protokole donusuyor",
         "protokole donusen",
         "protokol acilma yuzdesi",
-        "protokol acilma orani"
+        "protokol acilma orani",
+        "protokole donustu",
+        "yuzde kaci protokole",
+        "protokole donusme orani",
+        "protokol acilan randevu orani"
       ],
       "compatible_dimensions_group": "standard",
       "default_time_column": "BaslangicTarihi",

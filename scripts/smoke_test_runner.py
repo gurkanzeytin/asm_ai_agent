@@ -37,6 +37,8 @@ MEETING_SCENARIOS = {
     "05_grounded_branch",
     "07_additive_followup",
     "09_year_only_followup",
+    "13_memory_chain_2025",
+    "14_clarification_memory_completion",
 }
 
 

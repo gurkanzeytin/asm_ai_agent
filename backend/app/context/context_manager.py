@@ -13,6 +13,22 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_CONTEXT_RESET_PREFIXES = (
+    "onceki baglami unut",
+    "baglami unut",
+    "baglami sifirla",
+    "baglami temizle",
+    "hafizayi unut",
+    "hafizayi sifirla",
+    "memoryi unut",
+    "memory i unut",
+    "contexti unut",
+    "context i unut",
+    "yeni konu",
+    "yeni soru",
+    "yeni analiz",
+)
+
 
 class ContextManager:
     """Facade of the conversational context engine.
@@ -38,8 +54,23 @@ class ContextManager:
     ) -> ResolutionResult:
         """Resolves a question against the session context. Never raises."""
         try:
+            raw_question = question
+            reset_requested, effective_question = self._consume_context_reset_prefix(
+                question
+            )
+            if reset_requested:
+                self._store.clear(session_id)
+                logger.info(
+                    "Conversational context cleared by inline reset command: session=%s",
+                    session_id,
+                    extra={"session_id": session_id},
+                )
+                question = effective_question
+
             context = self._store.get(session_id)
             result = self._resolver.resolve(question, context)
+            if reset_requested:
+                result = result.model_copy(update={"original_question": raw_question})
             if result.follow_up_detected and context.query_plan_snapshot is not None:
                 result.retained_query_plan_snapshot = dict(context.query_plan_snapshot)
         except Exception as error:  # degrade, never break the pipeline
@@ -82,6 +113,15 @@ class ContextManager:
             },
         )
         return result
+
+    def _consume_context_reset_prefix(self, question: str) -> tuple[bool, str]:
+        folded = self._extractor.fold(question).strip()
+        for prefix in _CONTEXT_RESET_PREFIXES:
+            if not folded.startswith(prefix):
+                continue
+            remainder = question[len(prefix) :].lstrip(" \t\r\n,.;:!-")
+            return True, remainder or question
+        return False, question
 
     def update(
         self,
@@ -320,3 +360,20 @@ class ContextManager:
     def extract_date(self, question: str) -> str | None:
         """Expose the canonical context extractor without duplicating date rules."""
         return self._extractor.extract(question).date_expression
+
+    def conversation_memory_answer(self, question: str, session_id: str) -> str | None:
+        """Answers a meta-question ABOUT the conversation ("Son sorumda hangi
+        kırılımı istemiştim?") from the retained context, or None when the
+        question is a normal data question or there is no history to draw on.
+        Never generates SQL — this short-circuits the whole pipeline."""
+        from app.context.conversation_memory import (
+            build_conversation_memory_answer,
+            detect_conversation_memory_question,
+        )
+
+        folded = self._extractor.fold(question)
+        category = detect_conversation_memory_question(folded)
+        if category is None:
+            return None
+        context = self._store.get(session_id)
+        return build_conversation_memory_answer(context, category)

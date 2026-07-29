@@ -504,6 +504,36 @@ def test_single_category_narrative_has_no_competitive_claim():
     assert SINGLE_CATEGORY_LIMITATION in narrative.considerations
 
 
+def test_branch_distribution_narrative_uses_branch_wording():
+    analytics = AnalyticsResult(
+        analytics_type="comparison",
+        data_shape=DataShape.CATEGORICAL,
+        label_column="SubeAdi",
+        metrics={
+            "count": 1,
+            "total": 89.0,
+            "top_category": "TEST ASM Gebze",
+            "distribution": {"TEST ASM Gebze": 100.0},
+            "ranking": [{"label": "TEST ASM Gebze", "value": 89.0}],
+        },
+        row_count=1,
+        comparison_category_count=1,
+        comparison_sufficient=False,
+        comparison_limitation_reason=(
+            "Seçilen kapsamda yalnızca bir şube bulunduğu için "
+            "şubeler arası karşılaştırma yapılamadı."
+        ),
+    )
+
+    narrative = build_deterministic_narrative(
+        analytics, [InsightRule.SINGLE_CATEGORY_COMPARISON]
+    )
+
+    assert "şubesine ait" in narrative.summary
+    assert "durumunda" not in narrative.summary
+    assert "şube bulunduğu" in " ".join(narrative.considerations)
+
+
 def test_two_category_narrative_keeps_competitive_claim():
     analytics = AnalyticsResult(
         analytics_type="comparison",

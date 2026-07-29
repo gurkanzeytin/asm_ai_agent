@@ -11,8 +11,15 @@ from app.services.doctor_label_resolver import (
     DoctorLabelResolver,
     enrich_query_result_with_doctor_labels,
 )
-from app.services.result_safety import enrich_result_counts, is_unsafe_analytical_detail
-from app.shared.result_limits import OVERSIZED_ANALYTICAL_RESULT_MESSAGE
+from app.services.result_safety import (
+    enrich_result_counts,
+    is_sensitive_detail_output,
+    is_unsafe_analytical_detail,
+)
+from app.shared.result_limits import (
+    OVERSIZED_ANALYTICAL_RESULT_MESSAGE,
+    SENSITIVE_DETAIL_RESULT_MESSAGE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,18 +78,31 @@ class AnalyzeResultsNode(IAgentNode):
                 }
             )
 
-        if is_unsafe_analytical_detail(state.query_result, state.query_plan):
+        sensitive_detail_output = is_sensitive_detail_output(
+            state.query_result,
+            state.query_plan,
+            question=state.raw_question or state.question,
+        )
+        oversized_identifier_detail = is_unsafe_analytical_detail(
+            state.query_result, state.query_plan
+        )
+        if sensitive_detail_output or oversized_identifier_detail:
             logger.warning(
-                "AnalyzeResultsNode blocked oversized identifier-bearing analytical detail."
+                "AnalyzeResultsNode blocked unsafe detail output."
             )
             duration = (time.perf_counter() - start_time) * 1000
             guarded_result = state.query_result.model_copy(
                 update={"unsafe_detail_output": True}
             )
+            blocked_reason = (
+                SENSITIVE_DETAIL_RESULT_MESSAGE
+                if sensitive_detail_output
+                else OVERSIZED_ANALYTICAL_RESULT_MESSAGE
+            )
             return state.model_copy(
                 update={
                     "query_result": guarded_result,
-                    "analytics_blocked_reason": OVERSIZED_ANALYTICAL_RESULT_MESSAGE,
+                    "analytics_blocked_reason": blocked_reason,
                     "current_node": "analyze_results",
                     "completed_nodes": state.completed_nodes + ["analyze_results"],
                     "duration_ms": state.duration_ms + duration,

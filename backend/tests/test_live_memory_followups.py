@@ -223,6 +223,28 @@ def test_planner_extracts_aggregate_threshold_variants():
         assert plan.aggregate_threshold.value == value, question
 
 
+@pytest.mark.parametrize(
+    ("question", "operator", "value"),
+    [
+        # Turkish thousands separator: normalization turns "1.000" into "1 000",
+        # which used to be read as 0 (only the trailing "000" was captured);
+        # and a bare "2024 500" must not be merged into 2024500 (robustness
+        # probe round 7, 2026-07-29).
+        ("2024 bolum bazinda 1.000 den fazla randevusu olan bolumler", ">", 1000),
+        ("2024 bolum bazinda 10.000 den az randevusu olan bolumler", "<", 10000),
+        ("2024 bolum bazinda 1.000.000 den fazla randevusu olan bolumler", ">", 1000000),
+        ("2024 en az 2.500 randevusu olan doktorlar", ">=", 2500),
+        ("2024 bolum bazinda 500 den fazla randevu", ">", 500),
+    ],
+)
+def test_aggregate_threshold_handles_thousands_separator(question, operator, value):
+    view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+    plan = QueryPlanner().build_plan(question, QueryAnalyzer().analyze(question), [], views=[view])
+    assert plan.aggregate_threshold is not None, question
+    assert plan.aggregate_threshold.operator == operator, question
+    assert plan.aggregate_threshold.value == value, question
+
+
 def test_en_az_threshold_does_not_double_as_a_row_limit():
     """'en az 500 randevusu olan doktorlar' means at-least-500 (a HAVING), not
     the TOP 500 rows — the same number must not become a spurious row limit
@@ -428,7 +450,11 @@ async def test_month_year_comparison_followup_builds_period_comparison_plan():
 
     assert resolution.follow_up_detected is True
     assert second.analysis_type == "period_comparison"
-    assert second.dimensions == []
+    # A per-department view compared against another period stays per-department:
+    # the inherited GenelRandevuBolumAdi dimension survives into the comparison,
+    # so the answer is a per-department May-vs-June breakdown rather than a
+    # single two-period total (2026-07-29, live UI month-comparison findings).
+    assert second.dimensions == ["GenelRandevuBolumAdi"]
     assert second.ranking is None
     assert second.order is None
     assert len(second.periods) == 2
@@ -439,8 +465,14 @@ async def test_month_year_comparison_followup_builds_period_comparison_plan():
         built.sql, second, built.expected_aliases, deterministic=True
     )
     assert compliance.compliant is True
-    assert "percentage_change" in built.sql
-    assert "WHERE (BaslangicTarihi >= '2025-06-01'" in built.sql
+    # Grouped breakdown: one row per department with both period counts and the
+    # signed difference, ordered by |difference|.
+    assert "current_period_count" in built.sql
+    assert "baseline_period_count" in built.sql
+    assert "absolute_change" in built.sql
+    assert "GROUP BY" in built.sql
+    # Both periods still live in the WHERE (parenthesized disjunction), and the
+    # baseline window is never AND-ed onto the current one.
     assert "OR (BaslangicTarihi >= '2025-05-01'" in built.sql
     assert "AND BaslangicTarihi >= '2025-06-01'" not in built.sql
 
@@ -561,6 +593,50 @@ async def test_dimension_followup_after_period_comparison_drops_fixed_comparison
 
 
 @pytest.mark.asyncio
+async def test_ranking_chain_preserves_dimension_through_resort_replay_and_format():
+    """A department ranking must survive a re-sort ("Şimdi en düşük ... göre
+    sırala"), a same-analysis replay for a new year ("Aynı analizi 2024 için
+    yap"), and a format switch ("Tablo olarak göster") — none of these may
+    collapse the breakdown into a single KPI or drop it as out-of-scope
+    (2026-07-29, live UI multi-turn follow-up findings)."""
+    chain = _Chain()
+    first, _ = await chain.turn(
+        "2025 bolum bazinda gelmeme oranina gore en yuksek 10 bolumu goster"
+    )
+    assert first.dimensions == ["GenelRandevuBolumAdi"]
+    assert first.limit == 10
+
+    second, r2 = await chain.turn("Ilk 5 ile sinirla")
+    assert r2.follow_up_detected is True
+    assert second.dimensions == ["GenelRandevuBolumAdi"]
+    assert second.limit == 5
+
+    # Re-sort by a NEW metric with no dimension named — the breakdown continues.
+    third, r3 = await chain.turn("Simdi en dusuk gerceklesme oranina gore sirala")
+    assert r3.follow_up_detected is True
+    assert "resort_continuation" in r3.follow_up_signals
+    assert third.dimensions == ["GenelRandevuBolumAdi"]
+    assert third.metrics == ["completed_appointment_rate"]
+    assert third.limit == 5
+
+    # Same analysis, new year — swaps the date, keeps dimension/metric/limit.
+    fourth, r4 = await chain.turn("Ayni analizi 2024 icin yap")
+    assert r4.follow_up_detected is True
+    assert "same_analysis_replay" in r4.follow_up_signals
+    assert fourth.dimensions == ["GenelRandevuBolumAdi"]
+    assert fourth.metrics == ["completed_appointment_rate"]
+    assert fourth.limit == 5
+    assert _date(fourth) == ("2024-01-01", "2024-12-31")
+
+    # Format-only follow-up must not drop the analysis.
+    fifth, r5 = await chain.turn("Tablo olarak goster")
+    assert r5.follow_up_detected is True
+    assert fifth.dimensions == ["GenelRandevuBolumAdi"]
+    assert fifth.metrics == ["completed_appointment_rate"]
+    assert _date(fifth) == ("2024-01-01", "2024-12-31")
+
+
+@pytest.mark.asyncio
 async def test_sql_output_followup_after_period_comparison_keeps_comparison_plan():
     chain = _Chain()
     await chain.turn("2025 Mayis ayinda bolumlere gore toplam randevu sayisini goster.")
@@ -580,3 +656,47 @@ async def test_sql_output_followup_after_period_comparison_keeps_comparison_plan
         built.sql, fourth, built.expected_aliases, deterministic=True
     )
     assert compliance.compliant is True
+
+
+@pytest.mark.asyncio
+async def test_followup_phrasing_variants_are_consistent():
+    """Robustness probe round 5 (2026-07-29): additive/output follow-up
+    phrasings must behave the same as their already-working siblings.
+
+    - "buna ... ekle" ADDS a metric (like "... da ekle" / "bir de ..."),
+      it must not REPLACE — and "gerçekleşen" (which contains the substring
+      'ekle') must NOT be mistaken for an additive marker.
+    - "... de kır" ADDS a dimension (like "... da ayır" / "bir de ...").
+    - "görsel olarak göster" is an output-change follow-up (like "grafik
+      olarak göster"), inheriting the prior metric/dimension/date.
+    """
+    base = "2024 yilinda bolum bazinda randevu sayisi"
+
+    chain = _Chain()
+    await chain.turn(base)
+    added, res = await chain.turn("buna gelmeme oranini ekle")
+    assert res.follow_up_detected is True
+    assert added.metrics == ["appointment_count", "no_show_rate"]
+
+    chain = _Chain()
+    await chain.turn(base)
+    dim_added, _ = await chain.turn("cinsiyete gore de kir")
+    assert set(dim_added.dimensions) == {"GenelRandevuBolumAdi", "CinsiyetId"}
+
+    chain = _Chain()
+    await chain.turn(base)
+    visual, res = await chain.turn("gorsel olarak goster")
+    assert res.follow_up_detected is True
+    assert visual.metrics == ["appointment_count"]
+    assert visual.dimensions == ["GenelRandevuBolumAdi"]
+
+
+@pytest.mark.asyncio
+async def test_gerceklesen_is_not_treated_as_additive_ekle_marker():
+    """Regression guard: "gerçekleşen randevu sayısı" REPLACES the metric with
+    completed_appointment_count — the 'ekle' substring inside 'gerçekleşen'
+    must not make it additive."""
+    chain = _Chain()
+    await chain.turn("2025 ocak randevu sayisi")
+    second, _ = await chain.turn("Gerceklesen randevu sayisi nedir")
+    assert second.metrics == ["completed_appointment_count"]

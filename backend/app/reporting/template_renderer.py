@@ -209,9 +209,12 @@ class TemplateReportRenderer:
         increased = [row for row in rows if float(row["rate_point_change"]) > 0]
         lines = ["# Dönemsel Artış Analizi", ""]
         if not increased:
-            # Olay yoksa kazanan seçilmez: bunu açıkça söyleriz.
+            # Olay yoksa kazanan seçilmez: bunu açıkça söyleriz. Metin
+            # ResultReasoner ile birebir aynı ("artış tespit edilmedi") —
+            # aynı olguyu iki farklı yerde farklı ifade etmek tutarsızlık
+            # yaratıyordu (robustluk turu 2026-07-29).
             lines.append(
-                "İncelenen dönemde hiçbir grupta aranan oranda artış görülmedi."
+                "İncelenen dönemde hiçbir grupta aranan oranda artış tespit edilmedi."
             )
         else:
             ranked = sorted(
@@ -251,7 +254,11 @@ class TemplateReportRenderer:
         # dimension column rendered raw title-cased ("Subeadi") instead of
         # its Turkish label ("Şube"). get_column_label() covers both.
         row = query_result.rows[0]
-        lines = ["# Yanıt", "", "Bulduğum değerler:", ""]
+        lines = ["# Yanıt", ""]
+        branch_note = _single_branch_scope_note(query_result)
+        if branch_note:
+            lines.extend([branch_note, ""])
+        lines.extend(["Bulduğum değerler:", ""])
         for key in query_result.columns:
             if key in row:
                 lines.append(f"- **{get_column_label(key)}:** {_render_cell(key, row[key])}")
@@ -269,6 +276,7 @@ class TemplateReportRenderer:
         # in live multi-turn testing). get_column_label() covers both.
         query_result = cap_query_result(query_result, DEFAULT_GROUPED_RESULT_LIMIT)
         columns = query_result.columns or _columns_from_rows(query_result.rows)
+        branch_note = _single_branch_scope_note(query_result)
         header = "| " + " | ".join(get_column_label(col) for col in columns) + " |"
         separator = "| " + " | ".join("---" for _ in columns) + " |"
         rows = []
@@ -281,6 +289,7 @@ class TemplateReportRenderer:
                 "",
                 result_notice(query_result),
                 "",
+                *([branch_note, ""] if branch_note else []),
                 header,
                 separator,
                 *rows,
@@ -304,6 +313,24 @@ def _render_cell(column: str, value: Any) -> str:
     if isinstance(value, Number) and not isinstance(value, bool):
         return format_value(column, value)
     return str(value)
+
+
+def _single_branch_scope_note(query_result: QueryResult) -> str | None:
+    if len(query_result.rows) != 1:
+        return None
+    branch_column = next(
+        (column for column in query_result.columns if column in {"SubeAdi", "branch"}),
+        None,
+    )
+    if branch_column is None:
+        return None
+    value = query_result.rows[0].get(branch_column)
+    if value in (None, ""):
+        return None
+    return (
+        "Not: Bu sorgu sonucunda tek şube bulundu; şube bazında çoklu "
+        "karşılaştırma oluşmadı."
+    )
 
 
 def _single_value_sentence(label: str, rendered_value: str, question: str | None = None) -> str:

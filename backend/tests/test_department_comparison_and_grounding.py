@@ -20,7 +20,10 @@ from app.planning.value_resolver import (
     extract_comparison_pair,
     resolve_value,
 )
-from app.services.deterministic_sql_builder import DeterministicSQLBuilder
+from app.services.deterministic_sql_builder import (
+    _DEPARTMENT_SPLIT_ALIAS,
+    DeterministicSQLBuilder,
+)
 from tools.benchmark.metrics import Outcome, QuestionRun, Reason, classify
 
 
@@ -304,8 +307,18 @@ class TestComparisonEntityEnumeration:
             "Kalp ve Damar Cerrahisi bölümünü Ortopedi ile karşılaştır"
         ) == []
 
-    def test_no_comparison_marker_yields_nothing(self):
-        assert extract_comparison_entities("Kardiyoloji, Ortopedi ve Nöroloji bölümleri") == []
+    def test_field_cue_enumeration_is_a_multi_value_filter(self):
+        # A field cue ("bölümleri") makes a 3+-value list a multi-value FILTER,
+        # even without a comparison verb (#4 ileri filtreler, 2026-07-29).
+        assert extract_comparison_entities("Kardiyoloji, Ortopedi ve Nöroloji bölümleri") == [
+            "Kardiyoloji",
+            "Ortopedi",
+            "Nöroloji",
+        ]
+
+    def test_no_comparison_marker_and_no_field_cue_yields_nothing(self):
+        # Neither a comparison verb nor a field cue — not an enumeration.
+        assert extract_comparison_entities("Kardiyoloji, Ortopedi ve Nöroloji sayıları") == []
 
 
 # ── deterministic builder: containment predicate ────────────────────────────
@@ -749,3 +762,88 @@ class TestBenchmarkScorer:
         outcome, reason = classify(run)
         assert outcome == Outcome.PARTIAL
         assert reason == Reason.UNEXPECTED_CLARIFICATION
+
+
+@pytest.mark.asyncio
+async def test_three_value_department_filter_vs_comparison(monkeypatch):
+    """A 3+-value department enumeration is a FILTER (single containment-OR
+    total) in a plain context, but a per-entity breakdown when a comparison
+    verb is present — and all three values ground, not just the ends (#4 ileri
+    filtreler, 2026-07-29)."""
+    from app.agent.nodes.resolve_filter_values import ResolveFilterValuesNode
+    from app.agent.state import AgentState
+    from app.database_intelligence.models import ViewMetadata
+    from app.services.query_analyzer import QueryAnalyzer
+    from app.planning.planner import QueryPlanner
+
+    depts = ["Kardiyoloji", "Nöroloji", "Ortopedi"]
+
+    class _R:
+        async def resolve(self, field, phrase):
+            return resolve_value(field, phrase, depts if field == "department" else [])
+
+    view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+    node = ResolveFilterValuesNode(_R())
+
+    async def _run(question: str):
+        plan = QueryPlanner().build_plan(question, QueryAnalyzer().analyze(question), [], views=[view])
+        state = await node.execute(AgentState(question=question, raw_question=question, query_plan=plan))
+        return state.query_plan
+
+    filt = await _run("2024 Kardiyoloji, Noroloji ve Ortopedi bolumlerinde toplam kac randevu var")
+    assert filt.analysis_type != "comparison"
+    assert set(filt.resolved_filters["department"].values) == set(depts)
+    built = DeterministicSQLBuilder().build(filt)
+    # A single containment-OR filter, one row — every department appears.
+    assert all(d in built.sql for d in ("Kardiyoloji", "Nöroloji", "Ortopedi"))
+    assert "entity_label" not in built.sql
+
+    cmp = await _run("2024 Kardiyoloji, Noroloji ve Ortopedi yi karsilastir")
+    assert cmp.analysis_type == "comparison"
+
+
+@pytest.mark.asyncio
+async def test_department_exclusion_breakdown_and_total(monkeypatch):
+    """"X hariç ..." grounds the excluded name and drops the positive
+    department filter it mis-parsed into, so filter+exclusion never cancel to
+    zero rows. A breakdown excludes the ATOMIC value (composite rows keep their
+    other departments); a plain total excludes at the row level (#4 ileri
+    filtreler, 2026-07-29)."""
+    from app.agent.nodes.resolve_filter_values import ResolveFilterValuesNode
+    from app.agent.state import AgentState
+    from app.database_intelligence.models import ViewMetadata
+    from app.services.query_analyzer import QueryAnalyzer
+    from app.planning.planner import QueryPlanner
+
+    depts = ["Kardiyoloji", "Radyoloji", "Nöroloji", "Ortopedi"]
+
+    class _R:
+        async def resolve(self, field, phrase):
+            return resolve_value(field, phrase, depts if field == "department" else [])
+
+    view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+    node = ResolveFilterValuesNode(_R())
+
+    async def _run(question: str):
+        plan = QueryPlanner().build_plan(question, QueryAnalyzer().analyze(question), [], views=[view])
+        state = await node.execute(AgentState(question=question, raw_question=question, query_plan=plan))
+        return state.query_plan
+
+    brk = await _run("2024 Kardiyoloji haric bolum bazinda randevu sayisi")
+    assert brk.excluded_departments == ["Kardiyoloji"]
+    # The mis-parsed positive filter is cleared — no contradictory equality.
+    assert brk.department_filter is None
+    built = DeterministicSQLBuilder().build(brk)
+    # Atomic exclusion keeps the split breakdown; the positive containment /
+    # atomic-equality on the same value must be gone.
+    assert f"{_DEPARTMENT_SPLIT_ALIAS}.value NOT IN (N'Kardiyoloji')" in built.sql
+    assert "value = N'Kardiyoloji'" not in built.sql
+    assert "LIKE N'%,Kardiyoloji,%'" not in built.sql
+
+    tot = await _run("2024 Radyoloji haric toplam randevu")
+    assert tot.excluded_departments == ["Radyoloji"]
+    built_tot = DeterministicSQLBuilder().build(tot)
+    assert "NOT (" in built_tot.sql and "Radyoloji" in built_tot.sql
+
+    plain = await _run("2024 bolum bazinda randevu sayisi")
+    assert plain.excluded_departments == []

@@ -2437,6 +2437,302 @@
         ],
         "must_not_include_sql": []
       }
+    },
+    {
+      "id": "EXP-DISTINCT-DEGISIK-001",
+      "question": "2024 yilinda kac degisik doktor calismis",
+      "category": "expert_regression",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "expert",
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [
+          "unique_doctor_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CountResult",
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "DoktorId"
+        ],
+        "must_include_sql": [
+          "COUNT(DISTINCT"
+        ],
+        "must_not_include_sql": []
+      }
+    },
+    {
+      "id": "EXP-PASSIVE-NOSHOW-001",
+      "question": "2024 hangi 5 bolumde en cok gelinmiyor",
+      "category": "expert_regression",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "expert",
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [
+          "no_show_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "DistributionResult",
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "RandevuDurumu"
+        ],
+        "must_include_sql": [
+          "RandevuDurumu = N'Gelmedi'"
+        ],
+        "must_not_include_sql": []
+      }
+    },
+    {
+      "id": "EXP-CONVERSION-001",
+      "question": "2024 randevularin yuzde kaci protokole donustu",
+      "category": "expert_regression",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "expert",
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [
+          "protocol_conversion_rate"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "RatioResult",
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "ProtokolAcilisTarihi"
+        ],
+        "must_include_sql": [
+          "NULLIF"
+        ],
+        "must_not_include_sql": []
+      }
+    },
+    {
+      "id": "EXP-TYPO-DIM-001",
+      "question": "2024 bolm bazinda randevu sayisi",
+      "category": "expert_regression",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "expert",
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": null,
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "GenelRandevuBolumAdi"
+        ],
+        "must_include_sql": [
+          "GROUP BY"
+        ],
+        "must_not_include_sql": []
+      }
+    },
+    {
+      "id": "EXP-PERIODCMP-VE-001",
+      "question": "2025 nisan ve mayis randevu sayilarini kiyasla",
+      "category": "expert_regression",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "expert",
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": "period_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "answerable": true,
+        "baseline_period": null
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "BaslangicTarihi"
+        ],
+        "must_include_sql": [
+          "current_period",
+          "baseline_period",
+          "2025-04",
+          "2025-05"
+        ],
+        "must_not_include_sql": []
+      }
+    },
+    {
+      "id": "EXP-OOS-LAB-001",
+      "question": "2024 yilinda hastalarin laboratuvar sonuclari",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "expert",
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": true,
+        "answerable": false
+      },
+      "sql_requirements": {
+        "must_use_columns": [],
+        "must_include_sql": [],
+        "must_not_include_sql": []
+      }
+    },
+    {
+      "id": "EXP-OOS-PAYMENT-001",
+      "question": "2024 yilinda toplam tahsilat ne kadar",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "expert",
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": null,
+        "metrics": [],
+        "dimensions": [],
+        "clarification_required": true,
+        "answerable": false
+      },
+      "sql_requirements": {
+        "must_use_columns": [],
+        "must_include_sql": [],
+        "must_not_include_sql": []
+      }
+    },
+    {
+      "id": "EXP-THOUSANDS-001",
+      "question": "2024 bolum bazinda 1.000 den fazla randevusu olan bolumler",
+      "category": "expert_regression",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "expert",
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": "distribution",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "DistributionResult",
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "GenelRandevuBolumAdi"
+        ],
+        "must_include_sql": [
+          "HAVING",
+          "> 1000"
+        ],
+        "must_not_include_sql": [
+          "> 0"
+        ]
+      }
+    },
+    {
+      "id": "EXP-ISODATE-001",
+      "question": "2024-05 bolum bazinda randevu sayisi",
+      "category": "expert_regression",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "expert",
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": "count",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "CountResult",
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "GenelRandevuBolumAdi"
+        ],
+        "must_include_sql": [
+          "2024-05-01",
+          "2024-05-31"
+        ],
+        "must_not_include_sql": [
+          "2024-12-31"
+        ]
+      }
+    },
+    {
+      "id": "EXP-AGEFILTER-001",
+      "question": "2024 yilinda 40 yas ustu hastalarin randevu sayisi",
+      "category": "expert_regression",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "expert",
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": "count",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "CountResult",
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "DogumTarihi"
+        ],
+        "must_include_sql": [
+          "DATEDIFF(year, DogumTarihi, GETDATE()) > 40"
+        ],
+        "must_not_include_sql": [
+          "GROUP BY"
+        ]
+      }
     }
   ]
 }

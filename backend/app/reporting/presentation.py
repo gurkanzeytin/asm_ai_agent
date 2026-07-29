@@ -41,6 +41,15 @@ METRIC_LABELS_TR: dict[str, str] = {
     "unique_patient_count": "Tekil Hasta Sayısı",
     "unique_doctor_count": "Tekil Doktor Sayısı",
     "comparison_total_count": "Karşılaştırma Toplamı",
+    # İki-varlık karşılaştırması sütunları (deterministic_sql_builder.
+    # _entity_comparison): her iki tarafın koşullu sayımı.
+    "current_entity_count": "Birinci Grup Randevu Sayısı",
+    "baseline_entity_count": "İkinci Grup Randevu Sayısı",
+    # Oran/pay dönem-karşılaştırması ara sütunları (_period_comparison ratio).
+    "current_numerator": "Mevcut Dönem Pay",
+    "current_denominator": "Mevcut Dönem Payda",
+    "baseline_numerator": "Önceki Dönem Pay",
+    "baseline_denominator": "Önceki Dönem Payda",
     "group_count": "Grup Sayısı",
     "total_appointments": "Toplam Randevu",
     "average_appointments": "Ortalama Randevu",
@@ -125,6 +134,13 @@ DIMENSION_LABELS_TR: dict[str, str] = {
     "CreatedDate": "Oluşturulma Tarihi",
     "age_group": "Yaş Grubu",
     "day_type": "Gün Tipi",
+    # Zaman-serisi kova sütunu (time_trend period_start) — jenerik "Dönem".
+    "period_start": "Dönem",
+    # Dönem/varlık karşılaştırmasının etiket (başlık) sütunları.
+    "current_period_label": "Mevcut Dönem",
+    "baseline_period_label": "Önceki Dönem",
+    "current_entity_label": "Birinci Grup",
+    "baseline_entity_label": "İkinci Grup",
     # Üç ve daha fazla varlığın karşılaştırıldığı kırılımın etiket sütunu
     # (deterministic_sql_builder._entity_breakdown). Karşılaştırılan taraflar
     # bölüm de şube de olabildiği için jenerik bir etiket kullanılır.

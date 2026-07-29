@@ -126,6 +126,12 @@ class AgentState(BaseModel):
         default=None,
         description="Explicit user-facing output mode requested for this turn.",
     )
+    conversation_memory_answer: str | None = Field(
+        default=None,
+        description="Deterministic answer to a meta-question ABOUT the conversation "
+        "('Son sorumda hangi kırılımı istemiştim?'), built from retained context. When "
+        "set, the graph short-circuits to GenerateConversationMemoryNode (no SQL).",
+    )
     answerability_context_signals: List[str] = Field(
         default_factory=list,
         description="Trusted typed signals supplied by conversational context resolution.",

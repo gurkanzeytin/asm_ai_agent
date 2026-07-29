@@ -439,6 +439,17 @@ class TestStatusFilterIntegration:
         r2 = _ask(manager, "Kadın hastaların yaş dağılımını göster.")
         assert r2.resolved_signals.status_filters == []
 
+    def test_previous_status_does_not_leak_into_full_branch_comparison(self, manager):
+        _ask(manager, "Beklemede randevu sayisini goster.")
+        r2 = _ask(
+            manager,
+            "2025 yilinda subelere gore randevu sayilarini karsilastir.",
+        )
+
+        assert r2.follow_up_detected is False
+        assert r2.context_applied is False
+        assert r2.resolved_signals.status_filters == []
+
 
 class TestRankingAndLimitIntegration:
     def test_top_10_stores_limit_and_ranking(self, manager):

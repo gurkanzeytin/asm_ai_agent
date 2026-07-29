@@ -171,6 +171,20 @@ def test_template_renderer_single_row_uses_dimension_label_not_raw_column():
     assert "Subeadi" not in rendered.markdown
 
 
+def test_template_renderer_single_branch_result_states_scope_limitation():
+    rendered = TemplateReportRenderer().render(
+        ReportType.SINGLE_ROW,
+        _query_result(
+            ["SubeAdi", "appointment_count"],
+            [{"SubeAdi": "TEST ASM Gebze", "appointment_count": 213855}],
+        ),
+    )
+
+    assert rendered is not None
+    assert "tek şube bulundu" in rendered.markdown
+    assert "çoklu karşılaştırma oluşmadı" in rendered.markdown
+
+
 def test_template_renderer_empty():
     rendered = TemplateReportRenderer().render(ReportType.EMPTY, _query_result(["id"], []))
 

@@ -292,3 +292,34 @@ def test_turkish_characters_preserved_in_labels():
     label = get_metric_label("monthly_appointment_count")
     assert "ı" in label or "ş" in label or "ğ" in label or "Ç" in label or "Ş" in label
     assert label == "Aylık Randevu Sayısı"
+
+
+# ── 9. Deterministic-builder aliases never leak as raw English ─────────────
+
+
+def test_builder_result_columns_all_resolve_to_turkish_labels():
+    """Every column the deterministic SQL builder can emit must resolve to a
+    real Türkçe label — no raw snake_case/English fallback reaching the user
+    (2026-07-29, live UI output-polish findings: period_start, entity/period
+    labels, ratio numerator/denominator were leaking)."""
+    from app.reporting.presentation import _fallback_label, get_column_label
+
+    builder_columns = [
+        "period_start",
+        "current_period_label",
+        "baseline_period_label",
+        "current_entity_label",
+        "baseline_entity_label",
+        "current_entity_count",
+        "baseline_entity_count",
+        "current_numerator",
+        "current_denominator",
+        "baseline_numerator",
+        "baseline_denominator",
+        "current_period_count",
+        "baseline_period_count",
+        "absolute_change",
+        "percentage_change",
+    ]
+    leaked = [c for c in builder_columns if get_column_label(c) == _fallback_label(c, "column")]
+    assert leaked == [], f"unmapped columns leak raw labels: {leaked}"

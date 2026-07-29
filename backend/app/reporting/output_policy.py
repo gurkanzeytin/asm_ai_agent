@@ -68,6 +68,29 @@ def _wants_visual(folded: str) -> bool:
     return bool(_VISUAL_MARKER.search(folded)) and not _VISUAL_NEGATED.search(folded)
 
 
+# Specific chart-type request markers ("pasta grafik", "çizgi grafik", "sütun
+# grafik"). Ordered most-specific first; the visualization selector honours the
+# match only when the data actually supports it, otherwise it falls back to the
+# shape-based default (2026-07-29, live UI "pasta grafik" rendered as bar).
+_REQUESTED_CHART_MARKERS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\bpasta\w*\b"), "PIE_CHART"),
+    (re.compile(r"\b(cizgi\w*|line\b|trend\s+grafi)"), "LINE_CHART"),
+    (re.compile(r"\b(sutun\w*|bar\b|cubuk\w*)"), "BAR_CHART"),
+)
+
+
+def detect_requested_visualization(folded: str) -> str | None:
+    """Returns the VisualizationType value the user explicitly asked for
+    ("pasta" -> PIE_CHART), or None. Respects the same negation guard as
+    `_wants_visual` so "pasta grafik değil" never forces a pie chart."""
+    if _VISUAL_NEGATED.search(folded):
+        return None
+    for pattern, chart_type in _REQUESTED_CHART_MARKERS:
+        if pattern.search(folded):
+            return chart_type
+    return None
+
+
 # Symmetric with _VISUAL_NEGATED above: "tablo değil, grafik göster" (NOT a
 # table, show a chart) must not still count "tablo" as a data/table request
 # just because the bare word appears before its own rejection.

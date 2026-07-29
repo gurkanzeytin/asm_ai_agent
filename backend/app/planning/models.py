@@ -153,6 +153,12 @@ class QueryPlan(BaseModel):
         "('tüm şubeler', 'kurum genelinde', ...) — no branch VALUE filter may be produced. "
         "'filtered' otherwise (the default: no scope claim either way).",
     )
+    excluded_departments: list[str] = Field(
+        default_factory=list,
+        description="Grounded department values to EXCLUDE ('Kardiyoloji hariç bölüm "
+        "bazında ...'). Rendered as an atomic NOT IN (dept-split) or a NOT-containment "
+        "row filter. Empty means no department exclusion.",
+    )
     branch_filters: list[str] = Field(
         default_factory=list,
         description="Grounded branch (SubeAdi) values only. Never populated from a generic "

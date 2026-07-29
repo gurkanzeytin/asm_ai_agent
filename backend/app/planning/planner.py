@@ -354,6 +354,23 @@ class QueryPlanner:
                     intelligence["aggregation"] = (
                         primary.formula if primary and primary.formula else "COUNT(*)"
                     )
+            # Age RANGE filter ("40 yaş üstü", "18 yaşından küçük", "30-40 yaş
+            # arası"): a WHERE predicate on the derived age, NOT an age-group
+            # breakdown. Because "yaş" is a DogumTarihi synonym it otherwise
+            # became a GROUP BY dimension, bucketing by decade instead of
+            # filtering (#4 çoklu-değer/ileri filtreler, 2026-07-29).
+            age_filter = self._age_filter(folded)
+            if age_filter:
+                extra_filters = extra_filters + [age_filter]
+                if not catalog.detect_age_group_request(folded):
+                    intelligence["dimensions"] = [
+                        dimension
+                        for dimension in intelligence["dimensions"]
+                        if dimension != "DogumTarihi"
+                    ]
+                intelligence["required_columns"] = list(
+                    dict.fromkeys(intelligence["required_columns"] + ["DogumTarihi"])
+                )
             if raw_list_request:
                 list_projection = self._view_list_projection(view_name)
                 intelligence.update(
@@ -442,6 +459,17 @@ class QueryPlanner:
                 signals_type = signals.analysis_type
             if intelligence["aggregation"]:
                 aggregation = intelligence["aggregation"]
+            # Typo recovery: a mis-spelled grouping word ("bolm bazında") slips
+            # past every exact matcher (dimensions stay empty). ONLY then try a
+            # one-edit fuzzy recovery — never overriding a deliberate
+            # no-dimension decision such as a single-metric period comparison
+            # (robustness probe round 4, 2026-07-29).
+            if not intelligence["dimensions"]:
+                fuzzy_dimension = self._fuzzy_group_dimension(folded, view_name)
+                if fuzzy_dimension:
+                    intelligence["dimensions"] = [fuzzy_dimension]
+                    if not group_column:
+                        group_column = fuzzy_dimension
             if group_column and intelligence["dimensions"]:
                 # The catalog-resolved canonical GROUP BY dimension(s) (from
                 # column_intelligence.json, e.g. "doktor bazinda" -> DoktorId)
@@ -854,7 +882,16 @@ class QueryPlanner:
         # (before resolved_projection is derived from `dimensions` below)
         # answers with the two-period total instead of failing outright.
         if pattern == "period_comparison" and dimensions and len(metrics) <= 1:
-            dimensions = []
+            # A per-dimension breakdown of a period comparison is now built for
+            # the plain VOLUME case (DeterministicSQLBuilder._period_comparison_
+            # grouped: one row per department with current/baseline/diff). A
+            # rate/ratio comparison still has no grouped shape, so its stray
+            # dimension is dropped to keep the two-period scalar answerable.
+            # `metrics` here is still the pre-ratio guess (numerator/denominator
+            # are derived below), so gate on the count metric directly.
+            supported_grouped = metrics in ([], ["appointment_count"])
+            if not supported_grouped:
+                dimensions = []
 
         # A trend question ("randevu eğilimini özetle") carries no explicit
         # granularity KEYWORD ("aylık"/"haftalık") but its relative date range
@@ -1081,6 +1118,58 @@ class QueryPlanner:
                         return column
         return None
 
+    def _fuzzy_group_dimension(self, folded_question: str, view_name: str) -> str | None:
+        """Recovers a grouping dimension from a single-char TYPO in the grouping
+        word ("bolm bazında", "doktr bazında") — used ONLY as a last resort when
+        the exact catalog/concept matchers found no dimension at all, so it never
+        overrides a deliberate no-dimension decision. Matches by one insertion/
+        deletion against the concept vocabulary; substitutions are NOT tolerated
+        (they collide too easily, e.g. süre↔şube). The grammatical grouping
+        position keeps this low-risk (robustness probe round 4, 2026-07-29)."""
+        concepts = view_mapping.get_view_entry(view_name).get("concepts", {})
+        fuzzy_column: str | None = None
+        for match in _GROUP_BY_PATTERN.finditer(folded_question):
+            word = match.group(1)
+            if len(word) < 4:
+                continue
+            for spec in concepts.values():
+                column = spec.get("column")
+                if not column or column.lower().endswith("id"):
+                    continue
+                for term in spec.get("terms", []):
+                    folded_term = view_mapping.fold(term)
+                    if " " in folded_term or len(folded_term) < 4:
+                        continue
+                    if word.startswith(folded_term):
+                        return None  # an exact match exists anywhere — not a typo
+                    if fuzzy_column is None and self._one_indel_apart(word, folded_term):
+                        fuzzy_column = column
+        return fuzzy_column
+
+    @staticmethod
+    def _one_indel_apart(a: str, b: str) -> bool:
+        """True when `a` and `b` differ by exactly one inserted/deleted char.
+
+        Length-1 apart only (no substitutions) — catches the common
+        missing/extra-letter typo without the false matches a substitution
+        distance would allow among short, similar concept words.
+        """
+        short, long = (a, b) if len(a) < len(b) else (b, a)
+        if len(long) - len(short) != 1:
+            return False
+        i = j = 0
+        skipped = False
+        while i < len(short) and j < len(long):
+            if short[i] == long[j]:
+                i += 1
+                j += 1
+            elif skipped:
+                return False
+            else:
+                skipped = True
+                j += 1
+        return True
+
     def _entity_table(
         self, entity: str | None, table_map: dict[str, "TableMetadata"]
     ) -> str | None:
@@ -1288,6 +1377,41 @@ class QueryPlanner:
             return None
         return value
 
+    _AGE_EXPR = "DATEDIFF(year, DogumTarihi, GETDATE())"
+
+    def _age_filter(self, folded_question: str) -> str | None:
+        """Extracts an age-RANGE WHERE predicate ("40 yaş üstü", "18 yaşından
+        küçük", "30-40 yaş arası", "65 yaş ve üzeri"). Age is derived from
+        DogumTarihi the same way the age-group bucket is. Returns a T-SQL
+        predicate string, or None when the question carries no age bound.
+        """
+        # "30-40 yaş arası" / "30 40 yaş arası" — an inclusive band.
+        band = re.search(
+            r"\b(\d{1,3})\s*[-\s]\s*(\d{1,3})\s+yas\w*\s+aras", folded_question
+        )
+        if band:
+            low, high = sorted((int(band.group(1)), int(band.group(2))))
+            return f"{self._AGE_EXPR} BETWEEN {low} AND {high}"
+        # "N yaş ve üzeri/üstü" — inclusive lower bound (>=).
+        at_least = re.search(
+            r"\b(\d{1,3})\s+yas\w*\s+ve\s+(?:uzeri|ustu|yukari)", folded_question
+        )
+        if at_least:
+            return f"{self._AGE_EXPR} >= {int(at_least.group(1))}"
+        # "N yaş üstü/üzeri/üzerinde/büyük" — strict lower bound (>).
+        above = re.search(
+            r"\b(\d{1,3})\s+yas\w*\s+(?:ustu|uzeri|uzerinde|buyuk|yukari)", folded_question
+        )
+        if above:
+            return f"{self._AGE_EXPR} > {int(above.group(1))}"
+        # "N yaşından küçük / N yaş altı / N yaşından az" — strict upper bound (<).
+        below = re.search(
+            r"\b(\d{1,3})\s+yas\w*\s+(?:kucuk|alti|az|asagi)", folded_question
+        )
+        if below:
+            return f"{self._AGE_EXPR} < {int(below.group(1))}"
+        return None
+
     def _aggregate_threshold(self, folded_question: str) -> AggregateThreshold | None:
         """Extracts a HAVING-style bound on the grouped aggregate value.
 
@@ -1297,22 +1421,31 @@ class QueryPlanner:
         builder only renders it when the plan actually groups by a dimension;
         without a GROUP BY there is no aggregate to bound.
         """
+        # Number token that tolerates a Turkish thousands separator. Normalization
+        # turns "1.000" into "1 000" (the dot becomes a space), so a bare
+        # `\d[\d.]*` would capture only the trailing "000" next to "den" and read
+        # 1.000 as 0 (robustness probe round 7, 2026-07-29). The first
+        # alternative requires a 1-3 digit lead + at least one space/dot + 3-digit
+        # group (so a real "1 000" joins but a "2024 500" year+threshold pair does
+        # NOT — 2024 is 4 digits, an impossible thousands lead); a plain
+        # unseparated number falls through to `\d+`.
+        num = r"(\d{1,3}(?:[ .]\d{3})+|\d+)"
         # "N'den az/küçük", "N'den fazla/çok/büyük" — the apostrophe/suffix
         # ('den/'dan/den/dan) is normalized away, so match an optional gap.
         less = re.search(
-            r"\b(\d[\d.]*)\s*(?:'?d[ae]n|'?nin|'?in|'?un|'?nun)?\s*(az|kucuk|kucugu|asagi|alti|altinda)\b",
+            rf"\b{num}\s*(?:'?d[ae]n|'?nin|'?in|'?un|'?nun)?\s*(az|kucuk|kucugu|asagi|alti|altinda)\b",
             folded_question,
         )
         more = re.search(
-            r"\b(\d[\d.]*)\s*(?:'?d[ae]n|'?nin|'?in|'?un|'?nun)?\s*(fazla|cok|buyuk|buyugu|ustu|ustunde|uzeri|uzerinde)\b",
+            rf"\b{num}\s*(?:'?d[ae]n|'?nin|'?in|'?un|'?nun)?\s*(fazla|cok|buyuk|buyugu|ustu|ustunde|uzeri|uzerinde)\b",
             folded_question,
         )
         # "en az N" / "en fazla N" — inclusive bounds ("at least/at most N").
-        at_least = re.search(r"\ben\s+az\s+(\d[\d.]*)\b", folded_question)
-        at_most = re.search(r"\ben\s+(?:cok|fazla)\s+(\d[\d.]*)\b", folded_question)
+        at_least = re.search(rf"\ben\s+az\s+{num}\b", folded_question)
+        at_most = re.search(rf"\ben\s+(?:cok|fazla)\s+{num}\b", folded_question)
 
         def _num(token: str) -> float | None:
-            cleaned = token.replace(".", "")
+            cleaned = token.replace(".", "").replace(" ", "")
             return float(cleaned) if cleaned.isdigit() else None
 
         if at_least:

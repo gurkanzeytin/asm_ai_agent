@@ -246,6 +246,15 @@ class DeterministicSQLBuilder:
             expected_aliases.append(alias)
             metric_aliases[metric_id] = alias
         where = self._where(plan)
+        # Department EXCLUSION ("Kardiyoloji hariç ..."). When the query splits
+        # the composite department column, exclude the ATOMIC value so a
+        # composite row ("Kardiyoloji, Nöroloji") still contributes its OTHER
+        # departments; otherwise exclude at the row level via NOT-containment.
+        if plan.excluded_departments and not splits_department:
+            row_exclusion = f"NOT ({self._department_containment(plan.excluded_departments)})"
+            where = (
+                f"{where.rstrip()} AND {row_exclusion}\n" if where else f"WHERE {row_exclusion}\n"
+            )
         if splits_department:
             empty_guard = f"{_DEPARTMENT_SPLIT_ALIAS}.value <> ''"
             atomic_department_guard = self._atomic_department_guard(
@@ -253,6 +262,11 @@ class DeterministicSQLBuilder:
             )
             if atomic_department_guard:
                 empty_guard = f"{empty_guard} AND {atomic_department_guard}"
+            if plan.excluded_departments:
+                literals = ", ".join(
+                    self._unicode_literal(value) for value in plan.excluded_departments
+                )
+                empty_guard = f"{empty_guard} AND {_DEPARTMENT_SPLIT_ALIAS}.value NOT IN ({literals})"
             where = (
                 f"{where.rstrip()} AND {empty_guard}\n" if where else f"WHERE {empty_guard}\n"
             )
@@ -371,6 +385,21 @@ class DeterministicSQLBuilder:
         current, baseline, current_label, baseline_label = self._period_pair_with_labels(
             plan, adaptive_retry
         )
+        # Per-dimension period comparison ("Ocak ile Şubat'ı BÖLÜM BAZINDA
+        # kıyasla", "en çok fark olan ilk 5 bölüm"): one row per group with its
+        # current-period count, baseline-period count, and the signed
+        # difference — ordered by |difference| so the biggest movers lead. Only
+        # the plain VOLUME case is grouped; a rate/ratio comparison keeps the
+        # scalar two-period shape below (2026-07-29, live UI month-comparison
+        # findings).
+        if (
+            plan.dimensions
+            and not (plan.numerator and plan.denominator)
+            and len(plan.metrics) <= 1
+        ):
+            grouped = self._period_comparison_grouped(plan, current, baseline)
+            if grouped is not None:
+                return grouped
         if plan.numerator and plan.denominator:
             numerator = self._metric_expr(plan.numerator)
             denominator = self._metric_expr(plan.denominator)
@@ -432,6 +461,65 @@ class DeterministicSQLBuilder:
         sql = f"SELECT {select}\nFROM {VIEW}\nWHERE ({current}) OR ({baseline});"
         return DeterministicSQL(
             sql=sql, result_schema="PeriodComparisonResult", expected_aliases=aliases
+        )
+
+    def _period_comparison_grouped(
+        self, plan: QueryPlan, current: str, baseline: str
+    ) -> DeterministicSQL | UnsupportedPlan | None:
+        """One row per group for a two-period volume comparison. Returns None
+        when the sole dimension has no supported grouped shape, so the caller
+        falls back to the scalar two-period total."""
+        dimension = plan.dimensions[0]
+        splits_department = dimension == DEPARTMENT_COLUMN
+        if splits_department:
+            group_expr = f"{_DEPARTMENT_SPLIT_ALIAS}.value"
+            alias = DEPARTMENT_COLUMN
+        elif self._is_safe_identifier(dimension):
+            group_expr = dimension
+            alias = dimension
+        else:
+            return None
+        cur = f"SUM(CASE WHEN ({current}) THEN 1 ELSE 0 END)"
+        base = f"SUM(CASE WHEN ({baseline}) THEN 1 ELSE 0 END)"
+        select = (
+            f"{group_expr} AS {alias}, "
+            f"{cur} AS current_period_count, "
+            f"{base} AS baseline_period_count, "
+            f"({cur}) - ({base}) AS absolute_change"
+        )
+        aliases = [alias, "current_period_count", "baseline_period_count", "absolute_change"]
+        # The period disjunction MUST stay parenthesized: a trailing "AND guard"
+        # binds tighter than OR, so an unwrapped "(current) OR (baseline) AND
+        # guard" would apply the empty/atomic department guard only to the
+        # baseline side and leak empty-department rows from the current side.
+        where = f"WHERE (({current}) OR ({baseline}))\n"
+        from_clause = f"FROM {VIEW}\n"
+        if splits_department:
+            from_clause += self._department_split_cross_apply()
+            guard = f"{_DEPARTMENT_SPLIT_ALIAS}.value <> ''"
+            atomic_guard = self._atomic_department_guard(self._department_filter_values(plan))
+            if atomic_guard:
+                guard = f"{guard} AND {atomic_guard}"
+            if plan.excluded_departments:
+                literals = ", ".join(
+                    self._unicode_literal(value) for value in plan.excluded_departments
+                )
+                guard = f"{guard} AND {_DEPARTMENT_SPLIT_ALIAS}.value NOT IN ({literals})"
+            where = f"{where.rstrip()} AND {guard}\n"
+        top = f"TOP ({plan.limit}) " if plan.limit else ""
+        sql = (
+            f"SELECT {top}{select}\n"
+            f"{from_clause}"
+            f"{where}"
+            f"GROUP BY {group_expr}\n"
+            f"ORDER BY ABS(({cur}) - ({base})) DESC;"
+        )
+        return DeterministicSQL(
+            sql=sql,
+            # A multi-row breakdown table, not the single-row comparison
+            # contract — free-form DistributionResult rows carry the diff column.
+            result_schema="DistributionResult",
+            expected_aliases=aliases,
         )
 
     def _entity_comparison(self, plan: QueryPlan) -> DeterministicSQL | UnsupportedPlan:

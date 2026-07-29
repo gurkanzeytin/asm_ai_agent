@@ -478,7 +478,7 @@ class TestNoResultGuidance:
         )
         assert result is not None
         assert "Deneyebilecekleriniz" in result.markdown
-        assert "Tarih aralığını genişletin" in result.markdown
+        assert "toplam sayı olarak sorun" in result.markdown
 
 
 # ─────────────────────────────────────────────

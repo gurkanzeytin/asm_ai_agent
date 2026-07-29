@@ -754,8 +754,13 @@ def detect_period_comparison(folded_question: str, detected_date_ranges: int = 0
     """Returns comparison descriptors when the question compares two periods."""
     if any(phrase in folded_question for phrase in _PREVIOUS_PERIOD_PHRASES):
         return ["current_period_vs_previous_period"]
+    # "fark"/"degisim"/"gore" only count as comparison intent once TWO explicit
+    # date ranges are already on the table ("2025 mayıs nisan farkı", "2025
+    # mayısta nisana göre değişim") — the range gate keeps these common words
+    # from turning an ordinary single-period question into a comparison.
     if detected_date_ranges >= 2 and any(
-        term in folded_question for term in ("karsilastir", "kiyasla", " ile ", "arasindaki fark")
+        term in folded_question
+        for term in ("karsilastir", "kiyasla", " ile ", "arasindaki fark", "fark", "degisim", "gore")
     ):
         return ["two_explicit_periods"]
     return []

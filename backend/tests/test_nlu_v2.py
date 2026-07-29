@@ -242,6 +242,32 @@ def test_detect_ambiguity_public_helper(analyzer):
     assert result.matched_phrase == "en basarili"
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        # Lab/test results and collections/payments are NOT in vw_RandevuRaporu —
+        # these must be refused, not answered with SQL over non-existent columns
+        # (robustness probe round 6, 2026-07-29).
+        "hangi hastanın kan tahlili yüksek",
+        "hastaların laboratuvar sonuçları",
+        "2024 yılında toplam tahsilat ne kadar",
+        "2024 yılında kaç tetkik yapıldı",
+    ],
+)
+def test_lab_and_collection_questions_are_out_of_scope(analyzer, question):
+    result = analyzer.detect_ambiguity(question)
+    assert result is not None
+    assert result.matched_phrase == "unanswerable_concept"
+
+
+def test_daha_iyi_clarifies_only_without_an_explicit_metric(analyzer):
+    """"hangi bölüm daha iyi" has no criterion -> clarify; but "gelmeme oranı
+    daha iyi olan bölüm" states the criterion -> answer (robustness probe
+    round 6, 2026-07-29)."""
+    assert analyzer.detect_ambiguity("hangi bölüm daha iyi") is not None
+    assert analyzer.detect_ambiguity("gelmeme oranı daha iyi olan bölüm") is None
+
+
 # ── Graph routing & clarification response ────────────────────────────────────
 
 
@@ -313,7 +339,7 @@ async def test_clarification_node_falls_back_to_generic_message():
 
     result = await GenerateClarificationNode().execute(state)
 
-    assert "rephrase" in result.generated_report.markdown
+    assert "açık yazar mısınız" in result.generated_report.markdown
 
 
 @pytest.mark.asyncio

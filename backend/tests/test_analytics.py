@@ -550,6 +550,45 @@ def test_visualization_stays_single_series_bar_for_one_metric():
     assert recommendation.type == VisualizationType.BAR_CHART
 
 
+def test_explicit_pie_request_overrides_shape_default_when_drawable():
+    # "Pasta grafik olarak göster" on a small categorical result forces a pie,
+    # overriding the bar-chart default (2026-07-29, live UI finding).
+    recommendation = VisualizationSelector().select(
+        data_shape=DataShape.CATEGORICAL,
+        intents=[AnalyticsIntent.RANKING],
+        row_count=4,
+        category_count=4,
+        metric_count=1,
+        requested_type="PIE_CHART",
+    )
+    assert recommendation.type == VisualizationType.PIE_CHART
+
+
+def test_explicit_pie_request_ignored_when_too_many_categories():
+    # A pie of 40 slices is illegible — keep the shape-based fallback.
+    recommendation = VisualizationSelector().select(
+        data_shape=DataShape.CATEGORICAL,
+        intents=[AnalyticsIntent.RANKING],
+        row_count=40,
+        category_count=40,
+        metric_count=1,
+        requested_type="PIE_CHART",
+    )
+    assert recommendation.type != VisualizationType.PIE_CHART
+
+
+def test_explicit_chart_request_ignored_for_single_value():
+    recommendation = VisualizationSelector().select(
+        data_shape=DataShape.SINGLE_VALUE,
+        intents=[],
+        row_count=1,
+        category_count=0,
+        metric_count=1,
+        requested_type="PIE_CHART",
+    )
+    assert recommendation.type == VisualizationType.CARD
+
+
 # ═══════════ Plan-aware shape classification for single-row grouped results ═══
 
 
@@ -641,6 +680,28 @@ def test_single_category_result_is_comparison_insufficient():
     assert "TEST ASM" not in result.comparison_limitation_reason  # never names the category
     # Metric facts are preserved even though the comparison itself is insufficient.
     assert set(result.metric_summaries) == set(plan.metrics)
+
+
+def test_single_branch_result_uses_branch_specific_limitation_text():
+    engine = AnalyticsEngine()
+    plan = QueryPlan(question="q", dimensions=["SubeAdi"], metrics=["appointment_count"])
+    result = _query_result(
+        ["SubeAdi", "appointment_count"],
+        [{"SubeAdi": "TEST ASM Gebze", "appointment_count": 89}],
+    )
+
+    analytics = engine.analyze(
+        "Şubelere göre randevu sayısını karşılaştır",
+        result,
+        plan=plan,
+        metric_aliases={"appointment_count": "appointment_count"},
+    )
+
+    assert analytics.comparison_sufficient is False
+    assert analytics.comparison_limitation_reason
+    assert "şube" in analytics.comparison_limitation_reason.casefold()
+    assert "kategori" not in analytics.comparison_limitation_reason.casefold()
+    assert "TEST ASM" not in analytics.comparison_limitation_reason
 
 
 def test_two_category_result_is_comparison_sufficient():

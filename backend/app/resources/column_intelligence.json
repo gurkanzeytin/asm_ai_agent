@@ -809,7 +809,8 @@
         "fatura",
         "gelir",
         "ciro",
-        "fiyat"
+        "fiyat",
+        "tahsilat"
       ],
       "reason": "Ödeme/tutar bilgisi view içinde bulunmuyor.",
       "alternative": "Randevu hacmi ve gerçekleşme oranı analiz edilebilir."
@@ -914,6 +915,19 @@
       ],
       "reason": "Oda bilgisi bu veri görünümünde bulunmuyor.",
       "alternative": "Bölüm (GenelRandevuBolumAdi) veya şube (SubeAdi) bazında randevu analizi yapılabilir."
+    },
+    {
+      "terms": [
+        "tahlil",
+        "kan tahlili",
+        "laboratuvar",
+        "laboratuvar sonuc",
+        "lab sonuc",
+        "tetkik",
+        "test sonuc"
+      ],
+      "reason": "Laboratuvar/tahlil/tetkik sonucu bilgisi dbo.vw_RandevuRaporu icinde bulunmuyor.",
+      "alternative": "Randevu tipi (RandevuTipiAdi) veya hizmet (HizmetAdi) bazinda analiz yapilabilir."
     }
   ]
 }

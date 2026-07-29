@@ -2,11 +2,24 @@ from datetime import UTC, datetime
 
 from app.application_models.workflow_models import QueryResult
 from app.reporting.output_policy import (
+    detect_requested_visualization,
     determine_output_policy,
     determine_requested_response_mode,
     determine_requested_visible_sections,
     should_render_expanded_answer,
 )
+
+
+def test_detect_requested_visualization_maps_specific_chart_words():
+    assert detect_requested_visualization("bunu pasta grafik olarak goster") == "PIE_CHART"
+    assert detect_requested_visualization("cizgi grafik olarak goster") == "LINE_CHART"
+    assert detect_requested_visualization("sutun grafik yap") == "BAR_CHART"
+
+
+def test_detect_requested_visualization_none_when_absent_or_negated():
+    assert detect_requested_visualization("bolum bazinda randevu sayisi") is None
+    # Negation must not force a pie ("pasta grafik değil, tablo ver").
+    assert detect_requested_visualization("pasta grafik degil tablo ver") is None
 
 
 def _result() -> QueryResult:
