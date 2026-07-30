@@ -118,6 +118,6 @@ class GenerateChatResponseNode(IAgentNode):
             return self._greetings_file_path.read_text(encoding="utf-8").strip()
         except Exception:
             return (
-                "Merhaba! Ben Med Agent. Randevu verileriyle ilgili "
+                "Merhaba! Ben Mitis. Randevu verileriyle ilgili "
                 "sorularınızda size yardımcı olabilirim."
             )

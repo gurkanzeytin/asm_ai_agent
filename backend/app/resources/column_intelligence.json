@@ -928,6 +928,17 @@
       ],
       "reason": "Laboratuvar/tahlil/tetkik sonucu bilgisi dbo.vw_RandevuRaporu icinde bulunmuyor.",
       "alternative": "Randevu tipi (RandevuTipiAdi) veya hizmet (HizmetAdi) bazinda analiz yapilabilir."
+    },
+    {
+      "terms": [
+        "oturum",
+        "session",
+        "session id",
+        "oturum id",
+        "oturum kimligi"
+      ],
+      "reason": "Oturum/session kimligi dbo.vw_RandevuRaporu icinde dogrulanmis bir kolon olarak bulunmuyor.",
+      "alternative": "Ayni hasta ve ayni gun icinde coklu hizmet veya coklu randevu davranisi HastaId + BaslangicTarihi uzerinden analiz edilebilir."
     }
   ]
 }

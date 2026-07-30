@@ -16,21 +16,30 @@ from app.context.models import ConversationContext
 from app.context.resolver import ContextResolver
 from app.context.session_store import SessionStore
 from app.database_intelligence.models import DatabaseContext, ViewMetadata
+from app.planning.compliance import PlanComplianceValidator
 from app.planning.models import QueryPlan
-from app.services.query_analyzer import QueryAnalyzer
 from app.planning.planner import QueryPlanner
-from app.planning.value_resolver import resolve_value
+from app.planning.value_resolver import extract_candidate_phrases, resolve_value
 from app.services.deterministic_sql_builder import (
     DeterministicSQL,
     DeterministicSQLBuilder,
 )
-from app.planning.compliance import PlanComplianceValidator
-from app.planning.value_resolver import extract_candidate_phrases
+from app.services.query_analyzer import QueryAnalyzer
 
 
 class _GroundedResolver:
     async def resolve(self, field_name: str, phrase: str):
-        candidates = ["E", "K", "D"] if field_name == "gender" else []
+        candidates_by_field = {
+            "gender": ["E", "K", "D"],
+            "department": [
+                "Kardiyoloji",
+                "Radyoloji",
+                "Nöroloji",
+                "Ortopedi",
+                "Çocuk Sağlığı",
+            ],
+        }
+        candidates = candidates_by_field.get(field_name, [])
         return resolve_value(field_name, phrase, candidates)
 
 
@@ -196,6 +205,35 @@ def test_query_analyzer_resolves_possessive_quarter_form():
     assert detected.start_date.isoformat() == "2025-01-01"
     assert detected.end_date.isoformat() == "2025-03-31"
     assert detected.granularity == "quarter"
+
+
+@pytest.mark.asyncio
+async def test_appointments_per_patient_average_survives_department_ranking_followup():
+    chain = _Chain()
+
+    first, _ = await chain.turn("2025 hasta basina ortalama randevu adedi nedir")
+    assert first.analysis_type == "repeat_behavior"
+    assert first.metrics == ["appointments_per_patient"]
+
+    first_sql = DeterministicSQLBuilder().build(first)
+    assert isinstance(first_sql, DeterministicSQL)
+    assert "AS appointments_per_patient" in first_sql.sql
+
+    second, _ = await chain.turn(
+        "Bu ortalamayi bolumlere gore en yuksek 10 bolum olarak listele."
+    )
+
+    assert second.metrics == ["appointments_per_patient"]
+    assert second.dimensions == ["GenelRandevuBolumAdi"]
+    assert second.limit == 10
+    assert _date(second) == ("2025-01-01", "2025-12-31")
+
+    second_sql = DeterministicSQLBuilder().build(second)
+    assert isinstance(second_sql, DeterministicSQL)
+    assert "AS appointments_per_patient" in second_sql.sql
+    assert "CROSS APPLY" in second_sql.sql
+    assert "dept_atomic.value" in second_sql.sql
+    assert "COUNT(*) AS appointment_count" not in second_sql.sql
 
 
 def test_planner_extracts_aggregate_threshold_variants():
@@ -619,6 +657,7 @@ async def test_ranking_chain_preserves_dimension_through_resort_replay_and_forma
     assert third.metrics == ["completed_appointment_rate"]
     assert third.limit == 5
 
+
     # Same analysis, new year — swaps the date, keeps dimension/metric/limit.
     fourth, r4 = await chain.turn("Ayni analizi 2024 icin yap")
     assert r4.follow_up_detected is True
@@ -634,6 +673,170 @@ async def test_ranking_chain_preserves_dimension_through_resort_replay_and_forma
     assert fifth.dimensions == ["GenelRandevuBolumAdi"]
     assert fifth.metrics == ["completed_appointment_rate"]
     assert _date(fifth) == ("2024-01-01", "2024-12-31")
+
+
+@pytest.mark.asyncio
+async def test_ascending_resort_followup_keeps_grouping_threshold_and_date():
+    chain = _Chain()
+    first, _ = await chain.turn(
+        "2025 Mayis ayinda bolum bazinda randevu sayisini goster."
+    )
+    assert first.dimensions == ["GenelRandevuBolumAdi"]
+    assert _date(first) == ("2025-05-01", "2025-05-31")
+
+    second, r2 = await chain.turn("200'den az olanlari goster.")
+    assert r2.follow_up_detected is True
+    assert second.aggregate_threshold is not None
+    assert second.aggregate_threshold.operator == "<"
+    assert second.aggregate_threshold.value == 200
+
+    third, r3 = await chain.turn("En dusukten yuksege sirala.")
+    assert r3.follow_up_detected is True
+    assert third.dimensions == ["GenelRandevuBolumAdi"]
+    assert _date(third) == ("2025-05-01", "2025-05-31")
+    assert third.aggregate_threshold is not None
+    assert third.ranking == "ASC"
+    assert third.order == "ASC"
+
+    built = DeterministicSQLBuilder().build(third)
+    assert isinstance(built, DeterministicSQL)
+    assert "HAVING COUNT(*) < 200" in built.sql
+    assert "ORDER BY appointment_count ASC" in built.sql
+
+
+@pytest.mark.asyncio
+async def test_department_exclusion_followup_is_not_saved_as_positive_department():
+    chain = _Chain()
+    await chain.turn("2025 Mayis ayinda bolum bazinda randevu sayisini goster.")
+    await chain.turn("En dusukten yuksege sirala.")
+
+    excluded, r3 = await chain.turn("Kardiyoloji haric tut.")
+    assert r3.follow_up_detected is True
+    assert excluded.department_filter is None
+    assert excluded.excluded_departments == ["Kardiyoloji"]
+
+    branch, r4 = await chain.turn("Ayni sonucu sube bazinda kir.")
+    assert r4.follow_up_detected is True
+    assert branch.department_filter is None
+    assert branch.excluded_departments == ["Kardiyoloji"]
+    assert branch.dimensions == ["SubeAdi"]
+
+    built = DeterministicSQLBuilder().build(branch)
+    assert isinstance(built, DeterministicSQL)
+    assert "NOT (" in built.sql and "Kardiyoloji" in built.sql
+    assert "value = N'Kardiyoloji'" not in built.sql
+
+
+@pytest.mark.asyncio
+async def test_department_filter_followup_preserves_period_comparison_scope():
+    chain = _Chain()
+    first, _ = await chain.turn(
+        "2025 ve 2026 toplam randevu sayilarini karsilastir; farki ve yuzde degisimi de hesapla."
+    )
+    assert len(first.date_filters) == 2
+
+    second, resolution = await chain.turn(
+        "Bu karsilastirmayi sadece Kardiyoloji bolumu icin yap."
+    )
+
+    assert resolution.follow_up_detected is True
+    assert second.department_filter == "Kardiyoloji"
+    assert len(second.date_filters) == 2
+    built = DeterministicSQLBuilder().build(second)
+    assert isinstance(built, DeterministicSQL)
+    assert "Kardiyoloji" in built.sql
+    assert "NULLIF" in built.sql
+
+
+@pytest.mark.asyncio
+async def test_month_ranking_followup_keeps_department_and_limits_top_five():
+    chain = _Chain()
+    await chain.turn(
+        "2025 ve 2026 toplam randevu sayilarini karsilastir; farki ve yuzde degisimi de hesapla."
+    )
+    await chain.turn("Bu karsilastirmayi sadece Kardiyoloji bolumu icin yap.")
+
+    third, resolution = await chain.turn(
+        "Son cevaptaki Kardiyoloji filtresini koru; 2025 aylarini en yuksekten "
+        "dusuge sirala ve sadece ilk 5 ayi goster."
+    )
+
+    assert resolution.follow_up_detected is True
+    assert third.department_filter == "Kardiyoloji"
+    assert third.grouping_granularity == "month"
+    assert third.ranking == "DESC"
+    assert third.limit == 5
+    assert _date(third) == ("2025-01-01", "2025-12-31")
+    built = DeterministicSQLBuilder().build(third)
+    assert isinstance(built, DeterministicSQL)
+    assert "TOP (5)" in built.sql
+    assert "DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1)" in built.sql
+    assert "Kardiyoloji" in built.sql
+
+
+@pytest.mark.asyncio
+async def test_share_of_total_followup_renders_percentage_column():
+    chain = _Chain()
+    first, _ = await chain.turn(
+        "2025 yilinda bolumlere gore randevu sayilarini en yuksek 10 bolum olarak listele."
+    )
+    assert first.dimensions == ["GenelRandevuBolumAdi"]
+    assert first.limit == 10
+
+    second, resolution = await chain.turn(
+        "Bu ilk 10 bolumun 2025 toplam randevu icindeki pay yuzdesini de ekle."
+    )
+
+    assert resolution.follow_up_detected is True
+    assert second.dimensions == ["GenelRandevuBolumAdi"]
+    assert second.limit == 10
+    assert second.analysis_type == "distribution"
+    assert "share_of_total: appointment_count" in second.derived_calculations
+    built = DeterministicSQLBuilder().build(second)
+    assert isinstance(built, DeterministicSQL)
+    assert "pay_yuzdesi" in built.sql
+    assert "NULLIF" in built.sql
+
+
+def test_three_named_month_comparison_builds_multi_period_breakdown():
+    analyzer = QueryAnalyzer()
+    planner = QueryPlanner()
+    view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+    question = "2025 yilinda Ocak, Subat ve Mart aylarini toplam randevu acisindan karsilastir."
+
+    plan = planner.build_plan(question, analyzer.analyze(question), [], views=[view])
+
+    assert len(plan.date_filters) == 3
+    assert plan.analysis_type == "period_comparison"
+    built = DeterministicSQLBuilder().build(plan)
+    assert isinstance(built, DeterministicSQL)
+    assert "period_label" in built.sql
+    assert "UNION ALL" in built.sql
+    assert "2025-01-01" in built.sql
+    assert "2025-02-01" in built.sql
+    assert "2025-03-01" in built.sql
+    compliance = PlanComplianceValidator().check(
+        built.sql, plan, built.expected_aliases, deterministic=True
+    )
+    assert compliance.compliant is True
+
+
+@pytest.mark.asyncio
+async def test_pasta_grafiginde_goster_is_a_chart_followup_not_out_of_scope():
+    """A chart-type presentation follow-up in any Turkish locative form
+    ("Pasta grafiğinde göster", not just "grafikte") re-renders the prior
+    result instead of falling through to OUT_OF_SCOPE (2026-07-29, live UI on
+    an age-group breakdown)."""
+    chain = _Chain()
+    first, _ = await chain.turn("2025 yas grubuna gore randevu dagilimini goster")
+    assert first.dimensions  # a real breakdown was produced
+
+    second, resolution = await chain.turn("Pasta grafiginde goster")
+    assert resolution.follow_up_detected is True
+    assert "output_action_followup" in resolution.follow_up_signals
+    # The prior analysis is preserved, not collapsed or dropped.
+    assert second.dimensions == first.dimensions
+    assert second.answerable is not False
 
 
 @pytest.mark.asyncio
@@ -656,6 +859,296 @@ async def test_sql_output_followup_after_period_comparison_keeps_comparison_plan
         built.sql, fourth, built.expected_aliases, deterministic=True
     )
     assert compliance.compliant is True
+
+
+@pytest.mark.asyncio
+async def test_relationship_metric_survives_breakdown_followup():
+    chain = _Chain()
+
+    first, _ = await chain.turn(
+        "2024 yilinda ayni gun icinde ayni hasta birden fazla hizmet almis mi?"
+    )
+    assert first.analysis_type == "repeat_behavior"
+    assert first.metrics == ["same_day_multi_service_patient_count"]
+    assert first.dimensions == []
+
+    second, resolution = await chain.turn("Bunu subelere gore kir.")
+
+    assert resolution.follow_up_detected is True
+    assert second.analysis_type == "repeat_behavior"
+    assert second.metrics == ["same_day_multi_service_patient_count"]
+    assert second.dimensions == ["SubeAdi"]
+    assert second.projection == []
+    built = DeterministicSQLBuilder().build(second)
+    assert isinstance(built, DeterministicSQL)
+    assert "patient_day_services AS" in built.sql
+    assert "JOIN qualifying_patient_days" in built.sql
+    assert "GROUP BY SubeAdi" in built.sql
+    compliance = PlanComplianceValidator().check(
+        built.sql, second, built.expected_aliases, deterministic=True
+    )
+    assert compliance.compliant is True
+
+
+@pytest.mark.asyncio
+async def test_cross_branch_relationship_can_be_broken_down_by_service_in_session():
+    chain = _Chain()
+
+    first, _ = await chain.turn(
+        "2024 yilinda hangi hastalar farkli subelerde tekrar tekrar islem gormus?"
+    )
+    assert first.analysis_type == "repeat_behavior"
+    assert first.metrics == ["cross_branch_repeat_patient_count"]
+    assert first.dimensions == []
+
+    second, resolution = await chain.turn("Bunu hizmetlere gore dagit.")
+
+    assert resolution.follow_up_detected is True
+    assert second.analysis_type == "repeat_behavior"
+    assert second.metrics == ["cross_branch_repeat_patient_count"]
+    assert second.dimensions == ["HizmetAdi"]
+    assert second.projection == []
+    built = DeterministicSQLBuilder().build(second)
+    assert isinstance(built, DeterministicSQL)
+    assert "JOIN cross_branch_patients" in built.sql
+    assert "GROUP BY v.HizmetAdi" in built.sql
+    compliance = PlanComplianceValidator().check(
+        built.sql, second, built.expected_aliases, deterministic=True
+    )
+    assert compliance.compliant is True
+
+
+@pytest.mark.asyncio
+async def test_same_day_multi_service_breakdown_uses_aggregated_patient_day_cte():
+    chain = _Chain()
+
+    first, _ = await chain.turn(
+        "2023 yilinda ayni gun icinde ayni hasta birden fazla hizmet almis mi?"
+    )
+    assert first.analysis_type == "repeat_behavior"
+    assert first.metrics == ["same_day_multi_service_patient_count"]
+    assert first.dimensions == []
+
+    second, resolution = await chain.turn("Bunu hizmetlere gore dagit.")
+
+    assert resolution.follow_up_detected is True
+    assert second.analysis_type == "repeat_behavior"
+    assert second.metrics == ["same_day_multi_service_patient_count"]
+    assert second.dimensions == ["HizmetAdi"]
+    assert second.projection == []
+    assert _date(second) == ("2023-01-01", "2023-12-31")
+    built = DeterministicSQLBuilder().build(second)
+    assert isinstance(built, DeterministicSQL)
+    assert "patient_day_services AS" in built.sql
+    assert "qualified_services AS" in built.sql
+    assert "COUNT(*) OVER (PARTITION BY HastaId, service_day) AS value_count" in built.sql
+    assert "JOIN qualifying_patient_days" not in built.sql
+    assert "FROM dbo.vw_RandevuRaporu v" not in built.sql
+    assert "COUNT(DISTINCT CONCAT" not in built.sql
+    assert "GROUP BY HizmetAdi" in built.sql
+    compliance = PlanComplianceValidator().check(
+        built.sql, second, built.expected_aliases, deterministic=True
+    )
+    assert compliance.compliant is True
+
+
+@pytest.mark.asyncio
+async def test_same_day_multi_doctor_relationship_survives_branch_followup():
+    chain = _Chain()
+
+    first, _ = await chain.turn(
+        "2024 yilinda ayni gun ayni hasta birden fazla doktorla islem gormus mu?"
+    )
+    assert first.analysis_type == "repeat_behavior"
+    assert first.metrics == ["same_day_multi_doctor_patient_count"]
+    assert first.dimensions == []
+
+    second, resolution = await chain.turn("Bunu subelere gore kir.")
+
+    assert resolution.follow_up_detected is True
+    assert second.analysis_type == "repeat_behavior"
+    assert second.metrics == ["same_day_multi_doctor_patient_count"]
+    assert second.dimensions == ["SubeAdi"]
+    assert second.projection == []
+    assert _date(second) == ("2024-01-01", "2024-12-31")
+    built = DeterministicSQLBuilder().build(second)
+    assert isinstance(built, DeterministicSQL)
+    assert "patient_day_doctors AS" in built.sql
+    assert "COUNT(DISTINCT DoktorId) > 1" in built.sql
+    assert "GROUP BY SubeAdi" in built.sql
+    compliance = PlanComplianceValidator().check(
+        built.sql, second, built.expected_aliases, deterministic=True
+    )
+    assert compliance.compliant is True
+
+
+@pytest.mark.asyncio
+async def test_patient_span_followups_keep_year_scope_and_top_patient_shape():
+    chain = _Chain()
+
+    first, _ = await chain.turn(
+        "2024 yilinda bir hastanin ilk ve son randevusu arasinda kac gun gecmis?"
+    )
+    assert first.analysis_type == "repeat_behavior"
+    assert first.metrics == ["patient_appointment_span_days"]
+    assert _date(first) == ("2024-01-01", "2024-12-31")
+
+    second, resolution = await chain.turn("Ortalama gun farkini goster.")
+    assert resolution.follow_up_detected is True
+    assert second.metrics == ["patient_appointment_span_days"]
+    assert _date(second) == ("2024-01-01", "2024-12-31")
+
+    third, resolution = await chain.turn("En yuksek farki olan 10 hastayi listele.")
+    assert resolution.follow_up_detected is True
+    assert "patient_span_ranking_followup" in resolution.follow_up_signals
+    assert third.metrics == ["patient_appointment_span_days"]
+    assert third.limit == 10
+    assert _date(third) == ("2024-01-01", "2024-12-31")
+
+    built = DeterministicSQLBuilder().build(third)
+    assert isinstance(built, DeterministicSQL)
+    assert "SELECT TOP (10) HastaId AS HastaId" in built.sql
+    assert "BaslangicTarihi >= '2024-01-01'" in built.sql
+
+
+@pytest.mark.asyncio
+async def test_patient_overlap_breakdown_followup_keeps_both_years():
+    chain = _Chain()
+
+    first, _ = await chain.turn("Hem 2023 hem 2024 icinde islem goren hastalari say.")
+    assert first.analysis_type == "repeat_behavior"
+    assert first.metrics == ["multi_period_patient_overlap_count"]
+    assert len(first.date_filters) == 2
+
+    second, resolution = await chain.turn("Bu hastalari subelere gore kir.")
+
+    assert resolution.follow_up_detected is True
+    assert second.analysis_type == "repeat_behavior"
+    assert second.metrics == ["multi_period_patient_overlap_count"]
+    assert second.dimensions == ["SubeAdi"]
+    assert len(second.date_filters) == 2
+    built = DeterministicSQLBuilder().build(second)
+    assert isinstance(built, DeterministicSQL)
+    assert "overlap_patients AS" in built.sql
+    assert ") OR (" in built.sql
+    assert "GROUP BY v.SubeAdi" in built.sql
+    compliance = PlanComplianceValidator().check(
+        built.sql, second, built.expected_aliases, deterministic=True
+    )
+    assert compliance.compliant is True
+
+
+@pytest.mark.asyncio
+async def test_full_same_day_relationship_question_does_not_inherit_prior_breakdown():
+    chain = _Chain()
+
+    await chain.turn(
+        "2024 yilinda hangi hastalar farkli subelerde tekrar tekrar islem gormus?"
+    )
+    prior_breakdown, _ = await chain.turn("Bunu hizmetlere gore dagit.")
+    assert prior_breakdown.metrics == ["cross_branch_repeat_patient_count"]
+    assert prior_breakdown.dimensions == ["HizmetAdi"]
+
+    third, resolution = await chain.turn(
+        "2024 yilinda ayni gun icinde ayni hasta birden fazla hizmet almis mi?"
+    )
+
+    assert "constraint_edit_followup" not in resolution.follow_up_signals
+    assert resolution.context_applied is False
+    assert third.analysis_type == "repeat_behavior"
+    assert third.metrics == ["same_day_multi_service_patient_count"]
+    assert third.dimensions == []
+    built = DeterministicSQLBuilder().build(third)
+    assert isinstance(built, DeterministicSQL)
+    assert "JOIN qualifying_patient_days" not in built.sql
+    assert "GROUP BY v.HizmetAdi" not in built.sql
+
+
+@pytest.mark.asyncio
+async def test_gender_value_filter_followup_preserves_analytical_shape():
+    chain = _Chain()
+
+    await chain.turn("2024 yilinda yas grubuna gore randevu sayisi nasil dagiliyor?")
+    await chain.turn("Bunu cinsiyete gore kir.")
+    await chain.turn("2023 icin ayni analizi yap.")
+
+    fourth, resolution = await chain.turn("Kadin hastalar icin goster.")
+
+    assert resolution.follow_up_detected is True
+    assert "value_filter_followup" in resolution.follow_up_signals
+    assert fourth.analysis_type != "list"
+    assert fourth.metrics == ["appointment_count"]
+    assert fourth.dimensions == ["CinsiyetId"]
+    assert fourth.projection == ["CinsiyetId"]
+    assert _date(fourth) == ("2023-01-01", "2023-12-31")
+    assert fourth.resolved_filters["gender"].values == ["K"]
+    built = DeterministicSQLBuilder().build(fourth)
+    assert isinstance(built, DeterministicSQL)
+    assert "SELECT Id" not in built.sql
+    assert "CinsiyetId = N'K'" in built.sql
+    compliance = PlanComplianceValidator().check(
+        built.sql, fourth, built.expected_aliases, deterministic=True
+    )
+    assert compliance.compliant is True
+
+
+@pytest.mark.asyncio
+async def test_period_change_direction_followup_keeps_periods_and_dimension():
+    chain = _Chain()
+
+    first, _ = await chain.turn(
+        "2024 Mayis-Haziran kapsaminda bolumlere gore randevu degisimini goster."
+    )
+    assert first.analysis_type == "period_comparison"
+    assert first.dimensions == ["GenelRandevuBolumAdi"]
+    assert len(first.periods) == 2
+
+    second, resolution = await chain.turn("Azalanlari goster.")
+
+    assert resolution.follow_up_detected is True
+    assert second.analysis_type in {"period_comparison", "percentage_change"}
+    assert second.dimensions == ["GenelRandevuBolumAdi"]
+    assert len(second.periods) == 2
+    assert "period_change_direction:decrease" in second.derived_calculations
+    built = DeterministicSQLBuilder().build(second)
+    assert isinstance(built, DeterministicSQL)
+    assert "GROUP BY dept_atomic.value" in built.sql
+    assert built.sql.rstrip().endswith("ASC;")
+
+
+@pytest.mark.asyncio
+async def test_period_direction_followup_after_top_increase_branch_reverses_direction():
+    chain = _Chain()
+
+    first, _ = await chain.turn(
+        "2024 Mayis-Haziran kapsaminda en cok artan 5 sube hangisi?"
+    )
+    assert first.analysis_type == "period_comparison"
+    assert first.dimensions == ["SubeAdi"]
+    assert len(first.periods) == 2
+    assert "period_change_direction:increase" in first.derived_calculations
+
+    second, resolution = await chain.turn("Azalanlari goster.")
+
+    assert "period_direction_followup" in resolution.follow_up_signals
+    assert second.analysis_type == "period_comparison"
+    assert second.dimensions == ["SubeAdi"]
+    assert len(second.periods) == 2
+    assert "period_change_direction:increase" not in second.derived_calculations
+    assert "period_change_direction:decrease" in second.derived_calculations
+    assert second.ranking == "ASC"
+    assert second.order == "ASC"
+    built = DeterministicSQLBuilder().build(second)
+    assert isinstance(built, DeterministicSQL)
+    compliance = PlanComplianceValidator().check(
+        built.sql,
+        second,
+        built.expected_aliases,
+        deterministic=True,
+    )
+    assert compliance.compliant is True, compliance.missing
+    assert "GROUP BY SubeAdi" in built.sql
+    assert built.sql.rstrip().endswith("ASC;")
 
 
 @pytest.mark.asyncio

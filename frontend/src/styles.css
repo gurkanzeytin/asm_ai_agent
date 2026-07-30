@@ -47,7 +47,7 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Light, corporate healthcare theme (ASM AI Agent). */
+/* Light, corporate healthcare theme (Med Agent). */
 :root {
   --radius: 1rem;
   --background: #f6f8fb; /* app shell — never pure white, keeps cards distinct */

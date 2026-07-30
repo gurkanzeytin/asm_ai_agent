@@ -1,6 +1,7 @@
-import { motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "motion/react";
+import { tr } from "@/locales/tr";
 
-const LOGO_SRC = "/med-agent-logo.svg?v=3";
+const LOGO_SRC = "/mitis_logo.svg?v=1";
 
 export interface MedAgentLogoProps {
   /** Rendered size in px (width = height). Defaults to 180. */
@@ -34,7 +35,7 @@ export function MedAgentLogo({ size = 180, className, noIntro = false }: MedAgen
 
       <motion.img
         src={LOGO_SRC}
-        alt="Med Agent logosu"
+        alt={tr.brand.logoAlt}
         width={size}
         height={size}
         draggable={false}

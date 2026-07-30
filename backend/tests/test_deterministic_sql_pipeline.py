@@ -14,6 +14,7 @@ from app.planning.compliance import PlanComplianceValidator
 from app.planning.models import QueryPlan
 from app.planning.planner import QueryPlanner
 from app.semantics import catalog
+from app.semantics.models import SemanticFrame
 from app.services.deterministic_sql_builder import DeterministicSQLBuilder, UnsupportedPlan
 from app.services.query_analyzer import QueryAnalyzer
 from app.services.sql_service import SQLService
@@ -273,6 +274,267 @@ def test_standard_builder_emits_one_column_per_metric_with_distinct_aliases():
     assert "NULLIF" in built.sql
     for alias in built.metric_aliases.values():
         assert f"AS {alias}" in built.sql
+
+
+def test_scalar_appointment_and_unique_patient_metrics_do_not_group_by_patient_id():
+    plan = _plan("2025 randevu sayisi ile tekil hasta sayisini birlikte goster")
+
+    assert plan.metrics == ["appointment_count", "unique_patient_count"]
+    assert plan.dimensions == []
+    assert plan.projection == []
+
+    built = DeterministicSQLBuilder().build(plan)
+    assert not isinstance(built, UnsupportedPlan)
+    assert "COUNT(*) AS appointment_count" in built.sql
+    assert "COUNT(DISTINCT HastaId) AS unique_patient_count" in built.sql
+    assert "HastaId AS HastaId" not in built.sql
+    assert "GROUP BY" not in built.sql.upper()
+
+    result = PlanComplianceValidator().check(
+        built.sql, plan, expected_aliases=built.expected_aliases, deterministic=True
+    )
+    assert result.compliant is True
+
+
+def test_appointments_per_patient_repeat_behavior_builds_deterministic_sql():
+    plan = _plan("2025 hasta basina ortalama randevu adedi nedir")
+
+    assert plan.analysis_type == "repeat_behavior"
+    assert plan.metrics == ["appointments_per_patient"]
+
+    built = DeterministicSQLBuilder().build(plan)
+    assert not isinstance(built, UnsupportedPlan)
+    assert "CAST(COUNT(*) AS FLOAT) / NULLIF(COUNT(DISTINCT HastaId), 0) AS appointments_per_patient" in built.sql
+    assert "BaslangicTarihi >= '2025-01-01'" in built.sql
+
+
+def test_repeat_patient_count_uses_having_cte_without_patient_group_leak():
+    plan = _plan("2024 yilinda birden fazla randevusu olan kac hasta var?")
+
+    assert plan.analysis_type == "repeat_behavior"
+    assert plan.metrics == ["repeat_patient_count"]
+    assert plan.dimensions == []
+
+    built = DeterministicSQLBuilder().build(plan)
+    assert not isinstance(built, UnsupportedPlan)
+    assert "WITH patient_repeats AS" in built.sql
+    assert "GROUP BY HastaId" in built.sql
+    assert "HAVING COUNT(*) > 1" in built.sql
+    assert "SELECT COUNT(*) AS repeat_patient_count" in built.sql
+    assert "HastaId AS HastaId" not in built.sql
+
+
+def test_repeat_patient_count_clears_stale_semantic_ranking_and_aggregation():
+    question = "2024 yilinda birden fazla randevusu olan kac hasta var?"
+    semantic_frame = SemanticFrame(
+        question=question,
+        goal="RANK",
+        primary_subject="Patient",
+        fact_subject="Appointment",
+        requested_output="ranking",
+        question_type="ranking",
+    )
+    plan = QueryPlanner().build_plan(
+        question,
+        QueryAnalyzer().analyze(question),
+        tables=[],
+        semantic_frame=semantic_frame,
+        views=[VIEW],
+    )
+
+    assert plan.analysis_type == "repeat_behavior"
+    assert plan.metrics == ["repeat_patient_count"]
+    assert plan.aggregation is None
+    assert plan.ranking is None
+
+    built = DeterministicSQLBuilder().build(plan)
+    assert not isinstance(built, UnsupportedPlan)
+    compliance = PlanComplianceValidator().check(
+        built.sql, plan, expected_aliases=built.expected_aliases, deterministic=True
+    )
+    assert compliance.compliant is True
+
+
+def test_cross_branch_repeat_patient_routes_to_relationship_cte():
+    plan = _plan("2024 yilinda hangi hastalar farkli subelerde tekrar tekrar islem gormus?")
+
+    assert plan.analysis_type == "repeat_behavior"
+    assert plan.metrics == ["cross_branch_repeat_patient_count"]
+    assert plan.dimensions == []
+
+    built = DeterministicSQLBuilder().build(plan)
+    assert not isinstance(built, UnsupportedPlan)
+    assert "WITH cross_branch_patients AS" in built.sql
+    assert "COUNT(DISTINCT SubeAdi) > 1" in built.sql
+    assert "SELECT COUNT(*) AS cross_branch_repeat_patient_count" in built.sql
+
+
+def test_cross_branch_repeat_breakdown_cte_passes_projection_compliance():
+    plan = _plan(
+        "2024 yilinda hangi hastalar farkli subelerde tekrar tekrar islem gormus hizmetlere gore dagit"
+    )
+
+    assert plan.analysis_type == "repeat_behavior"
+    assert plan.metrics == ["cross_branch_repeat_patient_count"]
+    assert plan.dimensions == ["HizmetAdi"]
+    assert plan.projection == []
+
+    built = DeterministicSQLBuilder().build(plan)
+    assert not isinstance(built, UnsupportedPlan)
+    assert "SELECT v.HizmetAdi AS HizmetAdi" in built.sql
+    assert "GROUP BY v.HizmetAdi" in built.sql
+    compliance = PlanComplianceValidator().check(
+        built.sql, plan, expected_aliases=built.expected_aliases, deterministic=True
+    )
+    assert compliance.compliant is True
+
+
+def test_same_day_multi_service_patient_is_scalar_until_breakdown_is_explicit():
+    plan = _plan("2024 yilinda ayni gun icinde ayni hasta birden fazla hizmet almis mi?")
+
+    assert plan.analysis_type == "repeat_behavior"
+    assert plan.metrics == ["same_day_multi_service_patient_count"]
+    assert plan.dimensions == []
+
+    built = DeterministicSQLBuilder().build(plan)
+    assert not isinstance(built, UnsupportedPlan)
+    assert "WITH qualifying_patient_days AS" in built.sql
+    assert "COUNT(DISTINCT HizmetAdi) > 1" in built.sql
+    assert "GROUP BY HizmetAdi" not in built.sql
+
+    by_branch = _plan(
+        "2024 yilinda ayni gun icinde ayni hasta birden fazla hizmet alanlari subelere gore kir"
+    )
+    assert by_branch.metrics == ["same_day_multi_service_patient_count"]
+    assert by_branch.dimensions == ["SubeAdi"]
+    by_branch_sql = DeterministicSQLBuilder().build(by_branch)
+    assert not isinstance(by_branch_sql, UnsupportedPlan)
+    assert "patient_day_services AS" in by_branch_sql.sql
+    assert "JOIN qualifying_patient_days" in by_branch_sql.sql
+    assert "GROUP BY SubeAdi" in by_branch_sql.sql
+    assert "COUNT(DISTINCT CONCAT" not in by_branch_sql.sql
+
+
+def test_same_day_multi_doctor_patient_routes_to_relationship_cte():
+    plan = _plan(
+        "2024 yilinda ayni gun ayni hasta birden fazla doktorla islem gormus mu?"
+    )
+
+    assert plan.analysis_type == "repeat_behavior"
+    assert plan.metrics == ["same_day_multi_doctor_patient_count"]
+    assert plan.dimensions == []
+
+    built = DeterministicSQLBuilder().build(plan)
+    assert not isinstance(built, UnsupportedPlan)
+    assert "WITH qualifying_patient_days AS" in built.sql
+    assert "COUNT(DISTINCT DoktorId) > 1" in built.sql
+    assert "GROUP BY DoktorId" not in built.sql
+
+    by_branch = _plan(
+        "2024 yilinda ayni gun ayni hasta birden fazla doktorla islem gormus olanlari subelere gore kir"
+    )
+    assert by_branch.metrics == ["same_day_multi_doctor_patient_count"]
+    assert by_branch.dimensions == ["SubeAdi"]
+    by_branch_sql = DeterministicSQLBuilder().build(by_branch)
+    assert not isinstance(by_branch_sql, UnsupportedPlan)
+    assert "patient_day_doctors AS" in by_branch_sql.sql
+    assert "JOIN qualifying_patient_days" in by_branch_sql.sql
+    assert "GROUP BY SubeAdi" in by_branch_sql.sql
+
+
+def test_patient_appointment_span_days_routes_to_cte_and_top_patients():
+    plan = _plan("2024 yilinda bir hastanin ilk ve son randevusu arasinda kac gun gecmis?")
+
+    assert plan.analysis_type == "repeat_behavior"
+    assert plan.metrics == ["patient_appointment_span_days"]
+    assert plan.dimensions == []
+
+    built = DeterministicSQLBuilder().build(plan)
+    assert not isinstance(built, UnsupportedPlan)
+    assert "WITH patient_spans AS" in built.sql
+    assert "DATEDIFF(day" in built.sql
+    assert "AVG(CAST(span_days AS FLOAT)) AS patient_appointment_span_days" in built.sql
+    assert "GROUP BY SubeAdi" not in built.sql
+    compliance = PlanComplianceValidator().check(
+        built.sql, plan, built.expected_aliases, deterministic=True
+    )
+    assert compliance.compliant is True
+
+    top_patients = _plan("2024 yilinda en yuksek farki olan 10 hastayi listele.")
+    assert top_patients.metrics == ["patient_appointment_span_days"]
+    assert top_patients.limit == 10
+    top_sql = DeterministicSQLBuilder().build(top_patients)
+    assert not isinstance(top_sql, UnsupportedPlan)
+    assert "SELECT TOP (10) HastaId AS HastaId" in top_sql.sql
+    assert "ORDER BY patient_appointment_span_days DESC" in top_sql.sql
+
+
+def test_multi_period_patient_overlap_uses_or_scoped_presence_cte():
+    plan = _plan("Hem 2023 hem 2024 icinde islem goren hastalari say.")
+
+    assert plan.analysis_type == "repeat_behavior"
+    assert plan.metrics == ["multi_period_patient_overlap_count"]
+    assert len(plan.date_filters) == 2
+
+    built = DeterministicSQLBuilder().build(plan)
+    assert not isinstance(built, UnsupportedPlan)
+    assert "WITH patient_period_presence AS" in built.sql
+    assert "overlap_patients AS" in built.sql
+    assert "in_baseline_period = 1 AND in_current_period = 1" in built.sql
+    assert ") OR (" in built.sql
+    assert "SELECT COUNT(*) AS multi_period_patient_overlap_count" in built.sql
+    compliance = PlanComplianceValidator().check(
+        built.sql, plan, built.expected_aliases, deterministic=True
+    )
+    assert compliance.compliant is True
+
+    by_branch = _plan(
+        "Hem 2023 hem 2024 icinde islem goren hastalari subelere gore kir."
+    )
+    assert by_branch.metrics == ["multi_period_patient_overlap_count"]
+    assert by_branch.dimensions == ["SubeAdi"]
+    by_branch_sql = DeterministicSQLBuilder().build(by_branch)
+    assert not isinstance(by_branch_sql, UnsupportedPlan)
+    assert "JOIN overlap_patients" in by_branch_sql.sql
+    assert "GROUP BY v.SubeAdi" in by_branch_sql.sql
+
+
+def test_two_month_increase_request_builds_grouped_period_comparison():
+    plan = _plan("2024 Mayis-Haziran kapsaminda en cok artan 5 sube hangisi?")
+
+    assert plan.analysis_type == "period_comparison"
+    assert plan.dimensions == ["SubeAdi"]
+    assert plan.limit == 5
+    assert len(plan.periods) == 2
+    assert "period_change_direction:increase" in plan.derived_calculations
+
+    built = DeterministicSQLBuilder().build(plan)
+    assert not isinstance(built, UnsupportedPlan)
+    assert "SELECT TOP (5)" in built.sql
+    assert "GROUP BY SubeAdi" in built.sql
+    assert "HAVING" in built.sql
+    assert "ORDER BY" in built.sql
+    assert built.sql.rstrip().endswith("DESC;")
+
+
+def test_singular_service_ranking_and_first_doctor_list_are_aggregates():
+    service = _plan("2024 yilinda en cok kullanilan hizmet hangisi?")
+    assert service.limit == 1
+    assert service.dimensions == ["HizmetAdi"]
+    service_sql = DeterministicSQLBuilder().build(service)
+    assert not isinstance(service_sql, UnsupportedPlan)
+    assert "SELECT TOP (1)" in service_sql.sql
+    assert "GROUP BY HizmetAdi" in service_sql.sql
+
+    doctors = _plan("2024 yilinda ilk 10 doktoru listele")
+    assert doctors.analysis_type in {"ranking", "top_n", "distribution"}
+    assert doctors.limit == 10
+    assert doctors.dimensions == ["GenelRandevuKaynakAdi"]
+    doctor_sql = DeterministicSQLBuilder().build(doctors)
+    assert not isinstance(doctor_sql, UnsupportedPlan)
+    assert "SELECT TOP (10)" in doctor_sql.sql
+    assert "GROUP BY GenelRandevuKaynakAdi" in doctor_sql.sql
+    assert "Id AS Id" not in doctor_sql.sql
 
 
 def test_trend_builder_rejects_multi_metric_explicitly():

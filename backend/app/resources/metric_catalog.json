@@ -170,6 +170,142 @@
       "result_type": "integer"
     },
     {
+      "id": "cross_branch_repeat_patient_count",
+      "name": "Farkli subelerde tekrar eden hasta sayisi",
+      "description": "Ayni tarih/filter kapsaminda birden fazla randevusu ve birden fazla SubeAdi degeri olan tekil hasta sayisi.",
+      "analysis_type": "repeat_behavior",
+      "required_columns": [
+        "HastaId",
+        "SubeAdi",
+        "Id"
+      ],
+      "formula_type": "having_distinct_gt_1",
+      "formula": null,
+      "plan_description": "HastaId bazinda grupla; COUNT(*) > 1 ve COUNT(DISTINCT SubeAdi) > 1 olanlari say. Hasta adi/soyadi secilmez.",
+      "synonyms": [
+        "farkli subelerde tekrar",
+        "farkli subelerde tekrar tekrar",
+        "farkli subelerde islem gormus",
+        "birden fazla subede islem",
+        "birden fazla subede randevu",
+        "subeler arasinda tekrar eden hasta",
+        "farkli subelerde gelen hasta"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL HastaId ve NULL SubeAdi dislanir",
+      "result_type": "integer"
+    },
+    {
+      "id": "same_day_multi_service_patient_count",
+      "name": "Ayni gun coklu hizmet alan hasta-gun sayisi",
+      "description": "Ayni HastaId ve ayni BaslangicTarihi gunu icinde birden fazla farkli HizmetAdi gorulen hasta-gun kombinasyonu sayisi.",
+      "analysis_type": "repeat_behavior",
+      "required_columns": [
+        "HastaId",
+        "BaslangicTarihi",
+        "HizmetAdi",
+        "Id"
+      ],
+      "formula_type": "having_distinct_gt_1",
+      "formula": null,
+      "plan_description": "HastaId + CAST(BaslangicTarihi AS DATE) bazinda grupla; COUNT(DISTINCT HizmetAdi) > 1 olan hasta-gun kombinasyonlarini say. Hasta adi/soyadi secilmez.",
+      "synonyms": [
+        "ayni gun ayni hasta birden fazla hizmet",
+        "ayni gun icinde ayni hasta birden fazla hizmet",
+        "ayni hasta birden fazla hizmet almis",
+        "birden fazla hizmet almis mi",
+        "ayni gun coklu hizmet",
+        "ayni gun birden fazla hizmet"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL HastaId ve NULL HizmetAdi dislanir",
+      "result_type": "integer"
+    },
+    {
+      "id": "same_day_multi_doctor_patient_count",
+      "name": "Ayni gun coklu doktor gorulen hasta-gun sayisi",
+      "description": "Ayni HastaId ve ayni BaslangicTarihi gunu icinde birden fazla farkli DoktorId gorulen hasta-gun kombinasyonu sayisi.",
+      "analysis_type": "repeat_behavior",
+      "required_columns": [
+        "HastaId",
+        "BaslangicTarihi",
+        "DoktorId",
+        "Id"
+      ],
+      "formula_type": "having_distinct_gt_1",
+      "formula": null,
+      "plan_description": "HastaId + CAST(BaslangicTarihi AS DATE) bazinda grupla; COUNT(DISTINCT DoktorId) > 1 olan hasta-gun kombinasyonlarini say. Hasta adi/soyadi secilmez.",
+      "synonyms": [
+        "ayni gun ayni hasta birden fazla doktor",
+        "ayni gun icinde ayni hasta birden fazla doktor",
+        "ayni hasta birden fazla doktorla islem",
+        "birden fazla doktorla islem gormus",
+        "ayni gun coklu doktor",
+        "ayni gun birden fazla doktor"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL HastaId ve NULL DoktorId dislanir",
+      "result_type": "integer"
+    },
+    {
+      "id": "patient_appointment_span_days",
+      "name": "Hasta ilk-son randevu gun farki",
+      "description": "HastaId bazinda ilk ve son BaslangicTarihi arasindaki gun farkini hesaplar.",
+      "analysis_type": "repeat_behavior",
+      "required_columns": [
+        "HastaId",
+        "BaslangicTarihi",
+        "Id"
+      ],
+      "formula_type": "patient_span_days",
+      "formula": null,
+      "plan_description": "HastaId bazinda grupla; MIN(BaslangicTarihi), MAX(BaslangicTarihi) ve DATEDIFF(day, MIN, MAX) hesapla. Varsayilan cevap ortalama/maksimum/minimum gun farkidir; en yuksek/listeli isteklerde hasta bazinda TOP N dondurulur.",
+      "synonyms": [
+        "ilk ve son randevu",
+        "ilk son randevu",
+        "ilk randevu son randevu",
+        "randevusu arasinda kac gun",
+        "randevulari arasinda kac gun",
+        "randevu gun farki",
+        "gun farkini",
+        "ortalama gun farki",
+        "en yuksek farki olan"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL HastaId ve NULL BaslangicTarihi dislanir; tek randevulu hastalar span analizine dahil edilmez",
+      "result_type": "float"
+    },
+    {
+      "id": "multi_period_patient_overlap_count",
+      "name": "Iki donemde de islem goren hasta sayisi",
+      "description": "Iki ayri tarih/donem filtresinin ikisinde de randevusu olan tekil hasta sayisi.",
+      "analysis_type": "repeat_behavior",
+      "required_columns": [
+        "HastaId",
+        "BaslangicTarihi",
+        "Id"
+      ],
+      "formula_type": "period_overlap_distinct_count",
+      "formula": null,
+      "plan_description": "Iki donem icin HastaId varligini ayri bayraklarla hesapla; iki bayragi da 1 olan HastaId degerlerini say. Donem filtreleri AND edilmez.",
+      "synonyms": [
+        "her iki donemde islem goren",
+        "iki donemde de islem goren",
+        "iki yilda da islem goren",
+        "her iki yilda randevusu olan",
+        "hem hem islem goren hasta",
+        "ortak hasta sayisi"
+      ],
+      "compatible_dimensions_group": "standard",
+      "default_time_column": "BaslangicTarihi",
+      "null_behavior": "NULL HastaId dislanir",
+      "result_type": "integer"
+    },
+    {
       "id": "appointment_duration_average",
       "name": "Ortalama randevu süresi",
       "description": "Planlanan randevu süresinin ortalaması (dakika).",

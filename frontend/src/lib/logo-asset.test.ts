@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-describe("med-agent-logo.svg", () => {
+describe("mitis_logo.svg", () => {
   it("bitmap, maske veya arka plan katmanı içermeyen saf vektördür", () => {
-    const svg = readFileSync(resolve("public/med-agent-logo.svg"), "utf8");
+    const svg = readFileSync(resolve("public/mitis_logo.svg"), "utf8");
 
     expect(svg).toContain('viewBox="0 0 564 638"');
     expect(svg).toContain("<linearGradient");

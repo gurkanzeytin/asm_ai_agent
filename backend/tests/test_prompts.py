@@ -10,7 +10,7 @@ def test_prompt_loader_caching():
 
     # First load reads from disk
     first_load = prompt_loader.get_prompt("system_prompt")
-    assert "Med Agent" in first_load
+    assert "Mitis" in first_load
 
     # Manually overwrite cache memory data to prove cache hit verification
     prompt_loader._cache["system_prompt.md"] = "CACHE OVERRIDE VALUE"
@@ -22,7 +22,7 @@ def test_prompt_loader_caching():
     # Cleared cache reads from disk again
     prompt_loader.clear_cache()
     reloaded_load = prompt_loader.get_prompt("system_prompt")
-    assert "Med Agent" in reloaded_load
+    assert "Mitis" in reloaded_load
 
 
 def test_prompts_include_natural_turkish_style_rules():

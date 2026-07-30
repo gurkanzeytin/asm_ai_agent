@@ -18,16 +18,16 @@ import { uiTransition } from "@/lib/ui-motion";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Med Agent · Healthcare Intelligence" },
+      { title: `${tr.brand.name} · ${tr.brand.tagline}` },
       {
         name: "description",
         content:
-          "Premium AI assistant for healthcare organizations — analyze centers, query knowledge bases and generate reports in natural language.",
+          "Sağlık kurumları için randevu verilerini doğal dille analiz eden Med Agent arayüzü.",
       },
-      { property: "og:title", content: "Med Agent" },
+      { property: "og:title", content: tr.brand.name },
       {
         property: "og:description",
-        content: "Enterprise AI platform for healthcare intelligence.",
+        content: "Randevu analitiği ve sağlık zekâsı için Med Agent.",
       },
     ],
   }),

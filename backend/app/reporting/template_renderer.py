@@ -371,12 +371,13 @@ def _empty_result_summary(question: str | None) -> str:
     scopes = _empty_scope_labels(question)
     if scopes:
         return (
-            f"{_join_tr(scopes).capitalize()} için eşleşen kayıt bulamadım. "
-            "Seçilen kapsamda kayıt olmayabilir."
+            f"{_join_tr(scopes).capitalize()} için eşleşen kayıt bulamadım — "
+            "seçtiğiniz kapsamda bu verilerde randevu olmayabilir. Sorgu doğru "
+            "çalıştı; sonuç gerçekten boş."
         )
     return (
-        "Bu kriterlerle eşleşen kayıt bulamadım. Tarih aralığı veya filtreler "
-        "kapsamı fazla daraltmış olabilir."
+        "Bu kriterlerle eşleşen randevu kaydı bulamadım. Sorgu doğru çalıştı; "
+        "büyük olasılıkla tarih aralığı veya filtreler kapsamı fazla daraltmış."
     )
 
 

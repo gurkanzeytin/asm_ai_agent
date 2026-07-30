@@ -103,7 +103,8 @@ class AnalyticsEngine:
         result_shape = self._classify_result_shape(query_result, data_shape, plan)
 
         values = self._numeric_values(query_result, metric_column)
-        labels = self._labels(query_result, label_column or temporal_column)
+        data_label_column = temporal_column if data_shape == DataShape.TIME_SERIES else label_column
+        labels = self._labels(query_result, data_label_column)
 
         grain = plan.grouping_granularity if plan else None
         metrics = self._compute_metrics(
@@ -174,7 +175,7 @@ class AnalyticsEngine:
             insights=insights,
             visualization=visualization,
             metric_column=metric_column,
-            label_column=label_column or temporal_column,
+            label_column=data_label_column,
             row_count=query_result.row_count,
             technical_row_count=query_result.row_count,
             business_record_count=(

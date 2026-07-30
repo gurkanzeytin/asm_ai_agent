@@ -670,12 +670,15 @@ export function SqlResultsTable({
       {visibleColumns.map((c, colIdx) => {
         const colMeta = columnMeta[c];
         const formatted = formatSqlCell(c, meta.row[c], colMeta?.format, colMeta?.unit);
+        const isNumeric = formatted.kind === "number";
         return (
           <td
             key={c}
             className={cn(
               "border-b border-border/40 px-3 font-mono text-[11.5px] text-foreground/90",
               cellPadding,
+              // Numbers read far better right-aligned with fixed-width digits.
+              isNumeric && "text-right tabular-nums",
               colIdx === 0 && "sticky left-16 z-[1] bg-background/95 backdrop-blur",
             )}
             style={{ width: columnWidths[c], minWidth: columnWidths[c] }}
@@ -1221,6 +1224,7 @@ export function SqlResultsTable({
                         }}
                         className={cn(
                           "cursor-pointer transition hover:bg-primary/5 focus-visible:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60",
+                          v.index % 2 === 1 && "bg-muted/25",
                           isFocused && "bg-primary/5",
                         )}
                       >
@@ -1290,7 +1294,10 @@ export function SqlResultsTable({
                           aria-label={tr.sqlTable.viewRowDetails(absIdx + 1)}
                           onClick={() => openRow(absIdx)}
                           onKeyDown={(e) => onRowKeyDown(e, i, absIdx)}
-                          className="cursor-pointer transition hover:bg-primary/5 focus-visible:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60"
+                          className={cn(
+                            "cursor-pointer transition hover:bg-primary/5 focus-visible:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60",
+                            i % 2 === 1 && "bg-muted/25",
+                          )}
                         >
                           <td
                             className={cn(

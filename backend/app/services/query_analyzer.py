@@ -555,13 +555,17 @@ class QueryAnalyzer:
                 continue
             if index + 1 >= len(iso_date_matches):
                 ranges.append(
-                    self._date_range(iso_date_matches[index].group(0), first_date, first_date, "day")
+                    self._date_range(
+                        iso_date_matches[index].group(0), first_date, first_date, "day"
+                    )
                 )
                 continue
             second_date = _iso_date(iso_date_matches[index + 1])
             if second_date is None:
                 ranges.append(
-                    self._date_range(iso_date_matches[index].group(0), first_date, first_date, "day")
+                    self._date_range(
+                        iso_date_matches[index].group(0), first_date, first_date, "day"
+                    )
                 )
                 continue
             if second_date < first_date:
@@ -608,13 +612,23 @@ class QueryAnalyzer:
                 continue
             if index + 1 >= len(numeric_dmy_matches):
                 ranges.append(
-                    self._date_range(numeric_dmy_matches[index].group(0), first_date, first_date, "day")
+                    self._date_range(
+                        numeric_dmy_matches[index].group(0),
+                        first_date,
+                        first_date,
+                        "day",
+                    )
                 )
                 continue
             second_date = _numeric_dmy(numeric_dmy_matches[index + 1])
             if second_date is None:
                 ranges.append(
-                    self._date_range(numeric_dmy_matches[index].group(0), first_date, first_date, "day")
+                    self._date_range(
+                        numeric_dmy_matches[index].group(0),
+                        first_date,
+                        first_date,
+                        "day",
+                    )
                 )
                 continue
             if second_date < first_date:
@@ -699,8 +713,8 @@ class QueryAnalyzer:
         }
         quarter_matches = list(
             re.finditer(
-                rf"\b(20\d{{2}}|19\d{{2}})\s+(?:in\s+|nin\s+|yil\w*\s+)?"
-                rf"(ilk|birinci|1|ikinci|2|ucuncu|3|dorduncu|4)\s+ceyre[kg]\w*\b",
+                r"\b(20\d{2}|19\d{2})\s+(?:in\s+|nin\s+|yil\w*\s+)?"
+                r"(ilk|birinci|1|ikinci|2|ucuncu|3|dorduncu|4)\s+ceyre[kg]\w*\b",
                 query_ascii,
             )
         )
@@ -724,8 +738,8 @@ class QueryAnalyzer:
         # (live UI 2026-07-28: this phrasing kept the whole year, no half filter).
         half_year_matches = list(
             re.finditer(
-                rf"\b(20\d{{2}}|19\d{{2}})\s+(?:in\s+|nin\s+|un\s+|nun\s+|yil\w*\s+)?"
-                rf"(ilk|birinci|ikinci|son)\s+yari\w*\b",
+                r"\b(20\d{2}|19\d{2})\s+(?:in\s+|nin\s+|un\s+|nun\s+|yil\w*\s+)?"
+                r"(ilk|birinci|ikinci|son)\s+yari\w*\b",
                 query_ascii,
                 re.IGNORECASE,
             )
@@ -762,7 +776,7 @@ class QueryAnalyzer:
             re.finditer(
                 rf"\b(?:(20\d{{2}}|19\d{{2}})\s+(?:in\s+|nin\s+|un\s+|nun\s+|yil\w*\s+)?)?"
                 rf"({month_alternatives})\s*(?:-|–|—|\s+ile\s+|\s+ila\s+|\s+ile\b)\s*"
-                rf"({month_alternatives})\s+aras\w*",
+                rf"({month_alternatives})(?:\s+(?:aras\w*|donem\w*|kapsam\w*|aralig\w*))?",
                 query_ascii,
                 re.IGNORECASE,
             )
@@ -770,7 +784,9 @@ class QueryAnalyzer:
         month_range_matches = bare_space_month_range_matches + month_range_matches
         month_range_spans = [match.span() for match in month_range_matches]
         for match in month_range_matches:
-            year = int(match.group(1)) if match.group(1) else (same_sentence_anchor_year or today.year)
+            year = int(match.group(1)) if match.group(1) else (
+                same_sentence_anchor_year or today.year
+            )
             start_month = months_lower[match.group(2).lower()]
             end_month = months_lower[match.group(3).lower()]
             if end_month < start_month:

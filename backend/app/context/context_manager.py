@@ -168,7 +168,18 @@ class ContextManager:
                     context.date_expression = query_plan.date_filters[0].expression
                 elif signals.date_expression:
                     context.date_expression = signals.date_expression
-                if signals.department:
+                if query_plan is not None:
+                    excluded_departments = set(query_plan.excluded_departments)
+                    if query_plan.department_filter:
+                        context.department = query_plan.department_filter
+                    elif (
+                        excluded_departments
+                        and context.department in excluded_departments
+                    ):
+                        context.department = None
+                    elif signals.department and signals.department not in excluded_departments:
+                        context.department = signals.department
+                elif signals.department:
                     context.department = signals.department
                 if signals.entity_types:
                     context.entity_types = signals.entity_types

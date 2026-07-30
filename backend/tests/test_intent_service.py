@@ -150,7 +150,7 @@ def test_default_greeting_resource_is_turkish():
         greeting = node._get_greeting_text()
 
     assert "Merhaba" in greeting
-    assert "Med Agent" in greeting
+    assert "Mitis" in greeting
     assert "ASM AI" not in greeting
     assert "Türkçe olarak" not in greeting
     assert "Hello" not in greeting
@@ -166,7 +166,7 @@ def test_greeting_fallback_is_turkish(tmp_path):
     greeting = node._read_greetings_file()
 
     assert "Merhaba" in greeting
-    assert "Med Agent" in greeting
+    assert "Mitis" in greeting
     assert "ASM AI" not in greeting
     assert "Türkçe olarak" not in greeting
     assert "Hello" not in greeting

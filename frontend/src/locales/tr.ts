@@ -6,6 +6,12 @@
  * (i18n kütüphanesi bilinçli olarak eklenmedi).
  */
 export const tr = {
+  brand: {
+    name: "Med Agent",
+    tagline: "Sağlık Zekâsı",
+    logoAlt: "Med Agent logosu",
+  },
+
   common: {
     settings: "Ayarlar",
     details: "Detaylar",
@@ -35,7 +41,7 @@ export const tr = {
   },
 
   header: {
-    online: "Yapay zekâ · Çevrimiçi",
+    online: "Randevu Analitiği · Çevrimiçi",
     newConversation: "Yeni görüşme",
     toggleTheme: "Temayı değiştir",
     clearChat: "Sohbeti temizle",
@@ -43,10 +49,10 @@ export const tr = {
   },
 
   welcome: {
-    titleBefore: "Bugün size nasıl yardımcı",
-    titleHighlight: "olabilirim",
+    titleBefore: "Randevu verilerinizi birlikte",
+    titleHighlight: "analiz edelim",
     description:
-      "Kurumunuz hakkında sorular sorun, veritabanında sorgular çalıştırın, belgeleri analiz edin veya doğal dille raporlar oluşturun.",
+      "Doğal Türkçe ile sorun; bölüm, şube, doktor ve tarih bazında randevu sayıları, gelmeme ve gerçekleşme oranları, dönem karşılaştırmaları ve dağılımları tablo ya da grafik olarak alın.",
   },
 
   details: {
@@ -60,6 +66,8 @@ export const tr = {
     idle: "Hazır — yeni görev bekleniyor",
     sqlQuery: "SQL sorgusu",
     copySql: "SQL sorgusunu kopyala",
+    expandSql: "SQL sorgusunu büyüt",
+    sqlModalTitle: "SQL Sorgusu",
     noSqlGenerated: "Bu yanıt için SQL sorgusu oluşturulmadı.",
     toolCalls: "Araç çağrıları",
     processSummary: "İşlem özeti",
@@ -68,8 +76,9 @@ export const tr = {
   },
 
   chat: {
-    placeholder: "Bir şey sorun...",
+    placeholder: "Randevu verileri hakkında bir şey sorun…",
     thinking: "Düşünüyor…",
+    summaryEyebrow: "Özet",
     workflowStages: {
       understanding: "Sorunuz anlaşılıyor…",
       preparing_sql: "SQL sorgusu hazırlanıyor…",
@@ -127,6 +136,9 @@ export const tr = {
     openFullscreen: "Tam ekran incele",
     fullscreenTitle: "SQL Sonucu - Geniş Görünüm",
     fullscreenDescription: "Tabloyu, filtreleri ve grafikleri geniş çalışma alanında inceleyin.",
+    tableFullscreenTitle: "Tablo - Geniş Görünüm",
+    tableFullscreenDescription:
+      "Tabloyu geniş çalışma alanında yatay ve dikey kaydırarak inceleyin.",
     columns: "Sütunlar",
     manageColumns: "Görünür sütunları yönet",
     showAllColumns: "Tüm sütunları göster",

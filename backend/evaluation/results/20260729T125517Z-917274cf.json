@@ -1,0 +1,1941 @@
+{
+  "run_id": "20260729T125517Z-917274cf",
+  "generated_at": "2026-07-29T12:55:17.361976+00:00",
+  "suite": "expert",
+  "mode": "sql-generation",
+  "environment": {
+    "sql_dialect": "tsql",
+    "database_provider": "mssql",
+    "live_db_available": true
+  },
+  "summary": {
+    "total_cases": 28,
+    "passed": 28,
+    "failed": 0,
+    "skipped": 0,
+    "layer_accuracy": {
+      "routing": 100.0,
+      "query_plan": 100.0,
+      "sql_generation": 100.0,
+      "sql_semantics": 100.0
+    },
+    "failure_counts": {},
+    "p50_ms": 28.819800005294383,
+    "p95_ms": 64.64769993908703,
+    "max_ms": 90.72160010691732,
+    "deterministic_sql_avg_ms": 32.99992306766888,
+    "llm_sql_avg_ms": 0.0,
+    "live_execution_avg_ms": 0.0,
+    "timeout_rate": 0.0
+  },
+  "results": [
+    {
+      "case_id": "EXP-THRESH-GT-001",
+      "question": "2024 yilinda bolum bazinda 5000 den fazla randevusu olan bolumleri goster",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "DistributionResult",
+      "row_count": null,
+      "total_ms": 64.64769993908703,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0028999056667089462,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.008999952115118504,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 1.0498999617993832,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.9271999588236213,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT dept_atomic.value AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nCROSS APPLY (\n    SELECT LTRIM(RTRIM(dept_node.value('.', 'NVARCHAR(4000)'))) AS value\n    FROM (SELECT CAST(N'<i>' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(GenelRandevuBolumAdi, '&', ''), '<', ''), '>', ''), ', ', ','), ',', '</i><i>') + N'</i>' AS XML) AS dept_doc) AS dept_wrapped\n    CROSS APPLY dept_wrapped.dept_doc.nodes('/i') AS dept_split(dept_node)\n) AS dept_atomic\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31') AND dept_atomic.value <> ''\n\nGROUP BY dept_atomic.value\nHAVING COUNT(*) > 5000\nORDER BY appointment_count DESC;",
+      "plan_summary": {
+        "analysis_type": "distribution",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-THRESH-LT-001",
+      "question": "2025 mayis ayinda 200 den az randevusu olan bolumleri goster",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "DistributionResult",
+      "row_count": null,
+      "total_ms": 33.063999959267676,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001900014467537403,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.008900067768990993,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.8203999605029821,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.9370999177917838,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT dept_atomic.value AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nCROSS APPLY (\n    SELECT LTRIM(RTRIM(dept_node.value('.', 'NVARCHAR(4000)'))) AS value\n    FROM (SELECT CAST(N'<i>' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(GenelRandevuBolumAdi, '&', ''), '<', ''), '>', ''), ', ', ','), ',', '</i><i>') + N'</i>' AS XML) AS dept_doc) AS dept_wrapped\n    CROSS APPLY dept_wrapped.dept_doc.nodes('/i') AS dept_split(dept_node)\n) AS dept_atomic\nWHERE BaslangicTarihi >= '2025-05-01' AND BaslangicTarihi < DATEADD(day, 1, '2025-05-31') AND dept_atomic.value <> ''\n\nGROUP BY dept_atomic.value\nHAVING COUNT(*) < 200\nORDER BY appointment_count ASC;",
+      "plan_summary": {
+        "analysis_type": "distribution",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-THRESH-ENAZ-001",
+      "question": "2023 yilinda en az 1000 randevusu olan doktorlari randevu sayisina gore sirala",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "DistributionResult",
+      "row_count": null,
+      "total_ms": 33.76989997923374,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001700012944638729,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.004100031219422817,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.2762000076472759,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.3215000033378601,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT GenelRandevuKaynakAdi AS GenelRandevuKaynakAdi, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2023-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2023-12-31')\n\nGROUP BY GenelRandevuKaynakAdi\nHAVING COUNT(*) >= 1000\nORDER BY appointment_count DESC;",
+      "plan_summary": {
+        "analysis_type": "ranking",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuKaynakAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-PCTILE-TOP-001",
+      "question": "2024 yilinda doktorlar arasinda randevu sayisi bakimindan en ustteki %10 u goster",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "DistributionResult",
+      "row_count": null,
+      "total_ms": 36.99250007048249,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001600012183189392,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.005299923941493034,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.2566000912338495,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.2981000579893589,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT TOP (10) PERCENT GenelRandevuKaynakAdi AS GenelRandevuKaynakAdi, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31')\n\nGROUP BY GenelRandevuKaynakAdi\nORDER BY appointment_count DESC;",
+      "plan_summary": {
+        "analysis_type": "ranking",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuKaynakAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-PCTILE-TOP-002",
+      "question": "2024 yilinda randevu sayisi en yuksek %5 lik bolumleri goster",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "DistributionResult",
+      "row_count": null,
+      "total_ms": 31.747199944220483,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001500011421740055,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.006499933078885078,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.7439999608322978,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.8399999933317304,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT TOP (5) PERCENT dept_atomic.value AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nCROSS APPLY (\n    SELECT LTRIM(RTRIM(dept_node.value('.', 'NVARCHAR(4000)'))) AS value\n    FROM (SELECT CAST(N'<i>' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(GenelRandevuBolumAdi, '&', ''), '<', ''), '>', ''), ', ', ','), ',', '</i><i>') + N'</i>' AS XML) AS dept_doc) AS dept_wrapped\n    CROSS APPLY dept_wrapped.dept_doc.nodes('/i') AS dept_split(dept_node)\n) AS dept_atomic\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31') AND dept_atomic.value <> ''\n\nGROUP BY dept_atomic.value\nORDER BY appointment_count DESC;",
+      "plan_summary": {
+        "analysis_type": "ranking",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-DAYTYPE-001",
+      "question": "2024 yilinda hafta ici ve hafta sonu randevu sayisini karsilastir",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "CountResult",
+      "row_count": null,
+      "total_ms": 31.428099959157407,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001100008375942707,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.006700051017105579,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.3896999405696988,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.5245000356808305,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT CASE WHEN DATEDIFF(day, '19000101', BaslangicTarihi) % 7 >= 5 THEN N'Hafta Sonu' ELSE N'Hafta İçi' END AS day_type, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31')\n\nGROUP BY CASE WHEN DATEDIFF(day, '19000101', BaslangicTarihi) % 7 >= 5 THEN N'Hafta Sonu' ELSE N'Hafta İçi' END;",
+      "plan_summary": {
+        "analysis_type": "count",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "DayType"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-LEADTIME-001",
+      "question": "2024 yilinda randevu tarihi ile olusturulma tarihi arasindaki ortalama gun farki nedir",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "CountResult",
+      "row_count": null,
+      "total_ms": 41.11360001843423,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001400010660290718,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0039000296965241432,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.24800002574920654,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.29230001382529736,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT AVG(CAST(DATEDIFF(day, CreatedDate, BaslangicTarihi) AS FLOAT)) AS appointment_lead_time_average\nFROM dbo.vw_RandevuRaporu\nWHERE CreatedDate >= '2024-01-01' AND CreatedDate < DATEADD(day, 1, '2024-12-31')\n;",
+      "plan_summary": {
+        "analysis_type": "average",
+        "metrics": [
+          "appointment_lead_time_average"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-QUARTER-001",
+      "question": "2025 yilinin ilk ceyreginde bolum bazinda randevu sayisini goster",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "CountResult",
+      "row_count": null,
+      "total_ms": 32.51709998585284,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.002400018274784088,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.003800028935074806,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.6562999915331602,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.7877999451011419,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT dept_atomic.value AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nCROSS APPLY (\n    SELECT LTRIM(RTRIM(dept_node.value('.', 'NVARCHAR(4000)'))) AS value\n    FROM (SELECT CAST(N'<i>' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(GenelRandevuBolumAdi, '&', ''), '<', ''), '>', ''), ', ', ','), ',', '</i><i>') + N'</i>' AS XML) AS dept_doc) AS dept_wrapped\n    CROSS APPLY dept_wrapped.dept_doc.nodes('/i') AS dept_split(dept_node)\n) AS dept_atomic\nWHERE BaslangicTarihi >= '2025-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2025-03-31') AND dept_atomic.value <> ''\n\nGROUP BY dept_atomic.value;",
+      "plan_summary": {
+        "analysis_type": "count",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-HALFYEAR-001",
+      "question": "2024 yilinin ilk yarisinda aylik randevu trendini goster",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "TrendResult",
+      "row_count": null,
+      "total_ms": 26.84539998881519,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001300009898841381,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.003200024366378784,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.3341999836266041,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.3856000257655978,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1) AS period_start, COUNT(*) AS monthly_appointment_count\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-06-30')\nGROUP BY DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1)\nORDER BY period_start ASC;",
+      "plan_summary": {
+        "analysis_type": "time_trend",
+        "metrics": [
+          "monthly_appointment_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-MONTHRANGE-001",
+      "question": "2024 Ocak-Haziran arasi bolum bazinda randevu sayisi",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "CountResult",
+      "row_count": null,
+      "total_ms": 30.849399976432323,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001800013706088066,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.00400003045797348,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.8201999589800835,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.7955000037327409,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT dept_atomic.value AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nCROSS APPLY (\n    SELECT LTRIM(RTRIM(dept_node.value('.', 'NVARCHAR(4000)'))) AS value\n    FROM (SELECT CAST(N'<i>' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(GenelRandevuBolumAdi, '&', ''), '<', ''), '>', ''), ', ', ','), ',', '</i><i>') + N'</i>' AS XML) AS dept_doc) AS dept_wrapped\n    CROSS APPLY dept_wrapped.dept_doc.nodes('/i') AS dept_split(dept_node)\n) AS dept_atomic\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-06-30') AND dept_atomic.value <> ''\n\nGROUP BY dept_atomic.value;",
+      "plan_summary": {
+        "analysis_type": "count",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-DAILYAVG-001",
+      "question": "2024 yilinda gunluk ortalama randevu sayisi nedir",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "CountResult",
+      "row_count": null,
+      "total_ms": 26.907099992968142,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.002900022082030773,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.005600042641162872,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.3431000513955951,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.47530001029372215,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT CAST(COUNT(*) AS FLOAT) / NULLIF(COUNT(DISTINCT CAST(BaslangicTarihi AS DATE)), 0) AS daily_average_appointment_count, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31')\n;",
+      "plan_summary": {
+        "analysis_type": "average",
+        "metrics": [
+          "daily_average_appointment_count",
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-EXCLUDE-001",
+      "question": "2024 yilinda beklemede ve islem surmekte olanlari haric tut bolum bazinda randevu sayisini goster",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "CountResult",
+      "row_count": null,
+      "total_ms": 45.38779996801168,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.002100015990436077,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.004300032742321491,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.7059000199660659,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.8014999330043793,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT dept_atomic.value AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nCROSS APPLY (\n    SELECT LTRIM(RTRIM(dept_node.value('.', 'NVARCHAR(4000)'))) AS value\n    FROM (SELECT CAST(N'<i>' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(GenelRandevuBolumAdi, '&', ''), '<', ''), '>', ''), ', ', ','), ',', '</i><i>') + N'</i>' AS XML) AS dept_doc) AS dept_wrapped\n    CROSS APPLY dept_wrapped.dept_doc.nodes('/i') AS dept_split(dept_node)\n) AS dept_atomic\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31') AND RandevuDurumu IN (N'Gelmedi', N'Gerçekleşti', N'Giriş Yapılmış') AND dept_atomic.value <> ''\n\nGROUP BY dept_atomic.value;",
+      "plan_summary": {
+        "analysis_type": "count",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-NEG-RATIO-PCT-001",
+      "question": "2024 yilinda gelmeme orani %10 olan bolumler",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "RatioResult",
+      "row_count": null,
+      "total_ms": 25.143199949525297,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.003200024366378784,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.004100031219422817,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.8443000260740519,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 1.3683000579476357,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT dept_atomic.value AS GenelRandevuBolumAdi, 100.0 * SUM(CASE WHEN RandevuDurumu = N'Gelmedi' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) AS no_show_rate\nFROM dbo.vw_RandevuRaporu\nCROSS APPLY (\n    SELECT LTRIM(RTRIM(dept_node.value('.', 'NVARCHAR(4000)'))) AS value\n    FROM (SELECT CAST(N'<i>' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(GenelRandevuBolumAdi, '&', ''), '<', ''), '>', ''), ', ', ','), ',', '</i><i>') + N'</i>' AS XML) AS dept_doc) AS dept_wrapped\n    CROSS APPLY dept_wrapped.dept_doc.nodes('/i') AS dept_split(dept_node)\n) AS dept_atomic\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31') AND dept_atomic.value <> ''\n\nGROUP BY dept_atomic.value;",
+      "plan_summary": {
+        "analysis_type": "ratio",
+        "metrics": [
+          "no_show_rate"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-NEG-WEEKLY-001",
+      "question": "2024 yilinda haftalik randevu trendini goster",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "TrendResult",
+      "row_count": null,
+      "total_ms": 24.910599924623966,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001700012944638729,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.005500041879713535,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.3567999228835106,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.4007000243291259,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT DATEADD(WEEK, DATEDIFF(WEEK, 0, BaslangicTarihi), 0) AS period_start, COUNT(*) AS weekly_appointment_count\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31')\nGROUP BY DATEADD(WEEK, DATEDIFF(WEEK, 0, BaslangicTarihi), 0)\nORDER BY period_start ASC;",
+      "plan_summary": {
+        "analysis_type": "time_trend",
+        "metrics": [
+          "weekly_appointment_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-NEG-TOP5-001",
+      "question": "2024 yilinda en yogun 5 doktoru goster",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "DistributionResult",
+      "row_count": null,
+      "total_ms": 23.25680002104491,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001300009898841381,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.003800028935074806,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.24120009038597345,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.27600000612437725,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT TOP (5) GenelRandevuKaynakAdi AS GenelRandevuKaynakAdi, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31')\n\nGROUP BY GenelRandevuKaynakAdi\nORDER BY appointment_count DESC;",
+      "plan_summary": {
+        "analysis_type": "ranking",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuKaynakAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-POSSMONTH-001",
+      "question": "2025 yilinin mayis ayinda bolum bazinda randevu sayisi",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "CountResult",
+      "row_count": null,
+      "total_ms": 30.801699962466955,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.002400018274784088,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.004100031219422817,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.6630999268963933,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.7867999374866486,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT dept_atomic.value AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nCROSS APPLY (\n    SELECT LTRIM(RTRIM(dept_node.value('.', 'NVARCHAR(4000)'))) AS value\n    FROM (SELECT CAST(N'<i>' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(GenelRandevuBolumAdi, '&', ''), '<', ''), '>', ''), ', ', ','), ',', '</i><i>') + N'</i>' AS XML) AS dept_doc) AS dept_wrapped\n    CROSS APPLY dept_wrapped.dept_doc.nodes('/i') AS dept_split(dept_node)\n) AS dept_atomic\nWHERE BaslangicTarihi >= '2025-05-01' AND BaslangicTarihi < DATEADD(day, 1, '2025-05-31') AND dept_atomic.value <> ''\n\nGROUP BY dept_atomic.value;",
+      "plan_summary": {
+        "analysis_type": "count",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-PASSIVERATE-001",
+      "question": "2024 yilinda gelinmeyen randevu orani",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "RatioResult",
+      "row_count": null,
+      "total_ms": 20.37519996520132,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001900014467537403,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.002600019797682762,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.3649001009762287,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.34600007347762585,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT 100.0 * SUM(CASE WHEN RandevuDurumu = N'Gelmedi' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) AS no_show_rate\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31')\n;",
+      "plan_summary": {
+        "analysis_type": "ratio",
+        "metrics": [
+          "no_show_rate"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-HERAY-001",
+      "question": "2024 yilinda her ay kac randevu olmus",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "TrendResult",
+      "row_count": null,
+      "total_ms": 25.103899999521673,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001900014467537403,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.003500026650726795,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.36479998379945755,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.3887999337166548,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1) AS period_start, COUNT(*) AS monthly_appointment_count\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31')\nGROUP BY DATEFROMPARTS(YEAR(BaslangicTarihi), MONTH(BaslangicTarihi), 1)\nORDER BY period_start ASC;",
+      "plan_summary": {
+        "analysis_type": "time_trend",
+        "metrics": [
+          "monthly_appointment_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-DISTINCT-DEGISIK-001",
+      "question": "2024 yilinda kac degisik doktor calismis",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "CountResult",
+      "row_count": null,
+      "total_ms": 22.0359000377357,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001100008375942707,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.003300025127828121,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.1824999926611781,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.2223000628873706,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT COUNT(DISTINCT DoktorId) AS unique_doctor_count\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31')\n;",
+      "plan_summary": {
+        "analysis_type": "count",
+        "metrics": [
+          "unique_doctor_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-PASSIVE-NOSHOW-001",
+      "question": "2024 hangi 5 bolumde en cok gelinmiyor",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "DistributionResult",
+      "row_count": null,
+      "total_ms": 90.72160010691732,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.002100015990436077,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.003700028173625469,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.8697999874129891,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.8919000392779708,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT TOP (5) dept_atomic.value AS GenelRandevuBolumAdi, SUM(CASE WHEN RandevuDurumu = N'Gelmedi' THEN 1 ELSE 0 END) AS no_show_count\nFROM dbo.vw_RandevuRaporu\nCROSS APPLY (\n    SELECT LTRIM(RTRIM(dept_node.value('.', 'NVARCHAR(4000)'))) AS value\n    FROM (SELECT CAST(N'<i>' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(GenelRandevuBolumAdi, '&', ''), '<', ''), '>', ''), ', ', ','), ',', '</i><i>') + N'</i>' AS XML) AS dept_doc) AS dept_wrapped\n    CROSS APPLY dept_wrapped.dept_doc.nodes('/i') AS dept_split(dept_node)\n) AS dept_atomic\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31') AND dept_atomic.value <> ''\n\nGROUP BY dept_atomic.value\nORDER BY no_show_count DESC;",
+      "plan_summary": {
+        "analysis_type": "ranking",
+        "metrics": [
+          "no_show_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-CONVERSION-001",
+      "question": "2024 randevularin yuzde kaci protokole donustu",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "RatioResult",
+      "row_count": null,
+      "total_ms": 20.690400036983192,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001100008375942707,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.00300002284348011,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.30419998802244663,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.3325999714434147,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT 100.0 * SUM(CASE WHEN ProtokolAcilisTarihi IS NOT NULL THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) AS protocol_conversion_rate\nFROM dbo.vw_RandevuRaporu\nWHERE ProtokolAcilisTarihi >= '2024-01-01' AND ProtokolAcilisTarihi < DATEADD(day, 1, '2024-12-31')\n;",
+      "plan_summary": {
+        "analysis_type": "percentage",
+        "metrics": [
+          "protocol_conversion_rate"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-TYPO-DIM-001",
+      "question": "2024 bolm bazinda randevu sayisi",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "CountResult",
+      "row_count": null,
+      "total_ms": 22.969000041484833,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001900014467537403,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0030999071896076202,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.669300090521574,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.7488999981433153,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT dept_atomic.value AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nCROSS APPLY (\n    SELECT LTRIM(RTRIM(dept_node.value('.', 'NVARCHAR(4000)'))) AS value\n    FROM (SELECT CAST(N'<i>' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(GenelRandevuBolumAdi, '&', ''), '<', ''), '>', ''), ', ', ','), ',', '</i><i>') + N'</i>' AS XML) AS dept_doc) AS dept_wrapped\n    CROSS APPLY dept_wrapped.dept_doc.nodes('/i') AS dept_split(dept_node)\n) AS dept_atomic\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31') AND dept_atomic.value <> ''\n\nGROUP BY dept_atomic.value;",
+      "plan_summary": {
+        "analysis_type": "count",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-PERIODCMP-VE-001",
+      "question": "2025 nisan ve mayis randevu sayilarini kiyasla",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "PeriodComparisonResult",
+      "row_count": null,
+      "total_ms": 28.819800005294383,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.002800021320581436,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.005900044925510883,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 1.1337000178173184,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 1.185899949632585,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT N'Mayıs 2025' AS current_period_label, N'Nisan 2025' AS baseline_period_label, SUM(CASE WHEN BaslangicTarihi >= '2025-05-01' AND BaslangicTarihi < '2025-06-01' THEN 1 ELSE 0 END) AS current_period_count, SUM(CASE WHEN BaslangicTarihi >= '2025-04-01' AND BaslangicTarihi < '2025-05-01' THEN 1 ELSE 0 END) AS baseline_period_count, (SUM(CASE WHEN BaslangicTarihi >= '2025-05-01' AND BaslangicTarihi < '2025-06-01' THEN 1 ELSE 0 END)) - (SUM(CASE WHEN BaslangicTarihi >= '2025-04-01' AND BaslangicTarihi < '2025-05-01' THEN 1 ELSE 0 END)) AS absolute_change, 100.0 * ((SUM(CASE WHEN BaslangicTarihi >= '2025-05-01' AND BaslangicTarihi < '2025-06-01' THEN 1 ELSE 0 END)) - (SUM(CASE WHEN BaslangicTarihi >= '2025-04-01' AND BaslangicTarihi < '2025-05-01' THEN 1 ELSE 0 END))) / NULLIF((SUM(CASE WHEN BaslangicTarihi >= '2025-04-01' AND BaslangicTarihi < '2025-05-01' THEN 1 ELSE 0 END)), 0) AS percentage_change\nFROM dbo.vw_RandevuRaporu\nWHERE (BaslangicTarihi >= '2025-05-01' AND BaslangicTarihi < '2025-06-01') OR (BaslangicTarihi >= '2025-04-01' AND BaslangicTarihi < '2025-05-01');",
+      "plan_summary": {
+        "analysis_type": "period_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": [
+          {
+            "label": "Nisan 2025",
+            "start_inclusive": "2025-04-01",
+            "end_exclusive": "2025-05-01",
+            "column": "BaslangicTarihi"
+          },
+          {
+            "label": "Mayıs 2025",
+            "start_inclusive": "2025-05-01",
+            "end_exclusive": "2025-06-01",
+            "column": "BaslangicTarihi"
+          }
+        ]
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-OOS-LAB-001",
+      "question": "2024 yilinda hastalarin laboratuvar sonuclari",
+      "category": "unanswerable",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 3.489999915473163,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001600012183189392,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.002300017513334751,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": null,
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-OOS-PAYMENT-001",
+      "question": "2024 yilinda toplam tahsilat ne kadar",
+      "category": "unanswerable",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": null,
+      "result_contract": null,
+      "row_count": null,
+      "total_ms": 2.2842000471428037,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001300009898841381,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001300009898841381,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": null,
+      "plan_summary": null,
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-THOUSANDS-001",
+      "question": "2024 bolum bazinda 1.000 den fazla randevusu olan bolumler",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "DistributionResult",
+      "row_count": null,
+      "total_ms": 33.95359998103231,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0018998980522155762,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.003800028935074806,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.9457000996917486,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 1.01650005672127,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT dept_atomic.value AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nCROSS APPLY (\n    SELECT LTRIM(RTRIM(dept_node.value('.', 'NVARCHAR(4000)'))) AS value\n    FROM (SELECT CAST(N'<i>' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(GenelRandevuBolumAdi, '&', ''), '<', ''), '>', ''), ', ', ','), ',', '</i><i>') + N'</i>' AS XML) AS dept_doc) AS dept_wrapped\n    CROSS APPLY dept_wrapped.dept_doc.nodes('/i') AS dept_split(dept_node)\n) AS dept_atomic\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31') AND dept_atomic.value <> ''\n\nGROUP BY dept_atomic.value\nHAVING COUNT(*) > 1000\nORDER BY appointment_count DESC;",
+      "plan_summary": {
+        "analysis_type": "distribution",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-ISODATE-001",
+      "question": "2024-05 bolum bazinda randevu sayisi",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "CountResult",
+      "row_count": null,
+      "total_ms": 28.188399970531464,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001400010660290718,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.0039000296965241432,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.7063000230118632,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 1.3900999911129475,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT dept_atomic.value AS GenelRandevuBolumAdi, COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nCROSS APPLY (\n    SELECT LTRIM(RTRIM(dept_node.value('.', 'NVARCHAR(4000)'))) AS value\n    FROM (SELECT CAST(N'<i>' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(GenelRandevuBolumAdi, '&', ''), '<', ''), '>', ''), ', ', ','), ',', '</i><i>') + N'</i>' AS XML) AS dept_doc) AS dept_wrapped\n    CROSS APPLY dept_wrapped.dept_doc.nodes('/i') AS dept_split(dept_node)\n) AS dept_atomic\nWHERE BaslangicTarihi >= '2024-05-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-05-31') AND dept_atomic.value <> ''\n\nGROUP BY dept_atomic.value;",
+      "plan_summary": {
+        "analysis_type": "count",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    },
+    {
+      "case_id": "EXP-AGEFILTER-001",
+      "question": "2024 yilinda 40 yas ustu hastalarin randevu sayisi",
+      "category": "expert_regression",
+      "mode": "sql-generation",
+      "passed": true,
+      "skipped": false,
+      "skip_reason": null,
+      "sql_source": "deterministic",
+      "result_contract": "CountResult",
+      "row_count": null,
+      "total_ms": 25.758099975064397,
+      "stage_results": [
+        {
+          "stage": "routing",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.001300009898841381,
+          "failures": []
+        },
+        {
+          "stage": "query_plan",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.00400003045797348,
+          "failures": []
+        },
+        {
+          "stage": "sql_generation",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.26940007228404284,
+          "failures": []
+        },
+        {
+          "stage": "sql_semantics",
+          "passed": true,
+          "skipped": false,
+          "duration_ms": 0.28959999326616526,
+          "failures": []
+        }
+      ],
+      "failures": [],
+      "generated_sql": "SELECT COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu\nWHERE BaslangicTarihi >= '2024-01-01' AND BaslangicTarihi < DATEADD(day, 1, '2024-12-31') AND DATEDIFF(year, DogumTarihi, GETDATE()) > 40\n;",
+      "plan_summary": {
+        "analysis_type": "count",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "answerable": true,
+        "current_period": null,
+        "baseline_period": null,
+        "cohort": null,
+        "minimum_sample_size": null,
+        "periods": []
+      },
+      "llm_provider": null,
+      "llm_model": null,
+      "thinking_mode": null,
+      "latency_ms": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "finish_reason": null,
+      "remote_data_policy": null,
+      "fallback_used": false
+    }
+  ],
+  "previous_comparison": {
+    "previous_run_id": "20260729T114005Z-f62d299c",
+    "passed_delta": 0,
+    "failed_delta": 0,
+    "new_failure_types": [],
+    "resolved_failure_types": [],
+    "regression_case_ids": [],
+    "resolved_case_ids": [],
+    "p95_delta_ms": 0.4477999173104763
+  }
+}

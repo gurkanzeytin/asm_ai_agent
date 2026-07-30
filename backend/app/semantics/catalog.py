@@ -279,6 +279,8 @@ _ASC_MARKERS = (
     "en alttaki",
     "en kisa",
 )
+_PERIOD_INCREASE_MARKERS = ("artan", "artis", "yukselen", "yukselis")
+_PERIOD_DECREASE_MARKERS = ("azalan", "azalis", "dusen", "dusus")
 
 _GRANULARITY_TERMS = [
     ("hour", ("saatlik", "saat bazinda", "saatlere gore")),
@@ -478,6 +480,12 @@ def match_metrics(folded_question: str) -> list[str]:
         and not any(marker in folded_question for marker in _MULTI_METRIC_MARKERS)
     ):
         matched.remove("appointment_count")
+    if (
+        "appointment_count" in matched
+        and "appointments_per_patient" in matched
+        and not any(marker in folded_question for marker in _MULTI_METRIC_MARKERS)
+    ):
+        matched.remove("appointment_count")
     if conditional_ids and not any(marker in folded_question for marker in _MULTI_METRIC_MARKERS):
         matched = [
             mid
@@ -490,6 +498,14 @@ def match_metrics(folded_question: str) -> list[str]:
     data_quality_ids = [mid for mid in matched if by_id[mid].analysis_type == "data_quality"]
     if data_quality_ids and not any(marker in folded_question for marker in _MULTI_METRIC_MARKERS):
         matched = data_quality_ids
+    relationship_ids = [
+        mid
+        for mid in matched
+        if by_id[mid].analysis_type == "repeat_behavior"
+        and by_id[mid].formula_type.startswith("having_")
+    ]
+    if relationship_ids and not any(marker in folded_question for marker in _MULTI_METRIC_MARKERS):
+        matched = relationship_ids
     # A matched rate implies its count sibling only when they share the same mention.
     rate_bases: set[str] = set()
     for mid in matched:
@@ -743,6 +759,26 @@ def ranking_direction(folded_question: str) -> str:
     return "ASC" if any(marker in folded_question for marker in _ASC_MARKERS) else "DESC"
 
 
+def period_change_direction(folded_question: str) -> str | None:
+    """Return the latest period-change direction mentioned in the question.
+
+    Context replay can produce text like "en cok artan ... Azalanlari goster";
+    the latter phrase is the user's current edit, so last mention wins.
+    """
+    matches: list[tuple[int, str]] = []
+    for marker in _PERIOD_INCREASE_MARKERS:
+        position = folded_question.rfind(marker)
+        if position >= 0:
+            matches.append((position, "increase"))
+    for marker in _PERIOD_DECREASE_MARKERS:
+        position = folded_question.rfind(marker)
+        if position >= 0:
+            matches.append((position, "decrease"))
+    if not matches:
+        return None
+    return max(matches, key=lambda item: item[0])[1]
+
+
 def match_granularity(folded_question: str) -> str | None:
     for granularity, terms in _GRANULARITY_TERMS:
         if any(term in folded_question for term in terms):
@@ -760,7 +796,16 @@ def detect_period_comparison(folded_question: str, detected_date_ranges: int = 0
     # from turning an ordinary single-period question into a comparison.
     if detected_date_ranges >= 2 and any(
         term in folded_question
-        for term in ("karsilastir", "kiyasla", " ile ", "arasindaki fark", "fark", "degisim", "gore")
+        for term in (
+            "karsilastir",
+            "kiyasla",
+            "kiyas",
+            " ile ",
+            "arasindaki fark",
+            "fark",
+            "degisim",
+            "gore",
+        )
     ):
         return ["two_explicit_periods"]
     return []
@@ -777,6 +822,15 @@ def check_answerability(folded_question: str) -> tuple[bool, str | None, str | N
             # Prefix matching is disabled here: refusing to answer must never
             # rest on a loose match ('tutar' must not match 'tutarsız').
             if _term_in(folded_question, term, allow_prefix=False):
+                if (
+                    term == "iptal"
+                    and "yoksa" in folded_question
+                    and any(
+                        fallback in folded_question
+                        for fallback in ("gelmeyen", "gelmedi", "gelmeme")
+                    )
+                ):
+                    continue
                 return False, concept.reason, concept.alternative
     return True, None, None
 

@@ -1,10 +1,12 @@
 import { motion, AnimatePresence } from "motion/react";
-import { Clock, Database, ChevronRight, Copy, Check } from "lucide-react";
+import { Clock, Database, ChevronRight, Copy, Check, Maximize2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { tr } from "@/locales/tr";
 import { panelTransition } from "@/lib/ui-motion";
+import { SqlCode } from "./SqlCode";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface Props {
   open: boolean;
@@ -16,6 +18,7 @@ interface Props {
 
 export function InfoPanel({ open, responseMs, isThinking, sql }: Props) {
   const [copied, setCopied] = useState(false);
+  const [sqlExpanded, setSqlExpanded] = useState(false);
 
   const copySql = async () => {
     if (!sql) return;
@@ -29,76 +32,127 @@ export function InfoPanel({ open, responseMs, isThinking, sql }: Props) {
   };
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.aside
-          initial={{ x: 24, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: 16, opacity: 0 }}
-          transition={panelTransition}
-          className="hidden h-full w-[340px] shrink-0 border-l border-border bg-sidebar/40 lg:block"
-        >
-          <div className="flex h-16 shrink-0 items-center border-b border-border px-4">
-            <div className="text-sm font-semibold">{tr.details.title}</div>
-          </div>
-          <div className="flex flex-col gap-3 overflow-y-auto p-4">
-            <Card title={tr.details.conversation}>
-              <Row
-                icon={Clock}
-                label={tr.details.responseTime}
-                value={`${(responseMs / 1000).toFixed(2)}s`}
-              />
-            </Card>
-
-            <Card title={tr.details.agentStatus}>
-              <div className="flex items-center gap-2 text-sm">
-                <span
-                  className={cn(
-                    "h-2 w-2 rounded-full",
-                    isThinking ? "bg-warning pulse-ring" : "bg-success",
-                  )}
+    <>
+      <AnimatePresence>
+        {open && (
+          <motion.aside
+            key="info-panel"
+            initial={{ x: 24, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 16, opacity: 0 }}
+            transition={panelTransition}
+            className="hidden h-full w-[340px] shrink-0 border-l border-border bg-sidebar/40 lg:block"
+          >
+            <div className="flex h-16 shrink-0 items-center border-b border-border px-4">
+              <div className="text-sm font-semibold">{tr.details.title}</div>
+            </div>
+            <div className="flex flex-col gap-3 overflow-y-auto p-4">
+              <Card title={tr.details.conversation}>
+                <Row
+                  icon={Clock}
+                  label={tr.details.responseTime}
+                  value={`${(responseMs / 1000).toFixed(2)}s`}
                 />
-                <span className="text-muted-foreground">
-                  {isThinking ? tr.details.thinking : tr.details.idle}
-                </span>
-              </div>
-            </Card>
+              </Card>
 
-            <Expandable
-              icon={Database}
-              title={tr.details.sqlQuery}
-              action={
-                sql ? (
-                  <button
-                    type="button"
-                    onClick={copySql}
-                    title={tr.details.copySql}
-                    aria-label={tr.details.copySql}
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                  >
-                    {copied ? (
-                      <Check className="h-3.5 w-3.5 text-success" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5" />
+              <Card title={tr.details.agentStatus}>
+                <div className="flex items-center gap-2 text-sm">
+                  <span
+                    className={cn(
+                      "h-2 w-2 rounded-full",
+                      isThinking ? "bg-warning pulse-ring" : "bg-success",
                     )}
-                  </button>
-                ) : undefined
-              }
-            >
-              {sql ? (
-                <pre className="max-h-72 overflow-auto whitespace-pre rounded-lg border border-border/60 bg-muted p-3 text-[11px] leading-relaxed text-foreground">
-                  {sql}
-                </pre>
-              ) : (
-                <p className="rounded-lg border border-border/60 bg-muted p-3 text-[11px] leading-relaxed text-muted-foreground">
-                  {tr.details.noSqlGenerated}
-                </p>
-              )}
-            </Expandable>
+                  />
+                  <span className="text-muted-foreground">
+                    {isThinking ? tr.details.thinking : tr.details.idle}
+                  </span>
+                </div>
+              </Card>
+
+              <Expandable
+                icon={Database}
+                title={tr.details.sqlQuery}
+                action={
+                  sql ? (
+                    <div className="flex shrink-0 items-center">
+                      <button
+                        type="button"
+                        onClick={() => setSqlExpanded(true)}
+                        title={tr.details.expandSql}
+                        aria-label={tr.details.expandSql}
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                      >
+                        <Maximize2 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={copySql}
+                        title={tr.details.copySql}
+                        aria-label={tr.details.copySql}
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                      >
+                        {copied ? (
+                          <Check className="h-3.5 w-3.5 text-success" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  ) : undefined
+                }
+              >
+                {sql ? (
+                  <SqlCode
+                    sql={sql}
+                    header={false}
+                    className="my-0 rounded-lg border-border/60"
+                    preClassName="max-h-72 bg-muted text-[11px]"
+                  />
+                ) : (
+                  <p className="rounded-lg border border-border/60 bg-muted p-3 text-[11px] leading-relaxed text-muted-foreground">
+                    {tr.details.noSqlGenerated}
+                  </p>
+                )}
+              </Expandable>
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
+
+      <Dialog open={sqlExpanded} onOpenChange={setSqlExpanded}>
+        <DialogContent className="w-[min(calc(100vw-2rem),72rem)] max-w-none gap-0 overflow-hidden p-0">
+          <DialogHeader className="border-b border-border px-5 py-4 pr-14">
+            <div className="flex min-w-0 items-center justify-between gap-3">
+              <DialogTitle className="flex min-w-0 items-center gap-2 text-base">
+                <Database className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="truncate">{tr.details.sqlModalTitle}</span>
+              </DialogTitle>
+              <button
+                type="button"
+                onClick={copySql}
+                title={tr.details.copySql}
+                aria-label={tr.details.copySql}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+              >
+                {copied ? (
+                  <Check className="h-3.5 w-3.5 text-success" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+              </button>
+            </div>
+          </DialogHeader>
+          <div className="min-w-0 p-4">
+            <SqlCode
+              sql={sql ?? ""}
+              header={false}
+              className="my-0 rounded-lg border-border/60"
+              preClassName="max-h-[70vh] bg-muted p-4 text-sm"
+            />
           </div>
-        </motion.aside>
-      )}
-    </AnimatePresence>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

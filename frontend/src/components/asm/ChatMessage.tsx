@@ -1,7 +1,8 @@
 import { AnimatePresence, motion } from "motion/react";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { SqlCode } from "./SqlCode";
 import {
   Activity,
   AlertTriangle,
@@ -10,6 +11,7 @@ import {
   Copy,
   DatabaseZap,
   Lightbulb,
+  Maximize2,
   Pencil,
   RefreshCw,
   ServerCrash,
@@ -27,6 +29,13 @@ import type { WorkflowStage } from "@/lib/api";
 import type { MessageErrorKind } from "./types";
 import { panelTransition, quickTransition, uiTransition } from "@/lib/ui-motion";
 import { traceChatRuntime } from "@/lib/chat-runtime-trace";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const LazySqlResultsTable = lazy(() =>
   import("./SqlResultsTable").then((module) => ({ default: module.SqlResultsTable })),
@@ -52,6 +61,10 @@ export function ChatMessage({
     return context && cards.every((card) => card.context === context) ? context : undefined;
   })();
   const returnsLoadingPlaceholder = !isUser && Boolean(message.streaming) && !message.content;
+  // A genuine analytical answer (has data/metrics) gets the editorial "Özet"
+  // eyebrow + hairline; greetings, clarifications, and out-of-scope guidance
+  // stay plain so the eyebrow never mislabels a non-report reply.
+  const isDataAnswer = Boolean(message.sqlResult) || (message.metricCards?.length ?? 0) > 0;
   const resultDisplayMode =
     message.visibleSections?.includes("chart") && !message.visibleSections.includes("table")
       ? "chart"
@@ -131,6 +144,14 @@ export function ChatMessage({
             <AssistantText content={message.content} streaming animate={animateResponse} />
           ) : message.responseMode === "sql" ? (
             <AssistantSqlText sql={message.content} />
+          ) : isDataAnswer ? (
+            <div>
+              <span className="mb-1.5 inline-flex items-center gap-2 text-[10.5px] font-bold uppercase tracking-[0.08em] text-cyan before:h-[2px] before:w-3.5 before:rounded-full before:bg-cyan before:content-['']">
+                {tr.chat.summaryEyebrow}
+              </span>
+              <AssistantText content={message.content} animate={animateResponse} />
+              <div className="mt-2.5 h-px bg-border" />
+            </div>
           ) : (
             <AssistantText content={message.content} animate={animateResponse} />
           )}
@@ -156,16 +177,20 @@ export function ChatMessage({
                 return (
                   <div
                     key={`${card.context ?? "metric"}-${card.label}`}
-                    className="glass flex min-h-[104px] min-w-0 flex-col rounded-lg border border-border/60 px-3.5 py-3"
+                    className="glass relative flex min-h-[104px] min-w-0 flex-col overflow-hidden rounded-xl border border-border/60 py-3 pl-4 pr-3.5 transition-shadow hover:shadow-[var(--shadow-soft,0_8px_24px_-12px_rgba(23,32,51,.14))]"
                   >
+                    <span
+                      aria-hidden
+                      className="absolute inset-y-0 left-0 w-[3px] bg-gradient-to-b from-primary to-cyan"
+                    />
                     <div
                       className={cn(
-                        "line-clamp-2 min-h-10 overflow-hidden break-words font-semibold [overflow-wrap:anywhere]",
+                        "line-clamp-2 min-h-10 overflow-hidden break-words font-semibold tabular-nums tracking-tight [overflow-wrap:anywhere]",
                         valueLength > 32
                           ? "text-xs leading-5"
                           : valueLength > 18
                             ? "text-sm leading-5"
-                            : "text-lg leading-5",
+                            : "text-xl leading-6",
                         card.isEmpty ? "text-muted-foreground" : "text-foreground",
                       )}
                       title={card.value}
@@ -319,14 +344,7 @@ function CodeCopyButton({ text }: { text: string }) {
 }
 
 function AssistantSqlText({ sql }: { sql: string }) {
-  return (
-    <div className="relative my-2">
-      <pre className="overflow-x-auto rounded-lg border border-border bg-background/60 p-3 pr-20 text-xs">
-        <code>{sql}</code>
-      </pre>
-      <CodeCopyButton text={sql} />
-    </div>
-  );
+  return <SqlCode sql={sql} />;
 }
 
 function AssistantText({
@@ -351,6 +369,11 @@ function AssistantText({
             const isBlock = className?.includes("language-");
             if (isBlock) {
               const codeText = String(children).replace(/\n$/, "");
+              // A SQL fence gets the branded, syntax-highlighted block; any
+              // other language keeps the plain copy-able pre.
+              if (className?.includes("language-sql")) {
+                return <SqlCode sql={codeText} />;
+              }
               return (
                 <div className="relative my-2">
                   <pre className="overflow-x-auto rounded-lg border border-border bg-muted p-3 pr-20 text-xs text-foreground">
@@ -370,21 +393,27 @@ function AssistantText({
             );
           },
           table({ children }) {
-            return (
-              <div className="my-2 overflow-x-auto rounded-lg border border-border">
-                <table className="w-full text-xs">{children}</table>
-              </div>
-            );
+            return <MarkdownTable>{children}</MarkdownTable>;
           },
           th({ children }) {
             return (
-              <th className="border-b border-border bg-background/40 px-3 py-2 text-left font-medium">
+              <th className="min-w-28 border-b border-border bg-muted px-3 py-2 text-left align-top text-[11px] font-semibold uppercase tracking-wide text-muted-foreground [overflow-wrap:anywhere]">
                 {children}
               </th>
             );
           },
           td({ children }) {
-            return <td className="border-b border-border/50 px-3 py-2">{children}</td>;
+            const numeric = isNumericCell(children);
+            return (
+              <td
+                className={cn(
+                  "min-w-28 border-b border-border/50 px-3 py-2 align-top [overflow-wrap:anywhere]",
+                  numeric && "text-right tabular-nums",
+                )}
+              >
+                {children}
+              </td>
+            );
           },
           a({ children, href }) {
             return (
@@ -427,6 +456,43 @@ function AssistantText({
         />
       )}
     </div>
+  );
+}
+
+function MarkdownTable({ children }: { children: ReactNode }) {
+  const [expanded, setExpanded] = useState(false);
+  const renderTable = () => <table className="min-w-max table-auto text-xs">{children}</table>;
+
+  return (
+    <>
+      <div className="group/table relative my-2 max-w-full overflow-hidden rounded-xl border border-border [&_tbody_tr:hover]:bg-primary/5 [&_tbody_tr:nth-child(even)]:bg-muted/30">
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          aria-label={tr.sqlTable.openFullscreen}
+          title={tr.sqlTable.openFullscreen}
+          className="absolute right-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-md border border-border/70 bg-background/85 text-muted-foreground opacity-100 shadow-sm backdrop-blur transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 sm:opacity-0 sm:group-hover/table:opacity-100 sm:group-focus-within/table:opacity-100"
+        >
+          <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+        <div className="max-w-full overflow-x-auto">{renderTable()}</div>
+      </div>
+      <Dialog open={expanded} onOpenChange={setExpanded}>
+        <DialogContent className="h-[calc(100vh-3rem)] w-[min(calc(100vw-2rem),72rem)] max-w-none gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b border-border px-5 py-4">
+            <DialogTitle className="text-base">{tr.sqlTable.tableFullscreenTitle}</DialogTitle>
+            <DialogDescription className="text-xs">
+              {tr.sqlTable.tableFullscreenDescription}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 overflow-auto p-4">
+            <div className="min-w-max overflow-hidden rounded-xl border border-border [&_tbody_tr:hover]:bg-primary/5 [&_tbody_tr:nth-child(even)]:bg-muted/30">
+              {renderTable()}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -597,6 +663,24 @@ function parseMetricItem(item: string): { label: string; parts: string[] } {
 
 function stripInlineMarkdown(value: string): string {
   return value.replace(/\*\*(.*?)\*\*/g, "$1").trim();
+}
+
+function nodeToText(node: ReactNode): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(nodeToText).join("");
+  if (typeof node === "object" && "props" in node) {
+    return nodeToText((node as { props?: { children?: ReactNode } }).props?.children);
+  }
+  return "";
+}
+
+// A report-table cell whose text is purely a number (Türkçe "25.464",
+// "%71,4", "-1.196") — such columns are right-aligned with tabular figures.
+function isNumericCell(children: ReactNode): boolean {
+  const text = nodeToText(children).trim();
+  if (!text) return false;
+  return /^[-+]?[%₺$]?\s?\d[\d.,\s]*%?$/.test(text);
 }
 
 export function TypingIndicator({ stage }: { stage?: WorkflowStage }) {

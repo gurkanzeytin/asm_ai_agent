@@ -190,7 +190,7 @@ def test_template_renderer_empty():
 
     assert rendered is not None
     assert rendered.template_name == "empty"
-    assert "eşleşen kayıt bulamadım" in rendered.markdown
+    assert "eşleşen randevu kaydı bulamadım" in rendered.markdown
 
 
 def test_template_renderer_empty_uses_question_scope():
@@ -201,7 +201,7 @@ def test_template_renderer_empty_uses_question_scope():
     )
 
     assert rendered is not None
-    assert "Tarih aralığı ve randevu durumu için eşleşen kayıt bulamadım." in rendered.markdown
+    assert "Tarih aralığı ve randevu durumu için eşleşen kayıt bulamadım" in rendered.markdown
     assert "Tarih aralığını genişletip aynı soruyu yeniden deneyin." in rendered.markdown
     assert "Randevu durumu filtresini kaldırıp önce toplam dağılıma bakın." in rendered.markdown
     assert "Sorgu Sonucu" not in rendered.markdown

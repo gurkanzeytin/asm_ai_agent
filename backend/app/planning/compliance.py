@@ -259,16 +259,20 @@ class PlanComplianceValidator:
             )
             or plan.baseline_period
         ):
-            if "current_" not in folded_sql:
-                missing.append("current period metrics")
-            if "baseline_" not in folded_sql:
-                missing.append("baseline period metrics")
-            if plan.periods:
-                missing.extend(self._period_aggregate_issues(sql, plan))
-            elif "dateadd(day, -30" in folded_sql and "dateadd(day, -60" not in folded_sql:
-                missing.append("period comparison baseline window")
-            if "where" in folded_sql and " or " not in folded_sql:
-                missing.append("period comparison WHERE must include both periods")
+            if len(plan.periods) > 2:
+                if "union all" not in folded_sql:
+                    missing.append("multi-period comparison UNION ALL")
+            else:
+                if "current_" not in folded_sql:
+                    missing.append("current period metrics")
+                if "baseline_" not in folded_sql:
+                    missing.append("baseline period metrics")
+                if plan.periods:
+                    missing.extend(self._period_aggregate_issues(sql, plan))
+                elif "dateadd(day, -30" in folded_sql and "dateadd(day, -60" not in folded_sql:
+                    missing.append("period comparison baseline window")
+                if "where" in folded_sql and " or " not in folded_sql:
+                    missing.append("period comparison WHERE must include both periods")
 
         if plan.analysis_type == "anomaly_comparison" and re.search(r"\bhaving\b", folded_sql):
             missing.append("minimum sample size must not be applied as HAVING")

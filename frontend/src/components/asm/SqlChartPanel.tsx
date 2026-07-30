@@ -62,6 +62,10 @@ function truncateLabel(value: string) {
   return value.length > 16 ? `${value.slice(0, 15)}…` : value;
 }
 
+function chartDatumKey(item: ChartDatum, index: number) {
+  return `${index}:${item.name || "empty"}:${item.value}`;
+}
+
 const chartTypes = [
   { value: "bar" as const, icon: BarChart3 },
   { value: "line" as const, icon: ChartLine },
@@ -296,7 +300,7 @@ export function SqlChartPanel({ columns, rows, initialType = "bar", onCategorySe
                     <Bar dataKey="value" name={yKey} radius={[4, 4, 0, 0]} animationDuration={450}>
                       {data.map((item, index) => (
                         <Cell
-                          key={item.name}
+                          key={chartDatumKey(item, index)}
                           fill={palette[0]}
                           fillOpacity={index === focusIndex ? 1 : 0.78}
                           stroke={index === focusIndex ? "var(--foreground)" : "transparent"}
@@ -370,7 +374,7 @@ export function SqlChartPanel({ columns, rows, initialType = "bar", onCategorySe
                     >
                       {data.map((item, index) => (
                         <Cell
-                          key={item.name}
+                          key={chartDatumKey(item, index)}
                           fill={palette[index % palette.length]}
                           stroke={index === focusIndex ? "var(--foreground)" : "var(--background)"}
                           strokeWidth={index === focusIndex ? 3 : 2}
@@ -405,8 +409,8 @@ export function SqlChartPanel({ columns, rows, initialType = "bar", onCategorySe
             </tr>
           </thead>
           <tbody>
-            {data.map((item) => (
-              <tr key={item.name}>
+            {data.map((item, index) => (
+              <tr key={chartDatumKey(item, index)}>
                 <th scope="row">{item.name}</th>
                 <td>{formatNumber(item.value)}</td>
               </tr>

@@ -18,6 +18,7 @@ from app.semantics.catalog import (
     DAY_TYPE_DERIVATION,
     load_metric_catalog,
 )
+from app.semantics.view_mapping import fold
 
 SUPPORTED_ANALYSIS_TYPES = {
     "count",
@@ -42,6 +43,7 @@ SUPPORTED_ANALYSIS_TYPES = {
     "data_quality",
     "duration_analysis",
     "lead_time_analysis",
+    "repeat_behavior",
     "list",
     "adaptive_time_comparison",
     "percentage_change",
@@ -142,6 +144,8 @@ class DeterministicSQLBuilder:
         }:
             return self._period_comparison(plan, adaptive_retry=adaptive_retry)
         if analysis_type == "comparison":
+            if plan.periods or len(plan.date_filters) >= 2:
+                return self._period_comparison(plan, adaptive_retry=adaptive_retry)
             return self._entity_comparison(plan)
         if analysis_type == "anomaly_comparison":
             return self._anomaly(plan, adaptive_retry=adaptive_retry)
@@ -153,6 +157,10 @@ class DeterministicSQLBuilder:
             return self._trend(plan)
         if analysis_type == "list":
             return self._list(plan)
+        if analysis_type == "repeat_behavior":
+            repeat_sql = self._repeat_behavior(plan)
+            if repeat_sql is not None:
+                return repeat_sql
         return self._standard(plan, analysis_type)
 
     def metric_sql_map(self) -> dict[str, str]:
@@ -240,11 +248,21 @@ class DeterministicSQLBuilder:
         )
         expected_aliases.extend(output_alias_for.get(dimension, dimension) for dimension in dimensions)
         metric_aliases: dict[str, str] = {}
+        primary_metric_alias = ""
+        primary_metric_expression = metric_exprs[0][1]
         for metric_id, expression in metric_exprs:
             alias = self._alias_for_metric(metric_id, analysis_type)
             select_parts.append(f"{expression} AS {alias}")
             expected_aliases.append(alias)
             metric_aliases[metric_id] = alias
+            if not primary_metric_alias:
+                primary_metric_alias = alias
+        if self._has_share_of_total(plan) and group_by_columns:
+            select_parts.append(
+                f"100.0 * {primary_metric_expression} / NULLIF(SUM({primary_metric_expression}) OVER (), 0) "
+                "AS pay_yuzdesi"
+            )
+            expected_aliases.append("pay_yuzdesi")
         where = self._where(plan)
         # Department EXCLUSION ("Kardiyoloji hariç ..."). When the query splits
         # the composite department column, exclude the ATOMIC value so a
@@ -275,11 +293,11 @@ class DeterministicSQLBuilder:
             from_clause += self._department_split_cross_apply()
         group_by = f"\nGROUP BY {', '.join(group_by_columns)}" if group_by_columns else ""
         having = self._having(plan, group_by_columns, metric_exprs)
-        order_by = (
-            "\nORDER BY period_start ASC"
-            if time_bucket_expr
-            else self._order_by(plan, analysis_type, expected_aliases[-1])
-        )
+        ranking_alias = primary_metric_alias or expected_aliases[-1]
+        if time_bucket_expr and not (plan.ranking or plan.order or plan.limit):
+            order_by = "\nORDER BY period_start ASC"
+        else:
+            order_by = self._order_by(plan, analysis_type, ranking_alias)
         # A percentile slice ("en üstteki %10") renders as TOP (N) PERCENT with
         # the ranking ORDER BY, cutting the top/bottom N% of groups. It needs a
         # genuine ordering to be meaningful, so it only applies alongside one.
@@ -382,6 +400,8 @@ class DeterministicSQLBuilder:
     def _period_comparison(
         self, plan: QueryPlan, *, adaptive_retry: bool
     ) -> DeterministicSQL | UnsupportedPlan:
+        if len(plan.periods) > 2 and not plan.dimensions:
+            return self._multi_period_breakdown(plan)
         current, baseline, current_label, baseline_label = self._period_pair_with_labels(
             plan, adaptive_retry
         )
@@ -458,9 +478,39 @@ class DeterministicSQLBuilder:
                 "absolute_change",
                 "percentage_change",
             ]
-        sql = f"SELECT {select}\nFROM {VIEW}\nWHERE ({current}) OR ({baseline});"
+        filters = self._render_structured_filters(plan)
+        filter_sql = f" AND {' AND '.join(filters)}" if filters else ""
+        sql = f"SELECT {select}\nFROM {VIEW}\nWHERE (({current}) OR ({baseline})){filter_sql};"
         return DeterministicSQL(
             sql=sql, result_schema="PeriodComparisonResult", expected_aliases=aliases
+        )
+
+    def _multi_period_breakdown(self, plan: QueryPlan) -> DeterministicSQL | UnsupportedPlan:
+        if len(plan.metrics) > 1:
+            return UnsupportedPlan(
+                "multi-metric period breakdown not supported: only a single metric can be compared across periods today",
+                plan.metrics,
+            )
+        metric = self._metric_expr((plan.metrics or ["appointment_count"])[0])
+        if not metric:
+            return UnsupportedPlan(
+                "period breakdown metric mapping is not verified", plan.metrics
+            )
+        filters = self._render_structured_filters(plan)
+        filter_sql = f" AND {' AND '.join(filters)}" if filters else ""
+        selects = [
+            (
+                f"SELECT N'{period.label}' AS period_label, {metric} AS appointment_count\n"
+                f"FROM {VIEW}\n"
+                f"WHERE {self._period_predicate(period)}{filter_sql}"
+            )
+            for period in plan.periods
+        ]
+        sql = "\nUNION ALL\n".join(selects) + "\nORDER BY period_label;"
+        return DeterministicSQL(
+            sql=sql,
+            result_schema="DistributionResult",
+            expected_aliases=["period_label", "appointment_count"],
         )
 
     def _period_comparison_grouped(
@@ -507,12 +557,24 @@ class DeterministicSQLBuilder:
                 guard = f"{guard} AND {_DEPARTMENT_SPLIT_ALIAS}.value NOT IN ({literals})"
             where = f"{where.rstrip()} AND {guard}\n"
         top = f"TOP ({plan.limit}) " if plan.limit else ""
+        change_direction = self._period_change_direction(plan)
+        delta_expr = f"({cur}) - ({base})"
+        having = ""
+        if change_direction == "increase":
+            having = f"\nHAVING {delta_expr} > 0"
+            order_by = f"ORDER BY {delta_expr} DESC"
+        elif change_direction == "decrease":
+            having = f"\nHAVING {delta_expr} < 0"
+            order_by = f"ORDER BY {delta_expr} ASC"
+        else:
+            order_by = f"ORDER BY ABS({delta_expr}) DESC"
         sql = (
             f"SELECT {top}{select}\n"
             f"{from_clause}"
             f"{where}"
             f"GROUP BY {group_expr}\n"
-            f"ORDER BY ABS(({cur}) - ({base})) DESC;"
+            f"{having}\n"
+            f"{order_by};"
         )
         return DeterministicSQL(
             sql=sql,
@@ -521,6 +583,14 @@ class DeterministicSQLBuilder:
             result_schema="DistributionResult",
             expected_aliases=aliases,
         )
+
+    def _period_change_direction(self, plan: QueryPlan) -> str | None:
+        for calculation in plan.derived_calculations:
+            if calculation == "period_change_direction:increase":
+                return "increase"
+            if calculation == "period_change_direction:decrease":
+                return "decrease"
+        return None
 
     def _entity_comparison(self, plan: QueryPlan) -> DeterministicSQL | UnsupportedPlan:
         """Two-entity comparison ("Kardiyoloji ile Psikiyatri'yi karşılaştır"):
@@ -763,6 +833,480 @@ class DeterministicSQLBuilder:
         ]
         return DeterministicSQL(sql=sql, result_schema="VarianceResult", expected_aliases=aliases)
 
+    def _repeat_behavior(self, plan: QueryPlan) -> DeterministicSQL | UnsupportedPlan | None:
+        metric_ids = self._metric_ids(plan, "repeat_behavior")
+        if len(metric_ids) != 1:
+            return UnsupportedPlan(
+                "multi-metric repeat behavior not supported: only one repeat metric can be rendered",
+                metric_ids,
+            )
+        metric_id = metric_ids[0]
+        if metric_id == "repeat_patient_count":
+            return self._repeat_patient_count(plan)
+        if metric_id == "cross_branch_repeat_patient_count":
+            return self._cross_branch_repeat_patient_count(plan)
+        if metric_id == "same_day_multi_service_patient_count":
+            return self._same_day_multi_service_patient_count(plan)
+        if metric_id == "same_day_multi_doctor_patient_count":
+            return self._same_day_multi_doctor_patient_count(plan)
+        if metric_id == "patient_appointment_span_days":
+            return self._patient_appointment_span_days(plan)
+        if metric_id == "multi_period_patient_overlap_count":
+            return self._multi_period_patient_overlap_count(plan)
+        return None
+
+    def _repeat_patient_count(self, plan: QueryPlan) -> DeterministicSQL | UnsupportedPlan:
+        dimensions = self._dimensions(plan)
+        if not all(self._is_safe_identifier(dimension) for dimension in dimensions):
+            return UnsupportedPlan("repeat patient count requires safe grouping dimensions")
+        conditions = self._where_conditions(plan)
+        conditions.append("HastaId IS NOT NULL")
+        where = self._where_from_conditions(conditions)
+        alias = "repeat_patient_count"
+        if dimensions:
+            inner_select = ", ".join([*dimensions, "HastaId"])
+            group_by = ", ".join([*dimensions, "HastaId"])
+            outer_select = ", ".join([*dimensions, f"COUNT(*) AS {alias}"])
+            outer_group = ", ".join(dimensions)
+            top = f"TOP ({plan.limit}) " if plan.limit else ""
+            sql = (
+                "WITH patient_repeats AS (\n"
+                f"    SELECT {inner_select}, COUNT(*) AS appointment_count\n"
+                f"    FROM {VIEW}\n"
+                f"    {where}"
+                f"    GROUP BY {group_by}\n"
+                "    HAVING COUNT(*) > 1\n"
+                ")\n"
+                f"SELECT {top}{outer_select}\n"
+                "FROM patient_repeats\n"
+                f"GROUP BY {outer_group}\n"
+                f"ORDER BY {alias} {self._ranking_direction(plan)};"
+            )
+            return DeterministicSQL(
+                sql=sql,
+                result_schema="DistributionResult",
+                expected_aliases=[*dimensions, alias],
+                metric_aliases={alias: alias},
+            )
+        sql = (
+            "WITH patient_repeats AS (\n"
+            "    SELECT HastaId, COUNT(*) AS appointment_count\n"
+            f"    FROM {VIEW}\n"
+            f"    {where}"
+            "    GROUP BY HastaId\n"
+            "    HAVING COUNT(*) > 1\n"
+            ")\n"
+            f"SELECT COUNT(*) AS {alias}\n"
+            "FROM patient_repeats;"
+        )
+        return DeterministicSQL(
+            sql=sql,
+            result_schema="CountResult",
+            expected_aliases=[alias],
+            metric_aliases={alias: alias},
+        )
+
+    def _cross_branch_repeat_patient_count(self, plan: QueryPlan) -> DeterministicSQL | UnsupportedPlan:
+        dimensions = self._dimensions(plan)
+        if not all(self._is_safe_identifier(dimension) for dimension in dimensions):
+            return UnsupportedPlan("cross-branch repeat count requires safe grouping dimensions")
+        base_conditions = self._where_conditions(plan)
+        base_conditions.extend(["HastaId IS NOT NULL", "SubeAdi IS NOT NULL"])
+        base_where = self._where_from_conditions(base_conditions)
+        alias = "cross_branch_repeat_patient_count"
+        cte = (
+            "WITH cross_branch_patients AS (\n"
+            "    SELECT HastaId\n"
+            f"    FROM {VIEW}\n"
+            f"    {base_where}"
+            "    GROUP BY HastaId\n"
+            "    HAVING COUNT(*) > 1 AND COUNT(DISTINCT SubeAdi) > 1\n"
+            ")\n"
+        )
+        if dimensions:
+            outer_conditions = self._where_conditions(plan, "v")
+            outer_conditions.extend(["v.HastaId IS NOT NULL", "v.SubeAdi IS NOT NULL"])
+            outer_where = self._where_from_conditions(outer_conditions)
+            qualified_dimensions = [f"v.{dimension}" for dimension in dimensions]
+            select_dimensions = [f"v.{dimension} AS {dimension}" for dimension in dimensions]
+            top = f"TOP ({plan.limit}) " if plan.limit else ""
+            sql = cte + (
+                f"SELECT {top}{', '.join(select_dimensions)}, "
+                f"COUNT(DISTINCT v.HastaId) AS {alias}, COUNT(*) AS appointment_count\n"
+                f"FROM {VIEW} v\n"
+                "JOIN cross_branch_patients p ON p.HastaId = v.HastaId\n"
+                f"{outer_where}"
+                f"GROUP BY {', '.join(qualified_dimensions)}\n"
+                f"ORDER BY {alias} {self._ranking_direction(plan)};"
+            )
+            return DeterministicSQL(
+                sql=sql,
+                result_schema="DistributionResult",
+                expected_aliases=[*dimensions, alias, "appointment_count"],
+                metric_aliases={alias: alias, "appointment_count": "appointment_count"},
+            )
+        sql = cte + f"SELECT COUNT(*) AS {alias}\nFROM cross_branch_patients;"
+        return DeterministicSQL(
+            sql=sql,
+            result_schema="CountResult",
+            expected_aliases=[alias],
+            metric_aliases={alias: alias},
+        )
+
+    def _same_day_multi_service_patient_count(self, plan: QueryPlan) -> DeterministicSQL | UnsupportedPlan:
+        return self._same_day_multi_distinct_patient_count(
+            plan,
+            distinct_column="HizmetAdi",
+            alias="same_day_multi_service_patient_count",
+            value_label="services",
+        )
+
+    def _same_day_multi_doctor_patient_count(self, plan: QueryPlan) -> DeterministicSQL | UnsupportedPlan:
+        return self._same_day_multi_distinct_patient_count(
+            plan,
+            distinct_column="DoktorId",
+            alias="same_day_multi_doctor_patient_count",
+            value_label="doctors",
+        )
+
+    def _same_day_multi_distinct_patient_count(
+        self,
+        plan: QueryPlan,
+        *,
+        distinct_column: str,
+        alias: str,
+        value_label: str,
+    ) -> DeterministicSQL | UnsupportedPlan:
+        dimensions = self._dimensions(plan)
+        if not all(self._is_safe_identifier(dimension) for dimension in dimensions):
+            return UnsupportedPlan("same-day multi-distinct count requires safe grouping dimensions")
+        if not self._is_safe_identifier(distinct_column):
+            return UnsupportedPlan("same-day multi-distinct count requires a safe value column")
+        base_conditions = self._where_conditions(plan)
+        base_conditions.extend(["HastaId IS NOT NULL", f"{distinct_column} IS NOT NULL"])
+        base_where = self._where_from_conditions(base_conditions)
+        cte = (
+            "WITH qualifying_patient_days AS (\n"
+            "    SELECT HastaId, CAST(BaslangicTarihi AS DATE) AS service_day, "
+            f"COUNT(*) AS appointment_count, COUNT(DISTINCT {distinct_column}) AS value_count\n"
+            f"    FROM {VIEW}\n"
+            f"    {base_where}"
+            "    GROUP BY HastaId, CAST(BaslangicTarihi AS DATE)\n"
+            f"    HAVING COUNT(DISTINCT {distinct_column}) > 1\n"
+            ")\n"
+        )
+        if dimensions:
+            if dimensions == [distinct_column]:
+                top = f"TOP ({plan.limit}) " if plan.limit else ""
+                sql = (
+                    f"WITH patient_day_{value_label} AS (\n"
+                    "    SELECT HastaId, CAST(BaslangicTarihi AS DATE) AS service_day, "
+                    f"{distinct_column}, COUNT(*) AS appointment_count\n"
+                    f"    FROM {VIEW}\n"
+                    f"    {base_where}"
+                    f"    GROUP BY HastaId, CAST(BaslangicTarihi AS DATE), {distinct_column}\n"
+                    "),\n"
+                    f"qualified_{value_label} AS (\n"
+                    f"    SELECT HastaId, service_day, {distinct_column}, appointment_count, "
+                    "COUNT(*) OVER (PARTITION BY HastaId, service_day) AS value_count\n"
+                    f"    FROM patient_day_{value_label}\n"
+                    ")\n"
+                    f"SELECT {top}{distinct_column} AS {distinct_column}, COUNT(*) AS {alias}, "
+                    "COUNT(DISTINCT HastaId) AS patient_count, SUM(appointment_count) AS appointment_count\n"
+                    f"FROM qualified_{value_label}\n"
+                    "WHERE value_count > 1\n"
+                    f"GROUP BY {distinct_column}\n"
+                    f"ORDER BY {alias} {self._ranking_direction(plan)};"
+                )
+                return DeterministicSQL(
+                    sql=sql,
+                    result_schema="DistributionResult",
+                    expected_aliases=[*dimensions, alias, "patient_count", "appointment_count"],
+                    metric_aliases={alias: alias, "appointment_count": "appointment_count"},
+                )
+            patient_day_columns = list(dict.fromkeys([*dimensions, distinct_column]))
+            patient_day_select = ", ".join(patient_day_columns)
+            patient_day_group = ", ".join(
+                ["HastaId", "CAST(BaslangicTarihi AS DATE)", *patient_day_columns]
+            )
+            qualified_dimension_select = ", ".join(
+                [f"p.{dimension} AS {dimension}" for dimension in dimensions]
+            )
+            qualified_dimension_group = ", ".join(
+                [f"p.{dimension}" for dimension in dimensions]
+                + ["p.HastaId", "p.service_day"]
+            )
+            select_dimensions = [f"{dimension} AS {dimension}" for dimension in dimensions]
+            sql_select_dimensions = ", ".join(select_dimensions)
+            sql_group_dimensions = ", ".join(dimensions)
+            top = f"TOP ({plan.limit}) " if plan.limit else ""
+            sql = (
+                f"WITH patient_day_{value_label} AS (\n"
+                "    SELECT HastaId, CAST(BaslangicTarihi AS DATE) AS service_day, "
+                f"{patient_day_select}, COUNT(*) AS appointment_count\n"
+                f"    FROM {VIEW}\n"
+                f"    {base_where}"
+                f"    GROUP BY {patient_day_group}\n"
+                "),\n"
+                "qualifying_patient_days AS (\n"
+                "    SELECT HastaId, service_day\n"
+                f"    FROM patient_day_{value_label}\n"
+                "    GROUP BY HastaId, service_day\n"
+                f"    HAVING COUNT(DISTINCT {distinct_column}) > 1\n"
+                "),\n"
+                "qualified_dimension_days AS (\n"
+                f"    SELECT {qualified_dimension_select}, p.HastaId, p.service_day, "
+                "SUM(p.appointment_count) AS appointment_count\n"
+                f"    FROM patient_day_{value_label} p\n"
+                "    JOIN qualifying_patient_days q ON q.HastaId = p.HastaId "
+                "AND q.service_day = p.service_day\n"
+                f"    GROUP BY {qualified_dimension_group}\n"
+                ")\n"
+                f"SELECT {top}{sql_select_dimensions}, COUNT(*) AS {alias}, "
+                "COUNT(DISTINCT HastaId) AS patient_count, SUM(appointment_count) AS appointment_count\n"
+                "FROM qualified_dimension_days\n"
+                f"GROUP BY {sql_group_dimensions}\n"
+                f"ORDER BY {alias} {self._ranking_direction(plan)};"
+            )
+            return DeterministicSQL(
+                sql=sql,
+                result_schema="DistributionResult",
+                expected_aliases=[*dimensions, alias, "patient_count", "appointment_count"],
+                metric_aliases={alias: alias, "appointment_count": "appointment_count"},
+            )
+        sql = cte + (
+            f"SELECT COUNT(*) AS {alias}, COUNT(DISTINCT HastaId) AS patient_count, "
+            "SUM(appointment_count) AS appointment_count\n"
+            "FROM qualifying_patient_days;"
+        )
+        return DeterministicSQL(
+            sql=sql,
+            result_schema="CountResult",
+            expected_aliases=[alias, "patient_count", "appointment_count"],
+            metric_aliases={alias: alias, "appointment_count": "appointment_count"},
+        )
+
+    def _patient_appointment_span_days(
+        self, plan: QueryPlan
+    ) -> DeterministicSQL | UnsupportedPlan:
+        dimensions = [dimension for dimension in self._dimensions(plan) if dimension != "HastaId"]
+        if not all(self._is_safe_identifier(dimension) for dimension in dimensions):
+            return UnsupportedPlan("patient appointment span requires safe grouping dimensions")
+        conditions = self._where_conditions(plan)
+        conditions.extend(["HastaId IS NOT NULL", "BaslangicTarihi IS NOT NULL"])
+        where = self._where_from_conditions(conditions)
+        alias = "patient_appointment_span_days"
+        grouped_columns = [*dimensions, "HastaId"]
+        group_by = ", ".join(grouped_columns)
+        select_dimensions = f"{', '.join(dimensions)}, " if dimensions else ""
+        cte = (
+            "WITH patient_spans AS (\n"
+            f"    SELECT {select_dimensions}HastaId,\n"
+            "           MIN(CAST(BaslangicTarihi AS DATE)) AS first_appointment_date,\n"
+            "           MAX(CAST(BaslangicTarihi AS DATE)) AS last_appointment_date,\n"
+            "           DATEDIFF(day, MIN(CAST(BaslangicTarihi AS DATE)), MAX(CAST(BaslangicTarihi AS DATE))) AS span_days,\n"
+            "           COUNT(*) AS appointment_count\n"
+            f"    FROM {VIEW}\n"
+            f"    {where}"
+            f"    GROUP BY {group_by}\n"
+            "    HAVING COUNT(*) > 1\n"
+            ")\n"
+        )
+        patient_limit = self._patient_span_limit(plan)
+        if patient_limit:
+            sql = cte + (
+                f"SELECT TOP ({patient_limit}) HastaId AS HastaId, "
+                "first_appointment_date AS first_appointment_date, "
+                "last_appointment_date AS last_appointment_date, "
+                f"span_days AS {alias}, appointment_count AS appointment_count\n"
+                "FROM patient_spans\n"
+                f"ORDER BY {alias} DESC;"
+            )
+            return DeterministicSQL(
+                sql=sql,
+                result_schema="DistributionResult",
+                expected_aliases=[
+                    "HastaId",
+                    "first_appointment_date",
+                    "last_appointment_date",
+                    alias,
+                    "appointment_count",
+                ],
+                metric_aliases={alias: alias, "appointment_count": "appointment_count"},
+            )
+        if dimensions:
+            select_parts = [f"{dimension} AS {dimension}" for dimension in dimensions]
+            select_parts.extend(
+                [
+                    f"AVG(CAST(span_days AS FLOAT)) AS {alias}",
+                    "MAX(span_days) AS max_patient_appointment_span_days",
+                    "MIN(span_days) AS min_patient_appointment_span_days",
+                    "COUNT(*) AS patient_count",
+                    "SUM(appointment_count) AS appointment_count",
+                ]
+            )
+            sql = cte + (
+                f"SELECT {', '.join(select_parts)}\n"
+                "FROM patient_spans\n"
+                f"GROUP BY {', '.join(dimensions)}\n"
+                f"ORDER BY {alias} {self._ranking_direction(plan)};"
+            )
+            return DeterministicSQL(
+                sql=sql,
+                result_schema="DistributionResult",
+                expected_aliases=[
+                    *dimensions,
+                    alias,
+                    "max_patient_appointment_span_days",
+                    "min_patient_appointment_span_days",
+                    "patient_count",
+                    "appointment_count",
+                ],
+                metric_aliases={alias: alias, "appointment_count": "appointment_count"},
+            )
+        sql = cte + (
+            f"SELECT AVG(CAST(span_days AS FLOAT)) AS {alias}, "
+            "MAX(span_days) AS max_patient_appointment_span_days, "
+            "MIN(span_days) AS min_patient_appointment_span_days, "
+            "COUNT(*) AS patient_count, "
+            "SUM(appointment_count) AS appointment_count\n"
+            "FROM patient_spans;"
+        )
+        return DeterministicSQL(
+            sql=sql,
+            result_schema="CountResult",
+            expected_aliases=[
+                alias,
+                "max_patient_appointment_span_days",
+                "min_patient_appointment_span_days",
+                "patient_count",
+                "appointment_count",
+            ],
+            metric_aliases={alias: alias, "appointment_count": "appointment_count"},
+        )
+
+    def _multi_period_patient_overlap_count(
+        self, plan: QueryPlan
+    ) -> DeterministicSQL | UnsupportedPlan:
+        period_pair = self._overlap_period_pair(plan)
+        if period_pair is None:
+            return UnsupportedPlan("patient period overlap requires two explicit periods")
+        baseline, current = period_pair
+        dimensions = [dimension for dimension in self._dimensions(plan) if dimension != "HastaId"]
+        if not all(self._is_safe_identifier(dimension) for dimension in dimensions):
+            return UnsupportedPlan("patient period overlap requires safe grouping dimensions")
+        non_date_plan = plan.model_copy(update={"date_filters": [], "periods": []})
+        base_conditions = [
+            f"(({baseline}) OR ({current}))",
+            *self._where_conditions(non_date_plan),
+            "HastaId IS NOT NULL",
+        ]
+        base_where = self._where_from_conditions(base_conditions)
+        alias = "multi_period_patient_overlap_count"
+        cte = (
+            "WITH patient_period_presence AS (\n"
+            "    SELECT HastaId,\n"
+            f"           MAX(CASE WHEN {baseline} THEN 1 ELSE 0 END) AS in_baseline_period,\n"
+            f"           MAX(CASE WHEN {current} THEN 1 ELSE 0 END) AS in_current_period\n"
+            f"    FROM {VIEW}\n"
+            f"    {base_where}"
+            "    GROUP BY HastaId\n"
+            "),\n"
+            "overlap_patients AS (\n"
+            "    SELECT HastaId\n"
+            "    FROM patient_period_presence\n"
+            "    WHERE in_baseline_period = 1 AND in_current_period = 1\n"
+            ")\n"
+        )
+        if dimensions:
+            qualified_baseline, qualified_current = self._overlap_period_pair(
+                plan, qualifier="v"
+            ) or ("", "")
+            outer_conditions = [
+                f"(({qualified_baseline}) OR ({qualified_current}))",
+                *self._where_conditions(non_date_plan, "v"),
+                "v.HastaId IS NOT NULL",
+            ]
+            outer_where = self._where_from_conditions(outer_conditions)
+            select_dimensions = [f"v.{dimension} AS {dimension}" for dimension in dimensions]
+            group_dimensions = [f"v.{dimension}" for dimension in dimensions]
+            top = f"TOP ({plan.limit}) " if plan.limit else ""
+            sql = cte + (
+                f"SELECT {top}{', '.join(select_dimensions)}, "
+                f"COUNT(DISTINCT v.HastaId) AS {alias}, COUNT(*) AS appointment_count\n"
+                f"FROM {VIEW} v\n"
+                "JOIN overlap_patients p ON p.HastaId = v.HastaId\n"
+                f"{outer_where}"
+                f"GROUP BY {', '.join(group_dimensions)}\n"
+                f"ORDER BY {alias} {self._ranking_direction(plan)};"
+            )
+            return DeterministicSQL(
+                sql=sql,
+                result_schema="DistributionResult",
+                expected_aliases=[*dimensions, alias, "appointment_count"],
+                metric_aliases={alias: alias, "appointment_count": "appointment_count"},
+            )
+        sql = cte + f"SELECT COUNT(*) AS {alias}\nFROM overlap_patients;"
+        return DeterministicSQL(
+            sql=sql,
+            result_schema="CountResult",
+            expected_aliases=[alias],
+            metric_aliases={alias: alias},
+        )
+
+    def _overlap_period_pair(
+        self, plan: QueryPlan, qualifier: str | None = None
+    ) -> tuple[str, str] | None:
+        if len(plan.periods) >= 2:
+            first, second = plan.periods[0], plan.periods[1]
+            return (
+                self._period_plan_condition(first, qualifier),
+                self._period_plan_condition(second, qualifier),
+            )
+        if len(plan.date_filters) >= 2:
+            first, second = plan.date_filters[0], plan.date_filters[1]
+            return (
+                self._date_filter_condition(first, qualifier),
+                self._date_filter_condition(second, qualifier),
+            )
+        return None
+
+    def _period_plan_condition(self, period, qualifier: str | None = None) -> str:
+        prefix = f"{qualifier}." if qualifier else ""
+        column = period.column or DATE_COLUMN
+        return (
+            f"{prefix}{column} >= '{period.start_inclusive}' "
+            f"AND {prefix}{column} < '{period.end_exclusive}'"
+        )
+
+    def _date_filter_condition(self, date_filter, qualifier: str | None = None) -> str:
+        prefix = f"{qualifier}." if qualifier else ""
+        column = date_filter.column or DATE_COLUMN
+        return (
+            f"{prefix}{column} >= '{date_filter.start_date}' "
+            f"AND {prefix}{column} < DATEADD(day, 1, '{date_filter.end_date}')"
+        )
+
+    def _patient_span_limit(self, plan: QueryPlan) -> int | None:
+        folded_question = fold(plan.question)
+        patient_rows_requested = (
+            plan.limit is not None
+            or "listele" in folded_question
+            or "en yuksek fark" in folded_question
+            or "en uzun fark" in folded_question
+        ) and re.search(r"\bhasta\w*\b", folded_question)
+        if not patient_rows_requested:
+            return None
+        if plan.limit:
+            return plan.limit
+        match = re.search(r"\b(\d{1,3})\s+hasta\w*\b", folded_question)
+        if match:
+            return int(match.group(1))
+        return 10
+
+    def _ranking_direction(self, plan: QueryPlan) -> str:
+        return "ASC" if (plan.ranking == "ASC" or plan.order == "ASC") else "DESC"
+
     def _trend(self, plan: QueryPlan) -> DeterministicSQL | UnsupportedPlan:
         """Builds a chronologically ordered, time-bucketed SELECT for a trend
         plan — never a single scalar total. ``plan.grouping_granularity``
@@ -843,8 +1387,13 @@ class DeterministicSQLBuilder:
         ]
 
     def _where(self, plan: QueryPlan) -> str:
+        clauses = self._where_conditions(plan)
+        return f"WHERE {' AND '.join(clauses)}\n" if clauses else ""
+
+    def _where_conditions(self, plan: QueryPlan, qualifier: str | None = None) -> list[str]:
         clauses: list[str] = []
         seen_dates: set[tuple[str | None, str, str]] = set()
+        prefix = f"{qualifier}." if qualifier else ""
         for date_filter in plan.date_filters:
             key = (date_filter.column, date_filter.start_date, date_filter.end_date)
             if key in seen_dates:
@@ -852,10 +1401,27 @@ class DeterministicSQLBuilder:
             seen_dates.add(key)
             column = date_filter.column or DATE_COLUMN
             clauses.append(
-                f"{column} >= '{date_filter.start_date}' AND {column} < DATEADD(day, 1, '{date_filter.end_date}')"
+                f"{prefix}{column} >= '{date_filter.start_date}' AND {prefix}{column} < DATEADD(day, 1, '{date_filter.end_date}')"
             )
-        clauses.extend(self._render_structured_filters(plan))
+        structured = self._render_structured_filters(plan)
+        if qualifier:
+            structured = [self._qualify_columns(filter_sql, qualifier) for filter_sql in structured]
+        clauses.extend(structured)
+        return clauses
+
+    def _where_from_conditions(self, clauses: list[str]) -> str:
         return f"WHERE {' AND '.join(clauses)}\n" if clauses else ""
+
+    def _qualify_columns(self, expression: str, qualifier: str) -> str:
+        columns = sorted(FILTER_COLUMNS | {DATE_COLUMN, "CreatedDate"}, key=len, reverse=True)
+        qualified = expression
+        for column in columns:
+            qualified = re.sub(
+                rf"\b{re.escape(column)}\b",
+                f"{qualifier}.{column}",
+                qualified,
+            )
+        return qualified
 
     def _render_structured_filters(self, plan: QueryPlan) -> list[str]:
         """Render every grounded view filter through one escaped T-SQL path.
@@ -1069,11 +1635,18 @@ class DeterministicSQLBuilder:
             "cross_analysis": "DistributionResult",
             "duration_analysis": "DistributionResult",
             "lead_time_analysis": "DistributionResult",
+            "repeat_behavior": "RatioResult",
             "ranking": "DistributionResult",
             "top_n": "DistributionResult",
             "bottom_n": "DistributionResult",
         }
         return mapping.get(analysis_type, "CountResult")
+
+    def _has_share_of_total(self, plan: QueryPlan) -> bool:
+        return any(
+            calculation.startswith("share_of_total:")
+            for calculation in plan.derived_calculations
+        )
 
     def _period_pair(self, plan: QueryPlan, adaptive_retry: bool) -> tuple[str, str]:
         current, baseline, _, _ = self._period_pair_with_labels(plan, adaptive_retry)
@@ -1092,6 +1665,24 @@ class DeterministicSQLBuilder:
                 baseline,
                 current_period.label,
                 baseline_period.label,
+            )
+        if len(plan.date_filters) == 2:
+            baseline_filter, current_filter = plan.date_filters
+            baseline_column = baseline_filter.column or DATE_COLUMN
+            current_column = current_filter.column or DATE_COLUMN
+            baseline = (
+                f"{baseline_column} >= '{baseline_filter.start_date}' "
+                f"AND {baseline_column} < DATEADD(day, 1, '{baseline_filter.end_date}')"
+            )
+            current = (
+                f"{current_column} >= '{current_filter.start_date}' "
+                f"AND {current_column} < DATEADD(day, 1, '{current_filter.end_date}')"
+            )
+            return (
+                current,
+                baseline,
+                current_filter.expression or current_filter.start_date,
+                baseline_filter.expression or baseline_filter.start_date,
             )
         if adaptive_retry:
             return LAST_90, PREVIOUS_90, "son 90 gün", "önceki 90 gün"

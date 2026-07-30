@@ -150,6 +150,21 @@ def test_patient_aggregate_metric_is_not_classified_sensitive_detail() -> None:
     assert is_sensitive_detail_output(result, plan) is False
 
 
+def test_patient_aggregate_multi_metric_is_not_classified_sensitive_detail() -> None:
+    result = _query_result(
+        [{"appointment_count": 120, "unique_patient_count": 42}],
+        columns=["appointment_count", "unique_patient_count"],
+    )
+    plan = QueryPlan(
+        question="randevu sayisi ile tekil hasta sayisini birlikte goster",
+        analysis_type="count",
+        metrics=["appointment_count", "unique_patient_count"],
+        projection=[],
+    )
+
+    assert is_sensitive_detail_output(result, plan) is False
+
+
 def test_unsafe_analytical_detail_is_not_forwarded_to_api() -> None:
     result = _query_result(
         [{"HastaId": index, "metric": index} for index in range(1000)],

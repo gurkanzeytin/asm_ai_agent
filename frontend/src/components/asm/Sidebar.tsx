@@ -55,10 +55,10 @@ export function Sidebar({
               className="min-w-0 flex-1"
             >
               <div className="truncate text-[15px] font-semibold leading-5 text-foreground">
-                Med Agent
+                {tr.brand.name}
               </div>
               <div className="truncate text-xs leading-4 text-muted-foreground">
-                {tr.sidebar.appTagline}
+                {tr.brand.tagline}
               </div>
             </motion.div>
           )}

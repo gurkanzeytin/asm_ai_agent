@@ -339,7 +339,9 @@ async def test_clarification_node_falls_back_to_generic_message():
 
     result = await GenerateClarificationNode().execute(state)
 
-    assert "açık yazar mısınız" in result.generated_report.markdown
+    # The generic fallback guides the user toward a metric + breakdown.
+    assert "ölçüm" in result.generated_report.markdown
+    assert "kırılım" in result.generated_report.markdown
 
 
 @pytest.mark.asyncio

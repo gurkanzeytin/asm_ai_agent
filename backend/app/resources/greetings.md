@@ -1,1 +1,1 @@
-Merhaba! Ben Med Agent. Randevu verileriyle ilgili sorularınızda size yardımcı olabilirim.
+Merhaba! Ben Mitis 👋 Randevu verilerinizi analiz etmenize yardımcı olurum — bölüm, şube, doktor ve tarih bazında randevu sayıları, gelmeme/gerçekleşme oranları, dönem karşılaştırmaları ve dağılımlar. Örneğin: "2025 bölüm bazında gelmeme oranını göster" ya da "Mart ile Nisan'ı karşılaştır" diyebilirsiniz.

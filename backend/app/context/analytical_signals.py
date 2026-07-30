@@ -376,6 +376,20 @@ _DIMENSION_ADD_MARKERS = (
 _FILTER_ONLY_MARKERS = ("sadece", "yalniz", "yalnizca", "sinirla", "sinirlandir", "filtrele")
 _SAME_ANALYSIS_MARKERS = ("aynisi", "aynisini")
 _DIMENSION_DEFAULT_METRICS = {"appointment_count", "appointments_per_type"}
+_PERIOD_ANALYSIS_TYPES = {
+    "period_comparison",
+    "baseline_comparison",
+    "adaptive_time_comparison",
+    "percentage_change",
+}
+_REPLACED_DIMENSION_MARKERS = {
+    "doctor": ("doktor yerine", "hekim yerine", "uzman yerine"),
+    "department": ("bolum yerine", "departman yerine"),
+    "service": ("hizmet yerine", "servis yerine"),
+    "branch": ("sube yerine", "lokasyon yerine", "merkez yerine"),
+    "status": ("durum yerine", "status yerine"),
+    "category": ("kategori yerine",),
+}
 
 
 def _union(left: list, right: list) -> list:
@@ -384,6 +398,14 @@ def _union(left: list, right: list) -> list:
         if item not in merged:
             merged.append(item)
     return merged
+
+
+def _replace_period_change_direction(calculations: list[str], direction: str) -> list[str]:
+    return [
+        calculation
+        for calculation in calculations
+        if not calculation.startswith("period_change_direction:")
+    ] + [f"period_change_direction:{direction}"]
 
 
 def _dedupe_date_filters(date_filters: list) -> list:
@@ -396,6 +418,14 @@ def _dedupe_date_filters(date_filters: list) -> list:
         seen_dates.add(key)
         deduped.append(date_filter)
     return deduped
+
+
+def _replaced_dimension_concepts(folded: str) -> set[str]:
+    return {
+        concept
+        for concept, markers in _REPLACED_DIMENSION_MARKERS.items()
+        if any(marker in folded for marker in markers)
+    }
 
 
 def _filter_family(predicate: str) -> str | None:
@@ -524,6 +554,7 @@ def merge_query_plans(
     from app.semantics.view_mapping import fold
 
     folded = fold(raw_question)
+    period_direction = catalog.period_change_direction(folded)
 
     # A GENUINE explicit "listele" (list) request for raw records is always
     # self-contained: it asks a fundamentally different question ("show me
@@ -559,6 +590,10 @@ def merge_query_plans(
         "planner_ms": current.planner_ms,
         "matched_examples": list(current.matched_examples or retained.matched_examples),
     }
+    share_of_total_requested = any(
+        calculation.startswith("share_of_total:")
+        for calculation in current.derived_calculations
+    )
 
     # A new explicit date replaces the whole previous date/period contract.
     if current.date_filters:
@@ -570,10 +605,19 @@ def merge_query_plans(
         )
 
     current_dimensions = list(current.dimensions)
+    dimension_replacement = False
     if current_dimensions and any(marker in folded for marker in _FILTER_ONLY_MARKERS):
         # "... ile sınırla" names a filter value, not a new GROUP BY.
         current_dimensions = []
     if current_dimensions and "yerine" in folded:
+        dimension_replacement = True
+        replaced_concepts = _replaced_dimension_concepts(folded)
+        if replaced_concepts:
+            current_dimensions = [
+                dimension
+                for dimension in current_dimensions
+                if _COLUMN_TO_DIMENSION.get(dimension) not in replaced_concepts
+            ]
         replacement_dimensions = [
             dimension for dimension in current_dimensions if dimension not in retained.dimensions
         ]
@@ -602,16 +646,23 @@ def merge_query_plans(
             [value for value in retained.projection if value in dimensions],
             [value for value in current.projection if value in dimensions],
         ) or list(dimensions)
-        if retained.analysis_type in {
-            "period_comparison",
-            "baseline_comparison",
-            "adaptive_time_comparison",
-            "percentage_change",
-        }:
+        if retained.analysis_type in _PERIOD_ANALYSIS_TYPES:
             updates["analysis_type"] = current.analysis_type or "count"
             updates["periods"] = []
             updates["current_period"] = None
             updates["baseline_period"] = None
+        if (
+            dimension_replacement
+            and retained.metrics
+            and set(retained.metrics).issubset(
+                {"daily_appointment_count", "weekly_appointment_count", "monthly_appointment_count"}
+            )
+            and not catalog.detect_measure_request(folded)
+        ):
+            updates["metrics"] = ["appointment_count"]
+            updates["planned_metrics"] = []
+            updates["aggregation"] = "COUNT(*)"
+            updates["grouping_granularity"] = None
 
     # Planner defaults on a terse ranking/dimension follow-up are not an
     # explicit metric override.  Only raw-text metric evidence may replace the
@@ -762,6 +813,8 @@ def merge_query_plans(
         updates["order"] = current.order
     if current.limit is not None:
         updates["limit"] = current.limit
+    if current.department_filter:
+        updates["department_filter"] = current.department_filter
     # A numeric aggregate threshold ("200'den az/fazla olanları göster") is a
     # constraint EDIT on the retained grouped result — it carries no metric or
     # dimension of its own, so it must ride in on the current turn's plan and
@@ -790,12 +843,7 @@ def merge_query_plans(
         updates["comparisons"] = list(current.comparisons)
     if current.periods:
         updates["periods"] = list(current.periods)
-    if current.analysis_type in {
-        "period_comparison",
-        "baseline_comparison",
-        "adaptive_time_comparison",
-        "percentage_change",
-    }:
+    if current.analysis_type in _PERIOD_ANALYSIS_TYPES:
         updates["analysis_type"] = current.analysis_type
         if current.ranking is None:
             updates["ranking"] = None
@@ -806,9 +854,26 @@ def merge_query_plans(
             updates["planned_dimensions"] = []
             updates["projection"] = []
     if current.derived_calculations:
-        updates["derived_calculations"] = _union(
+        derived_calculations = _union(
             retained.derived_calculations, current.derived_calculations
         )
+        if period_direction:
+            derived_calculations = _replace_period_change_direction(
+                derived_calculations,
+                period_direction,
+            )
+        updates["derived_calculations"] = derived_calculations
+        if share_of_total_requested:
+            updates["analysis_type"] = "distribution"
+            updates["metrics"] = current.metrics or retained.metrics or ["appointment_count"]
+            updates["planned_metrics"] = [
+                item
+                for item in _union(retained.planned_metrics, current.planned_metrics)
+                if item.metric_id in updates["metrics"]
+            ]
+            updates["periods"] = []
+            updates["current_period"] = None
+            updates["baseline_period"] = None
 
     # Current structured predicates replace only their own column family;
     # unrelated retained predicates survive.
@@ -846,4 +911,32 @@ def merge_query_plans(
     updates["assumptions"] = _union(retained.assumptions, current.assumptions)
     if "date_filters" in updates:
         updates["date_filters"] = _dedupe_date_filters(updates["date_filters"])
-    return merged.model_copy(update=updates)
+    if period_direction and retained.analysis_type in _PERIOD_ANALYSIS_TYPES:
+        updates["analysis_type"] = retained.analysis_type
+        updates["periods"] = list(updates.get("periods") or retained.periods)
+        updates["derived_calculations"] = _replace_period_change_direction(
+            list(updates.get("derived_calculations") or retained.derived_calculations),
+            period_direction,
+        )
+        updates["ranking"] = "ASC" if period_direction == "decrease" else "DESC"
+        updates["order"] = updates["ranking"]
+    merged_plan = merged.model_copy(update=updates)
+    if merged_plan.analysis_type == "repeat_behavior":
+        repeat_updates: dict = {}
+        if merged_plan.projection:
+            # Repeat-behavior SQL is rendered through relationship CTE builders
+            # whose outer SELECT owns the visible aliases. Keeping a planner
+            # projection after a terse "bunu şubelere göre kır" follow-up makes
+            # the generic compliance checker inspect the CTE's first SELECT and
+            # falsely reject the query as missing the outer dimension alias.
+            repeat_updates["projection"] = []
+        if merged_plan.aggregation:
+            repeat_updates["aggregation"] = None
+        if not merged_plan.dimensions:
+            if merged_plan.ranking is not None:
+                repeat_updates["ranking"] = None
+            if merged_plan.order is not None:
+                repeat_updates["order"] = None
+        if repeat_updates:
+            merged_plan = merged_plan.model_copy(update=repeat_updates)
+    return merged_plan

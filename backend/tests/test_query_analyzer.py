@@ -494,6 +494,33 @@ async def test_schema_retriever_uses_normalized_query_and_entity_boost():
     assert context.normalized_query == "en fazla randevusu olan doktor kim"
 
 
+@pytest.mark.parametrize(
+    "query, expected_start, expected_end",
+    [
+        (
+            "2024 yilinin Nisan-Haziran doneminde randevular aylara gore nasil degismis?",
+            date(2024, 4, 1),
+            date(2024, 6, 30),
+        ),
+        (
+            "2023 Mayis-Haziran kapsaminda hizmet kullanimi nasil degismis?",
+            date(2023, 5, 1),
+            date(2023, 6, 30),
+        ),
+    ],
+)
+def test_month_range_scope_words_resolve_to_one_contiguous_span(
+    query, expected_start, expected_end
+):
+    analyzer = QueryAnalyzer(today=date(2026, 7, 10))
+
+    analysis = analyzer.analyze(query)
+
+    assert len(analysis.detected_dates) == 1
+    assert analysis.detected_dates[0].start_date == expected_start
+    assert analysis.detected_dates[0].end_date == expected_end
+
+
 @pytest.mark.asyncio
 async def test_schema_retriever_resolves_cocuk_to_real_department_vocabulary():
     col_id = ColumnMetadata(name="id", type_name="INTEGER", nullable=False, primary_key=True)

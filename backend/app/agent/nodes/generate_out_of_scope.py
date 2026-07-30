@@ -28,10 +28,12 @@ def _context_loss_markdown() -> str:
         [
             "# Önceki Soruyla Bağlantı Kurulamadı",
             "",
-            "Bu soruyu önceki mesajınızla ilişkilendiremedim.",
+            "Bu mesajı bir önceki sorunuzla ilişkilendiremedim; sanırım bağlamı "
+            "kaçırdım.",
             "",
-            "Hangi konuyu (randevu, doktor, bölüm, şube...) veya hangi filtreyi "
-            "kastettiğinizi biraz daha açık belirtebilir misiniz?",
+            "Hangi konuyu (randevu, doktor, bölüm, şube…) ya da hangi filtreyi "
+            "kastettiğinizi biraz daha açık yazarsanız kaldığımız yerden devam "
+            'edebiliriz. Örneğin: "Şube bazında da göster."',
         ]
     )
 
@@ -77,9 +79,10 @@ def _build_capability_markdown() -> str:
     )
     metric_lines = sorted({metric.name for metric in metrics})
 
-    sections = ["# Bu Soru Veri Kapsamı Dışında", "", (
-        "Bu soru, hastane randevu veritabanındaki verilerle yanıtlayabileceğim "
-        "bir soruya benzemiyor."
+    sections = ["# Bunu Randevu Verisiyle Yanıtlayamıyorum", "", (
+        "Bu soru, elimdeki randevu kayıtlarıyla yanıtlayabileceğim bir konu gibi "
+        "görünmüyor. Yalnızca randevu verileri üzerinde analiz yapabiliyorum — "
+        "aşağıdaki ölçüm ve kırılımlarla dilediğiniz raporu çıkarabilirim."
     ), "", "## Yanıtlayabileceğim konular"]
     if metric_lines:
         sections.append("")
@@ -91,7 +94,10 @@ def _build_capability_markdown() -> str:
     sections.append("## Örnek sorular")
     sections.extend(f'- "{example}"' for example in _EXAMPLE_QUESTIONS)
     sections.append("")
-    sections.append("Sorunuzu bu veriler üzerinden yeniden ifade ederseniz yardımcı olabilirim.")
+    sections.append(
+        "Sorunuzu randevu verileri üzerinden yeniden ifade ederseniz seve seve "
+        "yardımcı olurum."
+    )
     return "\n".join(sections)
 
 

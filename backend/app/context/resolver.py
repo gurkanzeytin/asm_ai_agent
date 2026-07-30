@@ -9,6 +9,7 @@ from app.context.models import (
     ExtractedSignals,
     ResolutionResult,
 )
+from app.reporting.output_policy import detect_requested_visualization
 
 # Reuse the context extractor's length-preserving fold directly. Importing
 # through ``app.semantics`` here eagerly initializes the semantic engine and,
@@ -87,18 +88,13 @@ _CONSTRAINT_EDIT_MARKERS = (
     "sinirlandir",
     "filtrele",
     "ayir",
-    "den kucuk",
-    "dan kucuk",
-    "den buyuk",
-    "dan buyuk",
-    "den az",
-    "dan az",
-    "den fazla",
-    "dan fazla",
     "ustunde",
     "altinda",
     "ayni filtre",
     "ayni filtreyle",
+)
+_NUMERIC_CONSTRAINT_EDIT_PATTERN = re.compile(
+    r"\b\d+(?:[.,]\d+)?\s*(?:den|dan)\s+(?:kucuk|buyuk|az|fazla)\b"
 )
 
 _OUTPUT_ACTION_FOLLOWUP_MARKERS = (
@@ -147,10 +143,25 @@ _OUTPUT_ACTION_FOLLOWUP_MARKERS = (
 )
 _CONVERSATIONAL_CONTINUATION_MARKERS = ("o zaman", "peki")
 _COMPARISON_FOLLOWUP_MARKERS = ("kiyasla", "karsilastir", "farki", "farkini")
+_PERIOD_DIRECTION_FOLLOWUP_MARKERS = (
+    "artan",
+    "artis",
+    "azalan",
+    "azalis",
+    "dusen",
+    "dusus",
+    "yukselen",
+    "yukselis",
+)
 # "Aynı analizi/sorguyu 2024 için yap", "Aynısını doktor bazında göster" — a
 # same-analysis replay that re-runs the prior analysis, optionally swapping in a
 # new date or overlaying a new dimension/metric. Broader than the strict
 # date-only branch, which only fires for a bare date fragment.
+_FILTER_VALUE_FOLLOWUP_GENDER_TERMS = ("kadin", "erkek")
+_FILTER_VALUE_FOLLOWUP_ENTITY_TERMS = ("hasta", "randevu")
+_FILTER_VALUE_FOLLOWUP_ACTION_MARKERS = ("icin", "olan", "goster", "getir", "ver")
+_FILTER_VALUE_RAW_LIST_MARKERS = ("listele", "listesi", "tek tek")
+
 _SAME_ANALYSIS_REPLAY_MARKERS = (
     "ayni analiz",
     "ayni sorgu",
@@ -242,7 +253,16 @@ class ContextResolver:
         # Unsupported status (Part 9): never silently ground an unsupported
         # value or produce a filter that can never match a row — surface a
         # clarification instead, offering the real canonical status vocabulary.
-        if _UNSUPPORTED_STATUS_TERM in _fold(question):
+        folded_question = _fold(question)
+        unsupported_status_fallback = (
+            _UNSUPPORTED_STATUS_TERM in folded_question
+            and "yoksa" in folded_question
+            and any(
+                fallback in folded_question
+                for fallback in ("gelmeyen", "gelmedi", "gelmeme")
+            )
+        )
+        if _UNSUPPORTED_STATUS_TERM in folded_question and not unsupported_status_fallback:
             result.clarification_needed = True
             result.clarification_question = _CLARIFICATION_UNSUPPORTED_STATUS
             result.clarification_options = list(_CANONICAL_STATUS_VALUES)
@@ -492,7 +512,7 @@ class ContextResolver:
         if (
             not result.follow_up_signals
             and not context.is_empty()
-            and any(marker in folded_question for marker in _CONSTRAINT_EDIT_MARKERS)
+            and self._has_constraint_edit_marker(folded_question)
         ):
             result.follow_up_signals.append("constraint_edit_followup")
 
@@ -507,12 +527,20 @@ class ContextResolver:
         ):
             result.follow_up_signals.append("conversational_continuation")
 
+        # A bare presentation follow-up ("Tablo olarak göster", "Pasta
+        # grafiğinde göster") re-renders the PRIOR result in a new form. Beyond
+        # the explicit marker list, any recognized chart-type REQUEST
+        # ("pasta/çizgi/sütun grafiğinde göster") counts too — the marker list
+        # can't enumerate every Turkish locative form ("grafikTE" vs
+        # "grafiğiNDE"), and without this a "pasta grafiğinde göster" follow-up
+        # fell through to OUT_OF_SCOPE (2026-07-29, live UI on an age-group
+        # breakdown).
+        wants_output_action = any(
+            marker in folded_question for marker in _OUTPUT_ACTION_FOLLOWUP_MARKERS
+        ) or detect_requested_visualization(folded_question) is not None
         if (
             context.query_plan_snapshot is not None
-            and any(
-                marker in folded_question
-                for marker in _OUTPUT_ACTION_FOLLOWUP_MARKERS
-            )
+            and wants_output_action
             and current_signals.is_empty()
             and "output_action_followup" not in result.follow_up_signals
         ):
@@ -527,6 +555,35 @@ class ContextResolver:
         ):
             result.follow_up_signals.append("comparison_followup")
 
+        if (
+            not result.follow_up_signals
+            and self._has_period_comparison_snapshot(context)
+            and any(
+                marker in folded_question
+                for marker in _PERIOD_DIRECTION_FOLLOWUP_MARKERS
+            )
+            and current_signals.is_empty()
+        ):
+            result.follow_up_signals.append("period_direction_followup")
+
+        if (
+            not result.follow_up_signals
+            and not context.is_empty()
+            and current_signals.is_empty()
+            # `current_signals` only sees the catalog's dimension/metric
+            # vocabulary — a phrase like "yaş dağılımı" (age distribution)
+            # carries its own real analytical intent but isn't in that
+            # catalog, so it reads as empty too. Without this gate that gap
+            # let a full independent question ("Kadın hastaların yaş
+            # dağılımını göster") get swallowed as a gender-filter follow-up
+            # on a stale prior topic (2026-07-30, `signals.is_analytical`
+            # already flags "dağılım" as its own content via `_ANALYTICAL_
+            # CUES`, so this cannot false-negative the same way).
+            and not signals.is_analytical
+            and self._has_value_filter_followup(folded_question)
+        ):
+            result.follow_up_signals.append("value_filter_followup")
+
         # "Top 10 departments" does not state what is being ranked.  When a
         # successful prior plan supplies that metric, it is a genuine ranking
         # continuation; a fully specified ranking question with its own metric
@@ -539,6 +596,14 @@ class ContextResolver:
             and bool(context.metrics)
         ):
             result.follow_up_signals.append("implicit_metric_ranking_followup")
+
+        if (
+            not result.follow_up_signals
+            and "patient_appointment_span_days" in context.metrics
+            and not signals.date_expression
+            and self._has_patient_span_ranking_followup(folded_question)
+        ):
+            result.follow_up_signals.append("patient_span_ranking_followup")
 
         # A re-sort/re-rank continuation ("Şimdi en düşük gerçekleşme oranına
         # göre sırala") supplies a new sort metric/direction but names NO
@@ -569,6 +634,7 @@ class ContextResolver:
         needs_output_or_comparison_replay = (
             "output_action_followup" in result.follow_up_signals
             or "comparison_followup" in result.follow_up_signals
+            or "period_direction_followup" in result.follow_up_signals
         )
         if (
             result.follow_up_signals
@@ -633,6 +699,61 @@ class ContextResolver:
 
         result.context_applied = result.applied
         return result
+
+    @staticmethod
+    def _has_constraint_edit_marker(folded_question: str) -> bool:
+        return any(
+            marker in folded_question for marker in _CONSTRAINT_EDIT_MARKERS
+        ) or bool(_NUMERIC_CONSTRAINT_EDIT_PATTERN.search(folded_question))
+
+    @staticmethod
+    def _has_period_comparison_snapshot(context: ConversationContext) -> bool:
+        snapshot = context.query_plan_snapshot or {}
+        return bool(
+            snapshot.get("analysis_type") == "period_comparison"
+            or snapshot.get("periods")
+            or context.comparison_targets
+        )
+
+    @staticmethod
+    def _has_patient_span_ranking_followup(folded_question: str) -> bool:
+        if re.search(r"\bhasta\w*\b", folded_question) is None:
+            return False
+        return any(
+            marker in folded_question
+            for marker in (
+                "en yuksek fark",
+                "en uzun fark",
+                "farki olan",
+                "gun farki",
+            )
+        ) and (
+            "listele" in folded_question
+            or re.search(r"\b\d{1,3}\s+hasta\w*\b", folded_question) is not None
+        )
+
+    @staticmethod
+    def _has_value_filter_followup(folded_question: str) -> bool:
+        """Detect short value-filter refinements without turning row-list
+        requests into analytical follow-ups.
+        """
+        if "kadin dogum" in folded_question:
+            return False
+        if any(marker in folded_question for marker in _FILTER_VALUE_RAW_LIST_MARKERS):
+            return False
+        if re.search(r"\b(?:ilk|son)\s+\d+\b", folded_question):
+            return False
+        tokens = folded_question.split()
+        mentions_gender = any(
+            token.startswith(_FILTER_VALUE_FOLLOWUP_GENDER_TERMS) for token in tokens
+        )
+        mentions_entity = any(
+            token.startswith(_FILTER_VALUE_FOLLOWUP_ENTITY_TERMS) for token in tokens
+        )
+        mentions_action = any(
+            marker in folded_question for marker in _FILTER_VALUE_FOLLOWUP_ACTION_MARKERS
+        )
+        return mentions_gender and mentions_entity and mentions_action
 
     def _resolve_pending_value_clarification(
         self, question: str, pending

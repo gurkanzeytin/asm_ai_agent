@@ -24,4 +24,32 @@ describe("InfoPanel", () => {
 
     expect(screen.queryByRole("button", { name: "Paneli kapat" })).toBeNull();
   });
+
+  it("büyüt butonu SQL sorgusunu bir modalda tam boy gösterir", async () => {
+    render(
+      <InfoPanel
+        open
+        responseMs={1250}
+        isThinking={false}
+        sql="SELECT dept, COUNT(*) FROM t GROUP BY dept"
+      />,
+    );
+
+    // No dialog before the user asks to expand.
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "SQL sorgusunu büyüt" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toBeTruthy();
+    // The full SQL is rendered inside the enlarged modal.
+    expect(dialog.textContent).toContain("SELECT dept, COUNT(*) FROM t GROUP BY dept");
+    expect(screen.getByText("SELECT").className).toContain("text-primary");
+    expect(screen.getByRole("heading", { name: "SQL Sorgusu" })).toBeTruthy();
+  });
+
+  it("SQL yokken büyüt butonu görünmez", () => {
+    render(<InfoPanel open responseMs={1250} isThinking={false} sql={null} />);
+    expect(screen.queryByRole("button", { name: "SQL sorgusunu büyüt" })).toBeNull();
+  });
 });

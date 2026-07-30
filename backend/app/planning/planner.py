@@ -2,7 +2,7 @@ import logging
 import re
 import time
 from collections import deque
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import TYPE_CHECKING
 
 from app.application_models.query_analysis import QueryAnalysis
@@ -56,6 +56,15 @@ _SELF_COUNT_DIMENSIONS: dict[str, set[str]] = {
     "unique_patient_count": {"HastaId"},
 }
 
+# Relationship metrics use some dimensions as the condition itself. A bare noun
+# in "different branches" or "multiple services" should not become a GROUP BY
+# unless the user explicitly asks for a breakdown by that same dimension.
+_RELATIONSHIP_CONDITION_DIMENSIONS: dict[str, set[str]] = {
+    "cross_branch_repeat_patient_count": {"SubeAdi"},
+    "same_day_multi_service_patient_count": {"HizmetAdi"},
+    "same_day_multi_doctor_patient_count": {"DoktorId", "GenelRandevuKaynakAdi"},
+}
+
 _NEGATION_PATTERN = re.compile(r"\b(olmayan|bulunmayan|almayan)\w*\b|\bhic\b")
 
 # Sentinel dimension name for the weekday/weekend derived grouping — not a real
@@ -91,14 +100,31 @@ _GROUP_BY_PATTERN = re.compile(r"(\w+)\s+(?:baz(?:inda|li)\b|gore\b)")
 # stripping block in _resolve_intelligence).
 _STATUS_GROUPING_WORDS = {"durum", "duruma", "durumu", "durumuna", "durumda"}
 
+_MONTH_BUCKET_RANKING_PATTERN = re.compile(
+    r"\bay\w*\b.*\b(?:sirala\w*|en\s+(?:yuksek|fazla|cok|dusuk|az)|ilk\s+\d+)\b"
+    r"|\b(?:sirala\w*|en\s+(?:yuksek|fazla|cok|dusuk|az)|ilk\s+\d+)\b.*\bay\w*\b"
+)
+
 _ASCENDING_MARKERS = (
     "artan sirala",
     "artan olarak sirala",
     "en az",
     "en dusuk",
+    "en dusukten yuksege",
+    "dusukten yuksege",
+    "azdan coga",
+    "azdan coka",
     "en seyrek",
 )
-_ORDER_ASC_MARKERS = ("artan sirala", "artan olarak sirala", "kucukten buyuge")
+_ORDER_ASC_MARKERS = (
+    "artan sirala",
+    "artan olarak sirala",
+    "kucukten buyuge",
+    "en dusukten yuksege",
+    "dusukten yuksege",
+    "azdan coga",
+    "azdan coka",
+)
 _ORDER_DESC_MARKERS = (
     "azalan sirala",
     "azalan olarak sirala",
@@ -114,7 +140,7 @@ _PERIOD_ANALYSIS_TYPES = {
     "adaptive_time_comparison",
     "percentage_change",
 }
-
+_PERIOD_COMPARISON_MARKERS = ("degisim", "degis", "fark", "kiyas", "kiyasla", "karsilastir")
 _MONTH_LABELS = (
     "",
     "Ocak",
@@ -457,8 +483,7 @@ class QueryPlanner:
                 signals_type = intelligence["analysis_type"]
             else:
                 signals_type = signals.analysis_type
-            if intelligence["aggregation"]:
-                aggregation = intelligence["aggregation"]
+            aggregation = intelligence["aggregation"]
             # Typo recovery: a mis-spelled grouping word ("bolm bazında") slips
             # past every exact matcher (dimensions stay empty). ONLY then try a
             # one-edit fuzzy recovery — never overriding a deliberate
@@ -507,6 +532,15 @@ class QueryPlanner:
                 # projection column" silently killed the whole answer
                 # (2026-07-24, real UI bug report).
                 projection = []
+            if intelligence["analysis_type"] == "repeat_behavior":
+                # Relationship CTE builders own their SELECT aliases. Keeping a
+                # planner projection here makes the generic compliance checker
+                # inspect the CTE's inner SELECT and falsely report the outer
+                # dimension alias as missing.
+                projection = []
+                if not intelligence["dimensions"]:
+                    ranking = None
+                    order = None
 
             periods = self._comparison_periods(
                 analysis,
@@ -526,6 +560,14 @@ class QueryPlanner:
             # into a real partial-year date range — this guard stays for any
             # other wording that pairs an explicit row limit with a trend.
             resolved_limit = analysis.detected_limit
+            if (
+                resolved_limit is None
+                and intelligence["granularity"] == "month"
+                and intelligence["analysis_type"] in {"ranking", "top_n", "bottom_n"}
+            ):
+                month_limit = re.search(r"\b(?:sadece\s+)?ilk\s+(\d{1,3})\s+ay\w*\b", folded)
+                if month_limit:
+                    resolved_limit = int(month_limit.group(1))
             if resolved_limit and intelligence["analysis_type"] == "time_trend":
                 resolved_limit = None
             # "en az / en fazla N <noun>" is an aggregate THRESHOLD ("at least N
@@ -539,6 +581,15 @@ class QueryPlanner:
                 and float(resolved_limit) == aggregate_threshold.value
             ):
                 resolved_limit = None
+            if (
+                resolved_limit is None
+                and (
+                    ranking
+                    or intelligence["analysis_type"] in {"ranking", "top_n", "bottom_n"}
+                )
+                and self._singular_ranking_result_requested(folded)
+            ):
+                resolved_limit = 1
 
             plan = QueryPlan(
                 question=question,
@@ -705,6 +756,36 @@ class QueryPlanner:
         answerable, reason, alternative = catalog.check_answerability(folded)
         metrics = catalog.match_metrics(folded)
         dimensions = catalog.match_dimensions(folded)
+        patient_span_requested = self._patient_appointment_span_requested(folded)
+        patient_period_overlap_requested = self._patient_period_overlap_requested(
+            folded, analysis
+        )
+        if patient_span_requested:
+            metrics = ["patient_appointment_span_days"]
+            dimensions = [
+                dimension
+                for dimension in dimensions
+                if self._explicit_breakdown_requested_for_dimension(folded, dimension)
+            ]
+            if not dimensions:
+                dimensions = [
+                    column
+                    for column in projection
+                    if self._explicit_breakdown_requested_for_dimension(folded, column)
+                ]
+        elif patient_period_overlap_requested:
+            metrics = ["multi_period_patient_overlap_count"]
+            dimensions = [
+                dimension
+                for dimension in dimensions
+                if self._explicit_breakdown_requested_for_dimension(folded, dimension)
+            ]
+            if not dimensions:
+                dimensions = [
+                    column
+                    for column in projection
+                    if self._explicit_breakdown_requested_for_dimension(folded, column)
+                ]
 
         # A named department ("Genel Cerrahi bölümünde ...") already pins
         # GenelRandevuBolumAdi to one value via department_filter; the bare
@@ -831,13 +912,33 @@ class QueryPlanner:
         # precondition never fire. A true share-of-total computation for an
         # arbitrary named value (the channel-share case) is a separate,
         # larger feature - not yet implemented.
+        share_of_total_requested = (
+            any(marker in folded for marker in ("pay", "payi"))
+            and "toplam" in folded
+            and bool(dimensions)
+            and (not metrics or metrics == ["appointment_count"])
+        )
+        if share_of_total_requested and not metrics:
+            metrics = ["appointment_count"]
         if pattern == "ratio" and (not metrics or metrics == ["appointment_count"]):
             pattern = "distribution" if dimensions else "count"
 
         granularity = catalog.match_granularity(folded)
+        if granularity is None and _MONTH_BUCKET_RANKING_PATTERN.search(folded):
+            granularity = "month"
         comparisons = catalog.detect_period_comparison(folded, date_range_count)
+        two_month_change_request = self._can_split_two_month_span(
+            analysis.detected_dates
+        ) and (
+            bool(self._period_change_direction(folded))
+            or any(marker in folded for marker in _PERIOD_COMPARISON_MARKERS)
+        )
+        if two_month_change_request and not comparisons:
+            comparisons = ["two_explicit_periods"]
 
         derived: list[str] = []
+        if share_of_total_requested:
+            derived.append("share_of_total: appointment_count")
         if catalog.detect_age_group_request(folded):
             derived.append(catalog.AGE_GROUP_DERIVATION)
             if "DogumTarihi" not in dimensions:
@@ -848,12 +949,20 @@ class QueryPlanner:
                 dimensions = dimensions + [_DAY_TYPE_DIMENSION]
             if metrics == []:
                 metrics = ["appointment_count"]
+        change_direction = self._period_change_direction(folded)
+        if comparisons and change_direction:
+            derived.append(f"period_change_direction:{change_direction}")
 
         # Structural upgrades: two grouping dimensions mean a cross analysis, a
         # time bucket means a trend, and a detected period comparison overrides
         # generic counting — regardless of which keyword triggered first.
         generic_patterns = (None, "count", "distinct_count", "distribution")
-        if comparisons and pattern in generic_patterns + ("time_trend",):
+        if comparisons and pattern in generic_patterns + (
+            "time_trend",
+            "ranking",
+            "top_n",
+            "bottom_n",
+        ):
             pattern = "period_comparison"
         elif granularity and pattern in generic_patterns:
             pattern = "time_trend"
@@ -881,7 +990,12 @@ class QueryPlanner:
         # real, separate feature - not yet implemented. Clearing it here
         # (before resolved_projection is derived from `dimensions` below)
         # answers with the two-period total instead of failing outright.
-        if pattern == "period_comparison" and dimensions and len(metrics) <= 1:
+        if (
+            pattern == "period_comparison"
+            and dimensions
+            and len(metrics) <= 1
+            and not patient_period_overlap_requested
+        ):
             # A per-dimension breakdown of a period comparison is now built for
             # the plain VOLUME case (DeterministicSQLBuilder._period_comparison_
             # grouped: one row per department with current/baseline/diff). A
@@ -938,6 +1052,12 @@ class QueryPlanner:
         if primary is not None:
             if primary.numerator and primary.denominator:
                 numerator, denominator = primary.numerator, primary.denominator
+            if primary.analysis_type == "repeat_behavior" and (
+                primary.formula_type.startswith("having_")
+                or primary.formula_type
+                in {"patient_span_days", "period_overlap_distinct_count"}
+            ):
+                pattern = primary.analysis_type
             if primary.analysis_type == "data_quality" and pattern in (
                 None,
                 "count",
@@ -960,6 +1080,44 @@ class QueryPlanner:
             if primary.fixed_dimension and primary.fixed_dimension not in dimensions:
                 dimensions = dimensions + [primary.fixed_dimension]
 
+        explicit_self_breakdown = any(
+            marker in folded
+            for marker in (
+                "hasta bazinda",
+                "hastaya gore",
+                "hasta id",
+                "hasta kimligi",
+                "doktor id",
+                "doktor bazinda doktor",
+            )
+        )
+        if not explicit_self_breakdown:
+            self_count_columns: set[str] = set()
+            for metric_id in metrics:
+                metric = by_id.get(metric_id)
+                if metric is None or metric.formula_type != "count_distinct":
+                    continue
+                self_count_columns.update(metric.required_columns)
+                self_count_columns.update(_SELF_COUNT_DIMENSIONS.get(metric.id, set()))
+            if self_count_columns:
+                dimensions = [d for d in dimensions if d not in self_count_columns]
+
+        relationship_condition_columns: set[str] = set()
+        for metric_id in metrics:
+            relationship_condition_columns.update(
+                _RELATIONSHIP_CONDITION_DIMENSIONS.get(metric_id, set())
+            )
+        if relationship_condition_columns:
+            dimensions = [
+                dimension
+                for dimension in dimensions
+                if dimension not in relationship_condition_columns
+                or self._explicit_breakdown_requested_for_dimension(folded, dimension)
+            ]
+
+        if pattern == "cross_analysis" and len(dimensions) < 2:
+            pattern = "distribution" if dimensions else "count"
+
         # A pure "kaç X var" distinct count counts the SAME concept whose bare
         # noun mention would otherwise become a grouping dimension ("Kaç doktor
         # var?" -> 'doktor' also matched GenelRandevuKaynakAdi). Without
@@ -973,15 +1131,6 @@ class QueryPlanner:
         ):
             self_columns = set(primary.required_columns) | _SELF_COUNT_DIMENSIONS.get(
                 primary.id, set()
-            )
-            explicit_self_breakdown = any(
-                marker in folded
-                for marker in (
-                    "hasta bazinda",
-                    "hastaya gore",
-                    "doktor id",
-                    "doktor bazinda doktor",
-                )
             )
             if not explicit_self_breakdown:
                 dimensions = [d for d in dimensions if d not in self_columns]
@@ -1064,6 +1213,11 @@ class QueryPlanner:
             return False
         if any(operation in analysis.detected_operations for operation in ("COUNT", "SUM", "AVG")):
             return False
+        if re.search(
+            r"\bilk\s+\d+\s+(?:doktor|hekim|hizmet|servis|sube|bolum|kaynak|kategori|yas)",
+            folded_question,
+        ):
+            return False
         ranking_markers = (
             *_VOLUME_RANKING_MARKERS,
             *_ASCENDING_MARKERS,
@@ -1086,6 +1240,11 @@ class QueryPlanner:
         if "randevu" in folded_question:
             return True
         return bool(analysis.detected_limit)
+
+    def _singular_ranking_result_requested(self, folded_question: str) -> bool:
+        if re.search(r"\b(?:hangileri|kimler)\b", folded_question):
+            return False
+        return bool(re.search(r"\b(?:hangisi|kim)\b", folded_question))
 
     def _view_list_projection(self, view_name: str) -> list[str]:
         columns = view_mapping.get_view_entry(view_name).get("columns", {})
@@ -1117,6 +1276,69 @@ class QueryPlanner:
                     if word.startswith(folded_term):
                         return column
         return None
+
+    def _patient_appointment_span_requested(self, folded_question: str) -> bool:
+        """Detect patient first-to-last appointment span requests."""
+        has_patient = re.search(r"\bhasta\w*\b", folded_question) is not None
+        first_last = (
+            re.search(r"\bilk\w*\b", folded_question) is not None
+            and re.search(r"\bson\w*\b", folded_question) is not None
+            and "randevu" in folded_question
+        )
+        span_wording = (
+            "gun fark" in folded_question
+            or "kac gun gec" in folded_question
+            or "arasinda kac gun" in folded_question
+            or "en yuksek fark" in folded_question
+            or "ortalama gun fark" in folded_question
+        )
+        return bool((has_patient and first_last) or (has_patient and span_wording))
+
+    def _patient_period_overlap_requested(
+        self, folded_question: str, analysis: QueryAnalysis
+    ) -> bool:
+        """Detect patients present in both explicit periods."""
+        if len(analysis.detected_dates) < 2:
+            return False
+        has_patient = re.search(r"\bhasta\w*\b", folded_question) is not None
+        has_overlap_marker = (
+            re.search(r"\bhem\b.+\bhem\b", folded_question) is not None
+            or "her iki" in folded_question
+            or "iki donemde" in folded_question
+            or "iki yilda" in folded_question
+            or "ortak hasta" in folded_question
+        )
+        has_presence_action = any(
+            marker in folded_question
+            for marker in ("islem goren", "randevusu olan", "gelen", "say")
+        )
+        return bool(has_patient and has_overlap_marker and has_presence_action)
+
+    def _explicit_breakdown_requested_for_dimension(
+        self, folded_question: str, dimension: str
+    ) -> bool:
+        dimension_terms = {
+            "HizmetAdi": ("hizmet", "servis"),
+            "SubeAdi": ("sube", "merkez", "lokasyon"),
+            "GenelRandevuBolumAdi": ("bolum", "brans"),
+            "GenelRandevuKaynakAdi": ("kaynak", "kanal"),
+            "DoktorId": ("doktor", "hekim"),
+            "RandevuDurumu": ("durum", "status"),
+            "CinsiyetId": ("cinsiyet",),
+        }
+        terms = dimension_terms.get(dimension, (dimension.lower(),))
+        for term in terms:
+            if re.search(
+                rf"\b{term}\w*\s+(?:baz\w*|gore|dagilim\w*|kirilim\w*|kir\w*|sirala\w*)\b",
+                folded_question,
+            ):
+                return True
+            if re.search(
+                rf"\b(?:dagilim\w*|kirilim\w*|kir\w*)\s+{term}\w*\b",
+                folded_question,
+            ):
+                return True
+        return False
 
     def _fuzzy_group_dimension(self, folded_question: str, view_name: str) -> str | None:
         """Recovers a grouping dimension from a single-char TYPO in the grouping
@@ -1205,8 +1427,15 @@ class QueryPlanner:
         date_filters: list[DateFilterPlan],
         analysis_type: str | None,
     ) -> list[PeriodPlan]:
-        """Carries exactly two parser periods into the plan as half-open ranges."""
-        if analysis_type not in _PERIOD_ANALYSIS_TYPES or len(analysis.detected_dates) != 2:
+        """Carries parser periods into the plan as half-open ranges."""
+        if analysis_type in _PERIOD_ANALYSIS_TYPES:
+            split_span_periods = self._two_month_span_periods(
+                analysis.detected_dates,
+                date_filters,
+            )
+            if split_span_periods:
+                return split_span_periods
+        if analysis_type not in _PERIOD_ANALYSIS_TYPES or len(analysis.detected_dates) < 2:
             return []
 
         periods: list[PeriodPlan] = []
@@ -1220,6 +1449,53 @@ class QueryPlanner:
                 )
             )
         return periods
+
+    def _period_change_direction(self, folded_question: str) -> str | None:
+        return catalog.period_change_direction(folded_question)
+
+    def _can_split_two_month_span(self, detected_dates: list) -> bool:
+        return bool(self._two_month_span_periods(detected_dates, []))
+
+    def _two_month_span_periods(
+        self,
+        detected_dates: list,
+        date_filters: list[DateFilterPlan],
+    ) -> list[PeriodPlan]:
+        if len(detected_dates) != 1:
+            return []
+        detected = detected_dates[0]
+        start = detected.start_date
+        end = detected.end_date
+        if start.day != 1:
+            return []
+        start_index = start.year * 12 + start.month
+        end_index = end.year * 12 + end.month
+        if end_index - start_index != 1:
+            return []
+        first_exclusive = self._next_month_start(start.year, start.month)
+        second_exclusive = self._next_month_start(end.year, end.month)
+        if end != second_exclusive - timedelta(days=1):
+            return []
+        column = date_filters[0].column if date_filters else None
+        return [
+            PeriodPlan(
+                label=f"{_MONTH_LABELS[start.month]} {start.year}",
+                start_inclusive=start.isoformat(),
+                end_exclusive=first_exclusive.isoformat(),
+                column=column,
+            ),
+            PeriodPlan(
+                label=f"{_MONTH_LABELS[end.month]} {end.year}",
+                start_inclusive=end.replace(day=1).isoformat(),
+                end_exclusive=second_exclusive.isoformat(),
+                column=column,
+            ),
+        ]
+
+    def _next_month_start(self, year: int, month: int):
+        if month == 12:
+            return date(year + 1, 1, 1)
+        return date(year, month + 1, 1)
 
     def _trend_granularity_from_dates(self, detected_dates: list) -> str:
         """Deterministically picks a time bucket from the requested date span.
@@ -1635,7 +1911,9 @@ def format_plan_for_prompt(plan: QueryPlan) -> str:
         joins = "; ".join(step.render() for step in plan.join_path)
         lines.append(f"- Joins: {joins}")
     if plan.periods:
-        for role, period in zip(("baseline", "current"), plan.periods, strict=True):
+        roles = ("baseline", "current") if len(plan.periods) == 2 else ()
+        for index, period in enumerate(plan.periods, start=1):
+            role = roles[index - 1] if roles else f"period {index}"
             column = period.column or "the date column"
             lines.append(
                 f"- {role.title()} period ({period.label}): "

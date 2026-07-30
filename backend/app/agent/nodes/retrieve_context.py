@@ -6,6 +6,7 @@ from app.agent.state import AgentState
 from app.context.analytical_signals import merge_query_plans
 from app.planning.models import QueryPlan
 from app.planning.planner import QueryPlanner
+from app.semantics import catalog
 from app.semantics.view_mapping import fold
 from app.services.interfaces import IPromptService
 from app.services.query_analyzer import QueryAnalyzer
@@ -112,10 +113,17 @@ class RetrieveContextNode(IAgentNode):
             # question ("2025 temmuz ..."), so its date span is authoritative.
             # Only applies when this turn itself mentions a date; otherwise the
             # merge-inherited filter (incl. its column choice) must survive.
+            period_direction_only_followup = (
+                query_plan is not None
+                and bool(query_plan.periods)
+                and not current_turn_has_date
+                and catalog.period_change_direction(fold(planning_question)) is not None
+            )
             if (
                 query_plan is not None
                 and state.context_follow_up_detected
                 and state.question != planning_question
+                and not period_direction_only_followup
                 and not all(marker in fold(planning_question) for marker in _OUTPUT_ACTION_MARKERS)
             ):
                 resolved_plan = self._build_plan(state.question, db_context, None)

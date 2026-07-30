@@ -165,6 +165,7 @@ describe("sohbet arayüzü düzenlemeleri", () => {
     );
 
     expect(screen.getByText("Med Agent")).toBeTruthy();
+    expect(screen.queryByText("Mitis")).toBeNull();
     expect(screen.queryByText("ASM AI Agent")).toBeNull();
     const newChat = screen.getByRole("button", { name: "Yeni sohbet" });
     expect(newChat.className).toContain("h-10");
@@ -405,5 +406,53 @@ describe("sohbet arayüzü düzenlemeleri", () => {
 
     fireEvent.keyDown(screen.getByRole("img"), { key: "Enter" });
     expect(onCategorySelect).toHaveBeenCalledWith("ay", "Şubat");
+  });
+
+  it("tekrarlanan bos grafik etiketlerinde React key uyarisi basmaz", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      render(
+        <SqlChartPanel
+          columns={["ay", "deger"]}
+          rows={[
+            { ay: "", deger: 1 },
+            { ay: "", deger: 2 },
+          ]}
+          initialType="line"
+        />,
+      );
+
+      expect(
+        consoleError.mock.calls.some((call) =>
+          call.some((part) => String(part).includes("Encountered two children with the same key")),
+        ),
+      ).toBe(false);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it("markdown rapor tablolarini genis inceleme modalinda acar", () => {
+    render(
+      <ChatMessage
+        message={{
+          id: "assistant-markdown-table",
+          role: "assistant",
+          content: [
+            "| ID | Baslangic Tarihi | Randevu Kaynagi | Bolum |",
+            "| --- | --- | --- | --- |",
+            "| 7479777 | 2024-05-31T22:30:00 | ASM_MR_PHILIPS | Radyoloji |",
+          ].join("\n"),
+          createdAt: 1,
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Tam ekran incele" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Tam ekran incele" }));
+    expect(screen.getByRole("heading", { name: "Tablo - Geniş Görünüm" })).toBeTruthy();
+    expect(screen.getByRole("dialog").textContent).toContain("ASM_MR_PHILIPS");
+    expect(screen.getAllByRole("table")).toHaveLength(1);
   });
 });

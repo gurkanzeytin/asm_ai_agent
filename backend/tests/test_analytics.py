@@ -15,6 +15,7 @@ from app.analytics.intent_detector import AnalyticsIntentDetector
 from app.analytics.models import AnalyticsIntent, DataShape, VisualizationType
 from app.analytics.visualization_selector import VisualizationSelector
 from app.application_models.workflow_models import QueryResult
+from app.planning.models import QueryPlan
 
 
 def _query_result(columns, rows) -> QueryResult:
@@ -168,6 +169,43 @@ def test_engine_trend_analysis_on_time_series():
     assert result.metrics["highest_period"] == "2026-05"
     assert result.metrics["largest_change"] == "2026-05"
     assert result.visualization.type == VisualizationType.LINE_CHART
+
+
+def test_time_series_uses_temporal_labels_when_category_column_is_present():
+    """A grouped time result can contain both a categorical label and a period.
+    Trend calculations must use the period column, not category strings such
+    as branch or department names (live UI 2026-07-30: those names were parsed
+    as ISO dates and disabled analytics enrichment)."""
+    result_set = _query_result(
+        ["SubeAdi", "period_start", "appointment_count"],
+        [
+            {
+                "SubeAdi": "TEST ASM Gebze",
+                "period_start": "2025-01-01",
+                "appointment_count": 10,
+            },
+            {
+                "SubeAdi": "TEST ASM Atasehir",
+                "period_start": "2025-02-01",
+                "appointment_count": 20,
+            },
+        ],
+    )
+
+    result = AnalyticsEngine().analyze(
+        "2025 aylik randevu trendini subelere gore goster",
+        result_set,
+        plan=QueryPlan(
+            question="q",
+            metrics=["appointment_count"],
+            dimensions=["SubeAdi"],
+            grouping_granularity="month",
+        ),
+    )
+
+    assert result.data_shape == DataShape.TIME_SERIES
+    assert result.label_column == "period_start"
+    assert result.metrics["first_comparable_period"] == "2025-01-01"
 
 
 def test_engine_comparison_on_categorical():
