@@ -58,9 +58,14 @@ _VISUAL_MARKER = re.compile(
 # section stayed fully expanded above the requested table). Up to 2 filler
 # words are tolerated ("grafik olarak değil") between the visual term and
 # the negation.
+# The rejection is not always "değil": "grafik olmasın", "grafik istemiyorum",
+# "grafiğe gerek yok" reject just as explicitly and previously left the chart
+# panel rendered next to the requested table (Codex live UI finding,
+# 2026-07-31: "Grafik değil, sadece tablo" — the "olmasın" phrasing).
 _VISUAL_NEGATED = re.compile(
     r"\b(?:grafik\w*|grafig\w*|chart|gorsel\w*|ciz\w*|cizgi\w*|bar|"
-    r"sutun\w*|pasta|oranlama)\b(?:\s+\w+){0,2}?\s+degil\b"
+    r"sutun\w*|pasta|oranlama)\b(?:\s+\w+){0,2}?\s+"
+    r"(?:degil|olmasin|istemiyorum|istemem|gerek\s+yok|gerekmiyor|cikarma|koyma)\b"
 )
 
 

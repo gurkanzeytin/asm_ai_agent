@@ -75,6 +75,50 @@ def test_at_least_threshold_keeps_desc_sorting():
     assert "ORDER BY appointment_count DESC" in sql
 
 
+def test_ratio_period_comparison_states_dropped_breakdown():
+    """A rate comparison has no grouped shape, so "bölüm bazında" is dropped —
+    but the plan must SAY so instead of silently answering with the two-period
+    total as if it were the requested breakdown (Codex live UI finding)."""
+    plan = _planned("2024 ve 2025 icin gelmeme oranini bolum bazinda kiyasla")
+    assert plan.dimensions == []
+    assert any("bazında dönem karşılaştırması" in note for note in plan.assumptions)
+
+
+def test_volume_period_comparison_keeps_breakdown_without_assumption():
+    """The plain VOLUME case IS grouped — no dimension dropped, nothing to warn."""
+    plan = _planned("2024 ve 2025 icin randevu sayisini bolum bazinda kiyasla")
+    assert plan.dimensions == ["GenelRandevuBolumAdi"]
+    assert not any("bazında dönem karşılaştırması" in note for note in plan.assumptions)
+
+
+def test_exclusion_phrase_inverts_less_than_threshold():
+    # "100'den az olanları dışarıda bırak" keeps the complement (>= 100), not
+    # the "< 100" set the bare threshold would match (Codex live UI finding).
+    plan = _planned(
+        "2023 yilinda bolumlere gore 100 den az randevusu olanlari disarida birak"
+    )
+    sql = _sql(plan)
+    assert plan.aggregate_threshold is not None
+    assert plan.aggregate_threshold.operator == ">="
+    assert plan.aggregate_threshold.value == 100
+    assert "HAVING COUNT(*) >= 100" in sql
+
+
+def test_exclusion_phrase_inverts_more_than_threshold():
+    plan = _planned(
+        "2023 yilinda bolumlere gore 500 den fazla randevusu olanlari haric tut"
+    )
+    assert plan.aggregate_threshold is not None
+    assert plan.aggregate_threshold.operator == "<="
+    assert plan.aggregate_threshold.value == 500
+
+
+def test_plain_threshold_without_exclusion_is_unchanged():
+    plan = _planned("2023 yilinda bolumlere gore 100 den az randevusu olan bolumler")
+    assert plan.aggregate_threshold is not None
+    assert plan.aggregate_threshold.operator == "<"
+
+
 @pytest.mark.parametrize(
     ("question", "date_column", "metric_alias"),
     [

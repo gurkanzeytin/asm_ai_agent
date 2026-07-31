@@ -2733,6 +2733,146 @@
           "GROUP BY"
         ]
       }
+    },
+    {
+      "id": "CODEX-UI-001",
+      "question": "2025'in 2024'e gore randevu sayisi degisimi",
+      "category": "period_comparison",
+      "difficulty": "hard",
+      "suite": "codex_ui_regression",
+      "blind": true,
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": "period_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "clarification_required": false,
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "BaslangicTarihi"
+        ],
+        "must_include_features": [
+          "conditional_aggregation",
+          "current_period",
+          "baseline_period",
+          "null_safe_division"
+        ],
+        "must_not_include_features": [
+          "raw_detail_projection"
+        ]
+      }
+    },
+    {
+      "id": "CODEX-UI-002",
+      "question": "2022 ile 2023 randevu sayilarini karsilastir",
+      "category": "period_comparison",
+      "difficulty": "medium",
+      "suite": "codex_ui_regression",
+      "blind": true,
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": "period_comparison",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": "PeriodComparisonResult",
+        "clarification_required": false,
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "BaslangicTarihi"
+        ],
+        "must_include_features": [
+          "conditional_aggregation",
+          "current_period",
+          "baseline_period",
+          "null_safe_division"
+        ],
+        "must_not_include_features": [
+          "raw_detail_projection"
+        ]
+      }
+    },
+    {
+      "id": "CODEX-UI-003",
+      "question": "2022 ile 2023 gerceklesme oranini karsilastir",
+      "category": "period_comparison",
+      "difficulty": "hard",
+      "suite": "codex_ui_regression",
+      "blind": true,
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": "period_comparison",
+        "metrics": [
+          "completed_appointment_rate"
+        ],
+        "dimensions": [],
+        "sql_source": "deterministic",
+        "result_contract": null,
+        "clarification_required": false,
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "BaslangicTarihi"
+        ],
+        "must_include_features": [
+          "conditional_aggregation",
+          "current_period",
+          "baseline_period",
+          "null_safe_division"
+        ],
+        "must_not_include_features": [
+          "raw_detail_projection"
+        ]
+      }
+    },
+    {
+      "id": "CODEX-UI-004",
+      "question": "2022 yilinda en yogun ilk 5 bolum hangisi",
+      "category": "expert_regression",
+      "difficulty": "medium",
+      "suite": "codex_ui_regression",
+      "blind": true,
+      "requires_live_db": false,
+      "expected": {
+        "in_scope": true,
+        "analysis_type": "top_n",
+        "metrics": [
+          "appointment_count"
+        ],
+        "dimensions": [
+          "GenelRandevuBolumAdi"
+        ],
+        "sql_source": "deterministic",
+        "result_contract": "DistributionResult",
+        "clarification_required": false,
+        "answerable": true
+      },
+      "sql_requirements": {
+        "must_use_columns": [
+          "GenelRandevuBolumAdi",
+          "BaslangicTarihi"
+        ],
+        "must_include_features": [
+          "group_by"
+        ],
+        "must_not_include_features": [
+          "raw_detail_projection"
+        ]
+      }
     }
   ]
 }

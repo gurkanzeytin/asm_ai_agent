@@ -376,6 +376,28 @@ _DIMENSION_ADD_MARKERS = (
 _FILTER_ONLY_MARKERS = ("sadece", "yalniz", "yalnizca", "sinirla", "sinirlandir", "filtrele")
 _SAME_ANALYSIS_MARKERS = ("aynisi", "aynisini")
 _DIMENSION_DEFAULT_METRICS = {"appointment_count", "appointments_per_type"}
+# Time-bucketed COUNT metrics — meaningless once the time axis (grouping
+# granularity) is dropped, so they revert to a plain appointment_count.
+_BUCKETED_COUNT_METRICS = {
+    "daily_appointment_count",
+    "weekly_appointment_count",
+    "monthly_appointment_count",
+}
+# Explicit "don't split by month/day" corrections (folded form: diacritics
+# stripped, lowercased). Substring match, so "aylara bolme" covers
+# "aylara bölme"/"bölmeden".
+_TIME_BUCKET_NEGATION_MARKERS = (
+    "ay ay degil",
+    "gun gun degil",
+    "aylara bolme",
+    "aya bolme",
+    "gunlere bolme",
+    "aylara ayirma",
+    "aya ayirma",
+    "ay bazinda degil",
+    "aylik degil",
+    "aylara gore degil",
+)
 _PERIOD_ANALYSIS_TYPES = {
     "period_comparison",
     "baseline_comparison",
@@ -651,18 +673,48 @@ def merge_query_plans(
             updates["periods"] = []
             updates["current_period"] = None
             updates["baseline_period"] = None
+        # Re-grouping onto a NEW entity dimension (an explicit "yerine", or any
+        # non-additive dimension replacement) makes an INHERITED time-bucket
+        # grain stale: the user re-grouped by an entity, not by month. Without
+        # this, "2023 en çok randevu alan 10 bölümü listele" right after
+        # "aylara göre kır" kept the month grain and returned (ay, bölüm) rows
+        # (mostly the same top department across months) instead of department
+        # totals. Never touch a grain the CURRENT turn itself requested.
+        replaced_grouping = (
+            (dimension_replacement or not additive)
+            and current.grouping_granularity is None
+            and retained.grouping_granularity is not None
+        )
+        if replaced_grouping:
+            updates["grouping_granularity"] = None
+            if (
+                retained.metrics
+                and set(retained.metrics).issubset(_BUCKETED_COUNT_METRICS)
+                and not catalog.detect_measure_request(folded)
+            ):
+                updates["metrics"] = ["appointment_count"]
+                updates["planned_metrics"] = []
+                updates["aggregation"] = "COUNT(*)"
+
+    # An explicit "don't split by month" correction ("ay ay değil", "aylara
+    # bölmeden göster") drops any inherited time-bucket grain even when the
+    # turn names no new dimension of its own — the scope-reuse path would
+    # otherwise re-render the same monthly table, ignoring the negation.
+    if (
+        current.grouping_granularity is None
+        and retained.grouping_granularity is not None
+        and "grouping_granularity" not in updates
+        and any(marker in folded for marker in _TIME_BUCKET_NEGATION_MARKERS)
+    ):
+        updates["grouping_granularity"] = None
         if (
-            dimension_replacement
+            "metrics" not in updates
             and retained.metrics
-            and set(retained.metrics).issubset(
-                {"daily_appointment_count", "weekly_appointment_count", "monthly_appointment_count"}
-            )
-            and not catalog.detect_measure_request(folded)
+            and set(retained.metrics).issubset(_BUCKETED_COUNT_METRICS)
         ):
             updates["metrics"] = ["appointment_count"]
             updates["planned_metrics"] = []
             updates["aggregation"] = "COUNT(*)"
-            updates["grouping_granularity"] = None
 
     # Planner defaults on a terse ranking/dimension follow-up are not an
     # explicit metric override.  Only raw-text metric evidence may replace the

@@ -92,6 +92,17 @@ _CONSTRAINT_EDIT_MARKERS = (
     "altinda",
     "ayni filtre",
     "ayni filtreyle",
+    # "Don't split by month/day" corrections are constraint edits on the
+    # retained grouped result — without these a bare "aylara bölmeden göster"
+    # (no entity/date of its own) is not seen as a follow-up and the monthly
+    # table is silently re-rendered, ignoring the negation (live UI
+    # 2026-07-30).
+    "aylara bolme",
+    "aya bolme",
+    "gunlere bolme",
+    "aylara ayirma",
+    "ay ay degil",
+    "gun gun degil",
 )
 _NUMERIC_CONSTRAINT_EDIT_PATTERN = re.compile(
     r"\b\d+(?:[.,]\d+)?\s*(?:den|dan)\s+(?:kucuk|buyuk|az|fazla)\b"

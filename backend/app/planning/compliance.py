@@ -208,8 +208,14 @@ class PlanComplianceValidator:
         # must be visibly present in the SQL.
         if plan.numerator and plan.denominator and "/" not in folded_sql:
             missing.append(f"ratio division {plan.numerator}/{plan.denominator}")
+        # NULLIF protects an ACTUAL division. A "ratio"/"percentage" analysis
+        # type whose plan carries no numerator/denominator can legitimately
+        # render as a plain COUNT(*) (e.g. a follow-up whose comparison context
+        # was not carried over) — demanding NULLIF there rejected division-free
+        # SQL and surfaced as "Yanıt Oluşturulamadı" (Codex live UI finding).
+        # A ratio plan that lost its division entirely is still caught above.
         if (plan.numerator and plan.denominator) or plan.analysis_type in ("ratio", "percentage"):
-            if "nullif" not in folded_sql:
+            if "/" in folded_sql and "nullif" not in folded_sql:
                 missing.append("ratio division-by-zero protection (NULLIF)")
         for dimension in plan.dimensions:
             if dimension in _DERIVED_DIMENSION_SENTINELS:
@@ -259,6 +265,22 @@ class PlanComplianceValidator:
             )
             or plan.baseline_period
         ):
+            # A degenerate plan that carries the same window twice ("2022 vs
+            # 2022", or a period whose label fragmented into two identical
+            # ranges) yields a self-comparison — duplicate UNION ALL blocks and
+            # a bogus 0 change. Reject it so the repair pass can rebuild rather
+            # than the user seeing "%0 değişim" or a doubled period column.
+            if len(plan.periods) > 1:
+                seen: set[tuple[str, str]] = set()
+                for period in plan.periods:
+                    key = (period.start_inclusive, period.end_exclusive)
+                    if key in seen:
+                        missing.append(
+                            "period comparison contains duplicate periods "
+                            f"({period.start_inclusive}..< {period.end_exclusive})"
+                        )
+                        break
+                    seen.add(key)
             if len(plan.periods) > 2:
                 if "union all" not in folded_sql:
                     missing.append("multi-period comparison UNION ALL")

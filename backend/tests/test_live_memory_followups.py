@@ -403,6 +403,60 @@ async def test_threshold_followup_reattaches_to_prior_grouped_table():
 
 
 @pytest.mark.asyncio
+async def test_ayni_veriyi_followup_keeps_date_scope_and_takes_new_dimension():
+    """'2024 randevuları bölüme kır' then 'Aynı veriyi doktor bazında kırılım
+    olarak getir': "aynı veriyi" is a reference to the previous answer, so the
+    2024 scope must survive while the NEW dimension (doctor) replaces the old
+    one. Before this, the phrase was not a follow-up signal at all, the date
+    filter was dropped, and the answer covered ALL time (1.683.876 rows in the
+    UI instead of 2024's) — and the corruption then cascaded to every later
+    turn in the session (Codex live UI testing, 2026-07-31)."""
+    chain = _Chain()
+    first, _ = await chain.turn("2024 randevularini bolume kir")
+    assert first.dimensions == ["GenelRandevuBolumAdi"]
+    assert _date(first) == ("2024-01-01", "2024-12-31")
+
+    second, resolution = await chain.turn(
+        "Ayni veriyi doktor bazinda kirilim olarak getir"
+    )
+    assert resolution.follow_up_detected is True
+    assert second.dimensions == ["DoktorId"]
+    assert _date(second) == ("2024-01-01", "2024-12-31")
+
+    # The scope keeps surviving further breakdown edits in the same session.
+    third, third_resolution = await chain.turn("Sube bazinda kirilimi da ekle")
+    assert third_resolution.follow_up_detected is True
+    assert _date(third) == ("2024-01-01", "2024-12-31")
+
+
+@pytest.mark.asyncio
+async def test_ay_kiriliminda_followup_buckets_by_month():
+    """'Bunu ay kırılımında göster' must bucket by month and drop the previous
+    categorical dimension. "<birim> kırılımı" was matched for no granularity at
+    all, so the answer silently repeated the earlier randevu-tipi breakdown
+    (Codex live UI testing, 2026-07-31)."""
+    chain = _Chain()
+    await chain.turn("2024 randevularini bolume kir")
+    await chain.turn("Randevu tipine gore dagilimi goster")
+
+    plan, resolution = await chain.turn("Bunu ay kiriliminda goster")
+    assert resolution.follow_up_detected is True
+    assert plan.grouping_granularity == "month"
+    assert plan.dimensions == []
+    assert _date(plan) == ("2024-01-01", "2024-12-31")
+
+
+def test_same_day_wording_is_not_a_context_reference():
+    """Guard for the fix above: 'aynı gün' is a DOMAIN term (same-day
+    appointments), not a reference to the previous turn — it must never pull a
+    stale date scope into an independent question."""
+    from app.context.extractor import ContextExtractor
+
+    signals = ContextExtractor().extract("ayni gun randevusu olan hastalar")
+    assert signals.pronouns == []
+
+
+@pytest.mark.asyncio
 async def test_bunu_monthly_trend_after_status_distribution_clears_status_dimension():
     chain = _Chain()
     first, _ = await chain.turn(
@@ -1193,3 +1247,98 @@ async def test_gerceklesen_is_not_treated_as_additive_ekle_marker():
     await chain.turn("2025 ocak randevu sayisi")
     second, _ = await chain.turn("Gerceklesen randevu sayisi nedir")
     assert second.metrics == ["completed_appointment_count"]
+
+
+def test_entity_ranking_over_first_months_has_no_spurious_month_grain():
+    """'2025 ilk 6 ayında en yoğun 5 şube' ranks BRANCHES by their total, not
+    by (month, branch): the 'ay' token belongs to the date scope ("first 6
+    months"), not a request to bucket by month. Live UI 2026-07-30 returned
+    top-5 (month, branch) rows all dominated by one branch."""
+    analyzer = QueryAnalyzer()
+    planner = QueryPlanner()
+    view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+    q = "2025 yilinin ilk 6 ayinda en yogun 5 subeyi randevu sayisina gore goster"
+    plan = planner.build_plan(q, analyzer.analyze(q), [], views=[view])
+    assert plan.grouping_granularity is None
+    assert plan.dimensions  # ranks a real branch dimension
+    assert plan.limit == 5
+    # A genuine "rank the months themselves" question still buckets by month.
+    months_q = "2024 yilinda en cok randevu alan ilk 3 ayi goster"
+    months_plan = planner.build_plan(months_q, analyzer.analyze(months_q), [], views=[view])
+    assert months_plan.grouping_granularity == "month"
+
+
+@pytest.mark.asyncio
+async def test_monthly_grain_dropped_when_followup_regroups_by_new_dimension():
+    """After "aylara göre kır" (monthly), a NEW-topic department-ranking turn
+    must group by department TOTALS — the inherited month grain must not leak
+    a DÖNEM column + monthly_appointment_count. Live UI 2026-07-30 Bug A."""
+    chain = _Chain()
+    await chain.turn("2024 yilinda toplam kac randevu olusturuldu")
+    monthly, _ = await chain.turn("Bunu aylara gore kir")
+    assert monthly.grouping_granularity == "month"
+
+    dept, _ = await chain.turn("2023 yilinda en cok randevu alan ilk 10 bolumu listele")
+    assert dept.dimensions == ["GenelRandevuBolumAdi"]
+    assert dept.grouping_granularity is None
+    assert "monthly_appointment_count" not in dept.metrics
+    assert _date(dept) == ("2023-01-01", "2023-12-31")
+
+
+@pytest.mark.asyncio
+async def test_explicit_ay_ay_degil_correction_drops_inherited_month_grain():
+    """The explicit "ay ay değil ... bölüm başına toplam" correction must drop
+    the inherited monthly grain instead of re-rendering the same monthly table.
+    Live UI 2026-07-30 Bug A: the scope-reuse path ignored the negation."""
+    chain = _Chain()
+    await chain.turn("2024 yilinda toplam kac randevu olusturuldu")
+    await chain.turn("Bunu aylara gore kir")
+    corrected, _ = await chain.turn(
+        "Hayir, ay ay degil. 2023 yilinin tamami icin bolum basina toplam "
+        "randevu sayisini ver, en yuksek 10 bolum."
+    )
+    assert corrected.dimensions == ["GenelRandevuBolumAdi"]
+    assert corrected.grouping_granularity is None
+    assert "monthly_appointment_count" not in corrected.metrics
+
+
+def test_multi_status_metrics_do_not_apply_a_global_status_where_filter():
+    """'toplam, gerçekleşen ve gelmeyen randevu' asks for three status-
+    differentiated counts, each its own SUM(CASE ...). The 'gerçekleşen' word
+    must NOT also add a global RandevuDurumu='Gerçekleşti' WHERE filter — that
+    excluded the rows the total/no-show columns need, making gerçekleşen ==
+    toplam and gelmeyen == 0 for every department (live UI 2026-07-30)."""
+    analyzer = QueryAnalyzer()
+    planner = QueryPlanner()
+    view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+    q = (
+        "2024 yilinda bolum bazinda toplam randevu, gerceklesen randevu ve "
+        "gelmeyen randevu sayilarini goster"
+    )
+    plan = planner.build_plan(q, analyzer.analyze(q), [], views=[view])
+    assert "completed_appointment_count" in plan.metrics
+    assert "appointment_count" in plan.metrics
+    assert "no_show_count" in plan.metrics
+
+    built = DeterministicSQLBuilder().build(plan)
+    assert isinstance(built, DeterministicSQL)
+    where = built.sql.split("WHERE", 1)[1].split("GROUP BY")[0]
+    assert "RandevuDurumu =" not in where  # status lives only in per-metric CASE
+    assert built.sql.count("SUM(CASE WHEN RandevuDurumu") >= 2
+    assert "COUNT(*) AS appointment_count" in built.sql
+
+
+def test_single_status_metric_still_scopes_via_where():
+    """Guard boundary: a lone 'gerçekleşen randevu' count (no other metric)
+    still scopes the whole query via the WHERE filter — the multi-metric
+    carve-out must not disarm the ordinary single-status case."""
+    analyzer = QueryAnalyzer()
+    planner = QueryPlanner()
+    view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
+    q = "2024 yilinda gerceklesen randevu sayisini bolume gore goster"
+    plan = planner.build_plan(q, analyzer.analyze(q), [], views=[view])
+    assert plan.metrics == ["completed_appointment_count"]
+    built = DeterministicSQLBuilder().build(plan)
+    assert isinstance(built, DeterministicSQL)
+    where = built.sql.split("WHERE", 1)[1].split("GROUP BY")[0]
+    assert "RandevuDurumu = N'Gerçekleşti'" in where

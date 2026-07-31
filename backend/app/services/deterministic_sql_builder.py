@@ -66,6 +66,11 @@ DATE_COLUMN = "BaslangicTarihi"
 # Ameliyathane, "); equality on the raw value never matches a single
 # department, so its predicates are rendered as delimiter-bounded containment.
 DEPARTMENT_COLUMN = "GenelRandevuBolumAdi"
+# Used by `_can_condition` to tell a single-aggregate metric formula (safe to
+# gate on a period) from a composite rate formula (two aggregates + arithmetic,
+# which cannot be wrapped without nesting aggregates).
+_AGGREGATE_CALL = re.compile(r"\b(?:COUNT|SUM|AVG|MIN|MAX)\s*\(", re.IGNORECASE)
+_LEADING_AGGREGATE = re.compile(r"\s*(?:COUNT|SUM|AVG|MIN|MAX)\s*\(", re.IGNORECASE)
 # Table alias for the CROSS APPLY STRING_SPLIT that explodes the composite
 # department column into one atomic value per row (see `_standard`).
 _DEPARTMENT_SPLIT_ALIAS = "dept_atomic"
@@ -420,6 +425,8 @@ class DeterministicSQLBuilder:
             grouped = self._period_comparison_grouped(plan, current, baseline)
             if grouped is not None:
                 return grouped
+        skipped: list[str] = []
+        metric_aliases: dict[str, str] = {}
         if plan.numerator and plan.denominator:
             numerator = self._metric_expr(plan.numerator)
             denominator = self._metric_expr(plan.denominator)
@@ -449,27 +456,52 @@ class DeterministicSQLBuilder:
                 "rate_point_change",
             ]
         else:
-            if len(plan.metrics) > 1:
-                return UnsupportedPlan(
-                    "multi-metric period comparison not supported: only a single "
-                    "metric can be compared across periods today",
-                    plan.metrics,
-                )
-            metric = self._metric_expr((plan.metrics or ["appointment_count"])[0])
-            if not metric:
+            # Multi-metric comparison ("2024 ve 2025 için toplam, gerçekleşen ve
+            # gelmeyen randevuyu karşılaştır") renders one current_/baseline_
+            # conditional-aggregate pair PER metric. The PRIMARY metric keeps the
+            # canonical current_period_count/baseline_period_count aliases so the
+            # PeriodComparisonResult contract and its renderer keep working
+            # unchanged; the remaining metrics are added as extra columns. Before
+            # this the whole plan was rejected and surfaced as "Yanıt
+            # Oluşturulamadı" (Codex live UI testing, 2026-07-31).
+            requested = plan.metrics or ["appointment_count"]
+            resolved, skipped = self._metric_expressions(requested)
+            # A composite rate cannot be gated on a period without nesting
+            # aggregates; drop it here and report it via `skipped_metrics` so
+            # the answer can say which metric was left out, rather than emitting
+            # SQL the database would reject.
+            conditionable = [
+                (metric_id, expression)
+                for metric_id, expression in resolved
+                if self._can_condition(expression)
+            ]
+            skipped = skipped + [
+                metric_id
+                for metric_id, expression in resolved
+                if not self._can_condition(expression)
+            ]
+            if not conditionable:
                 return UnsupportedPlan(
                     "period comparison metric mapping is not verified", plan.metrics
                 )
-            current_expr = self._conditional(metric, current)
-            baseline_expr = self._conditional(metric, baseline)
-            select = (
-                f"N'{current_label}' AS current_period_label, "
-                f"N'{baseline_label}' AS baseline_period_label, "
-                f"{current_expr} AS current_period_count, "
-                f"{baseline_expr} AS baseline_period_count, "
-                f"({current_expr}) - ({baseline_expr}) AS absolute_change, "
-                f"100.0 * (({current_expr}) - ({baseline_expr})) / NULLIF(({baseline_expr}), 0) AS percentage_change"
+            resolved = conditionable
+            # A plain total makes the most sensible headline number when the
+            # question mixed it with status breakdowns; otherwise keep the
+            # planner's own ordering.
+            primary_index = next(
+                (i for i, (mid, _) in enumerate(resolved) if mid == "appointment_count"), 0
             )
+            primary_id, primary = resolved[primary_index]
+            current_expr = self._conditional(primary, current)
+            baseline_expr = self._conditional(primary, baseline)
+            parts = [
+                f"N'{current_label}' AS current_period_label",
+                f"N'{baseline_label}' AS baseline_period_label",
+                f"{current_expr} AS current_period_count",
+                f"{baseline_expr} AS baseline_period_count",
+                f"({current_expr}) - ({baseline_expr}) AS absolute_change",
+                f"100.0 * (({current_expr}) - ({baseline_expr})) / NULLIF(({baseline_expr}), 0) AS percentage_change",
+            ]
             aliases = [
                 "current_period_label",
                 "baseline_period_label",
@@ -478,11 +510,33 @@ class DeterministicSQLBuilder:
                 "absolute_change",
                 "percentage_change",
             ]
+            for index, (metric_id, expression) in enumerate(resolved):
+                if index == primary_index or not self._is_safe_identifier(metric_id):
+                    continue
+                cur_metric = self._conditional(expression, current)
+                base_metric = self._conditional(expression, baseline)
+                parts.extend(
+                    [
+                        f"{cur_metric} AS current_{metric_id}",
+                        f"{base_metric} AS baseline_{metric_id}",
+                        f"({cur_metric}) - ({base_metric}) AS {metric_id}_change",
+                    ]
+                )
+                aliases.extend(
+                    [f"current_{metric_id}", f"baseline_{metric_id}", f"{metric_id}_change"]
+                )
+                metric_aliases[metric_id] = f"current_{metric_id}"
+            metric_aliases[primary_id] = "current_period_count"
+            select = ", ".join(parts)
         filters = self._render_structured_filters(plan)
         filter_sql = f" AND {' AND '.join(filters)}" if filters else ""
         sql = f"SELECT {select}\nFROM {VIEW}\nWHERE (({current}) OR ({baseline})){filter_sql};"
         return DeterministicSQL(
-            sql=sql, result_schema="PeriodComparisonResult", expected_aliases=aliases
+            sql=sql,
+            result_schema="PeriodComparisonResult",
+            expected_aliases=aliases,
+            skipped_metrics=skipped,
+            metric_aliases=metric_aliases,
         )
 
     def _multi_period_breakdown(self, plan: QueryPlan) -> DeterministicSQL | UnsupportedPlan:
@@ -1691,6 +1745,22 @@ class DeterministicSQLBuilder:
     def _period_predicate(self, period) -> str:
         column = period.column or DATE_COLUMN
         return f"{column} >= '{period.start_inclusive}' " f"AND {column} < '{period.end_exclusive}'"
+
+    def _can_condition(self, expression: str) -> bool:
+        """True when `_conditional` can safely gate this metric on a period.
+
+        A composite formula — a rate such as
+        `100.0 * SUM(CASE ...) / NULLIF(COUNT(*), 0)` — carries TWO aggregate
+        calls inside an arithmetic expression. `_conditional`'s generic fallback
+        would wrap the whole thing in another SUM(CASE ...), nesting an
+        aggregate inside an aggregate, which SQL Server rejects outright. Such a
+        metric can only be compared across periods through the
+        numerator/denominator path, never as an extra conditional column.
+        """
+        normalized = expression.strip()
+        if len(_AGGREGATE_CALL.findall(normalized)) != 1:
+            return False
+        return bool(_LEADING_AGGREGATE.match(normalized)) and normalized.endswith(")")
 
     def _conditional(self, aggregate: str, condition: str) -> str:
         normalized = aggregate.strip()

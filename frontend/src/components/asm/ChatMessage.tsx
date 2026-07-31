@@ -1,8 +1,17 @@
 import { AnimatePresence, motion } from "motion/react";
-import { lazy, Suspense, useState, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { SqlCode } from "./SqlCode";
+import { formatSqlCell } from "@/lib/sql-cell-format";
 import {
   Activity,
   AlertTriangle,
@@ -83,9 +92,46 @@ export function ChatMessage({
     returnsLoadingPlaceholder,
   });
 
+  // Copy the *visible artifact*, not just message.content. For a table/chart
+  // answer, message.content is often only a scope note ("Önceki cevaptaki
+  // kapsam kullanıldı.") — the meaningful output is the table. For a SQL-only
+  // answer the artifact is the query itself.
+  const buildCopyText = () => {
+    const content = message.content?.trim() ?? "";
+    const sections = message.visibleSections;
+    const result = message.sqlResult;
+    const isSqlOnly =
+      message.responseMode === "sql" ||
+      Boolean(
+        sections?.includes("sql") &&
+          !sections.includes("table") &&
+          !sections.includes("chart"),
+      );
+    if (isSqlOnly && result?.query?.trim()) {
+      return result.query.trim();
+    }
+    const parts: string[] = [];
+    if (content) parts.push(content);
+    if (result && result.columns.length > 0 && result.rows.length > 0) {
+      const header = result.columns.join("\t");
+      const body = result.rows
+        .map((row) =>
+          result.columns
+            .map((column) => {
+              const cell = formatSqlCell(column, row[column]);
+              return cell.kind === "null" ? "" : cell.display;
+            })
+            .join("\t"),
+        )
+        .join("\n");
+      parts.push(`${header}\n${body}`);
+    }
+    return parts.join("\n\n").trim() || content;
+  };
+
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(message.content);
+      await navigator.clipboard.writeText(buildCopyText());
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -461,21 +507,63 @@ function AssistantText({
 
 function MarkdownTable({ children }: { children: ReactNode }) {
   const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // A report table wider than the chat column can only be read by
+  // horizontal scrolling inside a cramped box — so when it overflows we make
+  // the fullscreen affordance obvious (button always shown, whole table
+  // clickable) instead of the quiet hover-only reveal used for tables that
+  // already fit.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const measure = () => setOverflowing(el.scrollWidth - el.clientWidth > 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [children]);
+
   const renderTable = () => <table className="min-w-max table-auto text-xs">{children}</table>;
 
   return (
     <>
-      <div className="group/table relative my-2 max-w-full overflow-hidden rounded-xl border border-border [&_tbody_tr:hover]:bg-primary/5 [&_tbody_tr:nth-child(even)]:bg-muted/30">
+      <div className="group/table relative my-2 w-fit max-w-full overflow-hidden rounded-xl border border-border [&_tbody_tr:hover]:bg-primary/5 [&_tbody_tr:nth-child(even)]:bg-muted/30">
         <button
           type="button"
           onClick={() => setExpanded(true)}
           aria-label={tr.sqlTable.openFullscreen}
           title={tr.sqlTable.openFullscreen}
-          className="absolute right-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-md border border-border/70 bg-background/85 text-muted-foreground opacity-100 shadow-sm backdrop-blur transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 sm:opacity-0 sm:group-hover/table:opacity-100 sm:group-focus-within/table:opacity-100"
+          className={cn(
+            "absolute right-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-md border border-border/70 bg-background/85 text-muted-foreground shadow-sm backdrop-blur transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+            overflowing
+              ? "opacity-100"
+              : "opacity-100 sm:opacity-0 sm:group-hover/table:opacity-100 sm:group-focus-within/table:opacity-100",
+          )}
         >
           <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
-        <div className="max-w-full overflow-x-auto">{renderTable()}</div>
+        <div
+          ref={scrollRef}
+          className={cn("max-w-full overflow-x-auto", overflowing && "cursor-zoom-in")}
+          {...(overflowing
+            ? {
+                role: "button" as const,
+                tabIndex: 0,
+                "aria-label": tr.sqlTable.openFullscreen,
+                onClick: () => setExpanded(true),
+                onKeyDown: (event: ReactKeyboardEvent) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setExpanded(true);
+                  }
+                },
+              }
+            : {})}
+        >
+          {renderTable()}
+        </div>
       </div>
       <Dialog open={expanded} onOpenChange={setExpanded}>
         <DialogContent className="h-[calc(100vh-3rem)] w-[min(calc(100vw-2rem),72rem)] max-w-none gap-0 overflow-hidden p-0">

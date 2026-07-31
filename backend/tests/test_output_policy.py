@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 
+import pytest
+
 from app.application_models.workflow_models import QueryResult
 from app.reporting.output_policy import (
     detect_requested_visualization,
@@ -130,6 +132,22 @@ def test_negated_grafik_request_shows_only_table_not_chart():
     )
     assert policy.response_mode == "data"
     assert policy.visible_sections == ["table"]
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Sadece tablo göster, grafik olmasın",
+        "Grafik istemiyorum, tabloyu ver",
+        "Tablo ver, grafik gerekmiyor",
+    ],
+)
+def test_non_degil_chart_rejections_also_suppress_the_chart(question):
+    """The rejection is not always "değil" — "grafik olmasın"/"istemiyorum"
+    reject just as explicitly but still rendered the chart panel next to the
+    requested table (Codex live UI testing, 2026-07-31)."""
+    assert determine_requested_response_mode(question) == "data"
+    assert determine_requested_visible_sections(question) == ["table"]
 
 
 def test_positive_grafik_forms_still_read_as_visualization():

@@ -602,6 +602,33 @@ def test_explicit_pie_request_overrides_shape_default_when_drawable():
     assert recommendation.type == VisualizationType.PIE_CHART
 
 
+def test_explicit_line_request_overrides_categorical_bar_default():
+    # "Çizgi grafik olarak göster" on categorical data forces a line chart,
+    # overriding the bar-chart default (Codex live UI finding: explicit "çizgi
+    # grafik" still rendered as a bar).
+    recommendation = VisualizationSelector().select(
+        data_shape=DataShape.CATEGORICAL,
+        intents=[AnalyticsIntent.RANKING],
+        row_count=6,
+        category_count=6,
+        metric_count=1,
+        requested_type="LINE_CHART",
+    )
+    assert recommendation.type == VisualizationType.LINE_CHART
+
+
+def test_explicit_bar_request_overrides_time_series_line_default():
+    recommendation = VisualizationSelector().select(
+        data_shape=DataShape.TIME_SERIES,
+        intents=[],
+        row_count=12,
+        category_count=12,
+        metric_count=1,
+        requested_type="BAR_CHART",
+    )
+    assert recommendation.type == VisualizationType.BAR_CHART
+
+
 def test_explicit_pie_request_ignored_when_too_many_categories():
     # A pie of 40 slices is illegible — keep the shape-based fallback.
     recommendation = VisualizationSelector().select(

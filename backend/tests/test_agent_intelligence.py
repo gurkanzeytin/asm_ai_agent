@@ -606,6 +606,36 @@ def test_ratio_with_no_dimension_falls_back_to_count(planner, analyzer):
     assert plan.dimensions == []
 
 
+def test_percentage_plan_without_division_does_not_require_nullif(planner, analyzer):
+    """A 'percentage' analysis type whose plan carries no numerator/denominator
+    renders as a plain COUNT(*) — with no division in the SQL there is nothing
+    for NULLIF to protect, so compliance must not reject it. This fired as
+    "Yanıt Oluşturulamadı" on the follow-up "aradaki farkı yüzde ve adet olarak
+    göster" (Codex live UI testing, 2026-07-31)."""
+    from app.planning.compliance import PlanComplianceValidator
+
+    plan = plan_for(planner, analyzer, "aradaki farkı yüzde ve adet olarak göster")
+    assert plan.analysis_type == "percentage"
+    assert not (plan.numerator and plan.denominator)
+
+    sql = "SELECT COUNT(*) AS appointment_count\nFROM dbo.vw_RandevuRaporu;"
+    result = PlanComplianceValidator().check(sql, plan)
+    assert not any("NULLIF" in issue for issue in result.missing), result.missing
+
+
+def test_ratio_sql_that_divides_still_requires_nullif(planner, analyzer):
+    """The guard still protects a real division."""
+    from app.planning.compliance import PlanComplianceValidator
+
+    plan = plan_for(planner, analyzer, "Gerçekleşme oranı nedir?")
+    unprotected = (
+        "SELECT 100.0 * SUM(CASE WHEN RandevuDurumu = N'Gerçekleşti' THEN 1 ELSE 0 END) "
+        "/ COUNT(*) AS completed_rate FROM dbo.vw_RandevuRaporu;"
+    )
+    result = PlanComplianceValidator().check(unprotected, plan)
+    assert any("NULLIF" in issue for issue in result.missing)
+
+
 def test_named_ratio_metric_is_unaffected_by_distribution_fallback(planner, analyzer):
     """A phrase that DOES match a specific ratio metric keeps analysis_type
     'ratio' with its numerator/denominator - only the empty-metric case

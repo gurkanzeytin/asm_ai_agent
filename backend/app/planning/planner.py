@@ -16,6 +16,7 @@ from app.planning.models import (
     PlannedMetric,
     QueryPlan,
 )
+from app.reporting.presentation import get_dimension_label
 from app.semantics import catalog, examples, reasoning, view_mapping
 
 if TYPE_CHECKING:  # avoid importing the database_intelligence package at runtime
@@ -419,6 +420,24 @@ class QueryPlanner:
             # numerator; a hard status WHERE filter would corrupt the denominator.
             if intelligence["numerator"] and status_filter:
                 extra_filters = [f for f in extra_filters if f != status_filter]
+            # Several status-differentiated metrics in one question ("toplam,
+            # gerçekleşen ve gelmeyen randevu sayıları") each embed their OWN
+            # status inside a SUM(CASE ...); the status word "gerçekleşen" also
+            # resolved a GLOBAL status WHERE filter, which would exclude the
+            # rows the OTHER metrics need — collapsing "toplam"/"gelmeyen" to
+            # the completed count and zero (live UI 2026-07-30: gerçekleşen ==
+            # toplam, gelmeyen == 0 for every department). When any planned
+            # metric measures a different (or no) status than the global
+            # filter, keep the status only in the per-metric CASE.
+            elif (
+                status_filter
+                and status_value
+                and any(
+                    catalog.metric_status_value(metric_id) != status_value
+                    for metric_id in intelligence["metrics"]
+                )
+            ):
+                extra_filters = [f for f in extra_filters if f != status_filter]
 
             # AI-INTELLIGENCE-008: implicit analytical wording resolves to an
             # explicit strategy (goal, cohort, baseline, KPI set, assumptions).
@@ -546,6 +565,7 @@ class QueryPlanner:
                 analysis,
                 date_filters,
                 intelligence["analysis_type"],
+                folded,
             )
 
             # Defense in depth: the deterministic time-series builder has no
@@ -633,7 +653,11 @@ class QueryPlanner:
                 baseline_period=strategy.baseline_period if strategy else None,
                 cohort=strategy.cohort if strategy else None,
                 minimum_sample_size=strategy.minimum_sample_size if strategy else None,
-                assumptions=(strategy.assumptions if strategy else []) + scope_assumptions,
+                assumptions=(
+                    (strategy.assumptions if strategy else [])
+                    + scope_assumptions
+                    + self._dropped_breakdown_assumptions(intelligence)
+                ),
                 planner_ms=(time.perf_counter() - start) * 1000,
             )
             self._log_plan(plan)
@@ -646,7 +670,9 @@ class QueryPlanner:
             output_table=output_table,
             fact_table=fact_table,
             date_filters=date_filters,
-            periods=self._comparison_periods(analysis, date_filters, signals.analysis_type),
+            periods=self._comparison_periods(
+                analysis, date_filters, signals.analysis_type, folded
+            ),
             department_filter=signals.department,
             scope=scope,
             branch_filters=[],
@@ -756,6 +782,9 @@ class QueryPlanner:
         answerable, reason, alternative = catalog.check_answerability(folded)
         metrics = catalog.match_metrics(folded)
         dimensions = catalog.match_dimensions(folded)
+        # Breakdown the user asked for that this plan shape cannot honour;
+        # surfaced as a plan assumption so the answer states the limitation.
+        dropped_breakdown: list[str] = []
         patient_span_requested = self._patient_appointment_span_requested(folded)
         patient_period_overlap_requested = self._patient_period_overlap_requested(
             folded, analysis
@@ -924,7 +953,18 @@ class QueryPlanner:
             pattern = "distribution" if dimensions else "count"
 
         granularity = catalog.match_granularity(folded)
-        if granularity is None and _MONTH_BUCKET_RANKING_PATTERN.search(folded):
+        # The implied-monthly-bucket heuristic ("en çok randevu alan 3 ay")
+        # must NOT fire when the turn already ranks a real entity dimension
+        # (şube/bölüm/doktor): there the "ay" token belongs to a date-scope
+        # phrase like "ilk 6 ayında ... en yoğun 5 şube" (= first 6 months),
+        # not a request to bucket BY month. Ranking stays on the entity; a
+        # spurious month grain would turn top-5-branches into top-5
+        # (month, branch) rows dominated by the largest branch.
+        if (
+            granularity is None
+            and not dimensions
+            and _MONTH_BUCKET_RANKING_PATTERN.search(folded)
+        ):
             granularity = "month"
         comparisons = catalog.detect_period_comparison(folded, date_range_count)
         two_month_change_request = self._can_split_two_month_span(
@@ -1005,6 +1045,13 @@ class QueryPlanner:
             # are derived below), so gate on the count metric directly.
             supported_grouped = metrics in ([], ["appointment_count"])
             if not supported_grouped:
+                # Record what was dropped so the answer can SAY the breakdown
+                # was not applied. Silently returning a two-period total for
+                # "bölüm bazında kıyasla" reads as a wrong answer rather than a
+                # limitation (Codex live UI finding, 2026-07-31).
+                dropped_breakdown = [
+                    get_dimension_label(dimension) for dimension in dimensions
+                ]
                 dimensions = []
 
         # A trend question ("randevu eğilimini özetle") carries no explicit
@@ -1185,6 +1232,7 @@ class QueryPlanner:
             "confidence": confidence,
             "aggregation": resolved_aggregation,
             "projection": resolved_projection,
+            "dropped_breakdown": dropped_breakdown,
         }
 
     def _view_output_entity(self, analysis: QueryAnalysis, output_entity: str | None) -> str | None:
@@ -1426,8 +1474,18 @@ class QueryPlanner:
         analysis: QueryAnalysis,
         date_filters: list[DateFilterPlan],
         analysis_type: str | None,
+        folded: str,
     ) -> list[PeriodPlan]:
-        """Carries parser periods into the plan as half-open ranges."""
+        """Carries parser periods into the plan as half-open ranges.
+
+        Periods are ordered [baseline, current] — the invariant the SQL builder
+        and comparison renderer rely on. For a *symmetric* comparison ("A ile B",
+        "A ve B") the parser's mention order is kept as-is (first mentioned =
+        baseline). For a *directional* comparison naming a reference period
+        ("2025'in 2024'e göre değişimi") the first-mentioned period is the
+        subject/current and the second is the baseline, so we reverse mention
+        order to restore the [baseline, current] invariant.
+        """
         if analysis_type in _PERIOD_ANALYSIS_TYPES:
             split_span_periods = self._two_month_span_periods(
                 analysis.detected_dates,
@@ -1448,7 +1506,21 @@ class QueryPlanner:
                     column=date_filter.column,
                 )
             )
+        if len(periods) == 2 and catalog.has_directional_period_reference(folded):
+            periods.reverse()
         return periods
+
+    def _dropped_breakdown_assumptions(self, intelligence: dict) -> list[str]:
+        """States a breakdown the plan could not honour, so the answer does not
+        present a two-period total as if it were the requested per-dimension
+        comparison."""
+        dropped = intelligence.get("dropped_breakdown") or []
+        if not dropped:
+            return []
+        return [
+            f"{', '.join(dropped)} bazında dönem karşılaştırması bu metrik için "
+            "henüz desteklenmiyor; sonuç dönem toplamları olarak verildi."
+        ]
 
     def _period_change_direction(self, folded_question: str) -> str | None:
         return catalog.period_change_direction(folded_question)
@@ -1524,8 +1596,16 @@ class QueryPlanner:
             marker in folded_expression for marker in ("bu ay", "gecen ay")
         ):
             return f"{_MONTH_LABELS[period.start_date.month]} {period.start_date.year}"
-        if period.granularity == "year" and re.fullmatch(r"\d{4}", period.expression):
-            return period.expression
+        # A full calendar year labels as just the year. The raw expression can
+        # carry trailing preposition/question words ("2025 için", "2024 yılına",
+        # "2023 yılında") the parser kept attached to the date token — those must
+        # never leak into the period label (or the SQL N'...' literal and the
+        # user-facing "… döneminde" summary). Extract the year instead of
+        # requiring the whole expression to be exactly four digits.
+        if period.granularity == "year":
+            year_match = re.search(r"\b(\d{4})\b", period.expression)
+            if year_match:
+                return year_match.group(1)
         return period.expression.strip()
 
     def _date_column(
@@ -1724,18 +1804,32 @@ class QueryPlanner:
             cleaned = token.replace(".", "").replace(" ", "")
             return float(cleaned) if cleaned.isdigit() else None
 
+        # An exclusion phrase flips the bound: "100'den az olanları DIŞARIDA
+        # BIRAK / hariç tut / çıkar" keeps the complement (>= 100), not the
+        # matched "< 100" set. Without this the filter kept exactly the groups
+        # the user asked to remove (Codex live UI finding). "hariç" for a named
+        # department has no numeric bound here, so it never reaches this branch.
+        excludes = any(
+            marker in folded_question
+            for marker in ("disarida birak", "disari birak", "haric tut", "haricinde", "cikar")
+        )
+        inverse = {">=": "<", "<=": ">", "<": ">=", ">": "<="}
+
+        def _bound(operator: str, token: str) -> AggregateThreshold | None:
+            value = _num(token)
+            if value is None:
+                return None
+            resolved = inverse[operator] if excludes else operator
+            return AggregateThreshold(operator=resolved, value=value)
+
         if at_least:
-            value = _num(at_least.group(1))
-            return AggregateThreshold(operator=">=", value=value) if value is not None else None
+            return _bound(">=", at_least.group(1))
         if at_most:
-            value = _num(at_most.group(1))
-            return AggregateThreshold(operator="<=", value=value) if value is not None else None
+            return _bound("<=", at_most.group(1))
         if less:
-            value = _num(less.group(1))
-            return AggregateThreshold(operator="<", value=value) if value is not None else None
+            return _bound("<", less.group(1))
         if more:
-            value = _num(more.group(1))
-            return AggregateThreshold(operator=">", value=value) if value is not None else None
+            return _bound(">", more.group(1))
         return None
 
     def _extra_filters(self, folded_question: str) -> list[str]:

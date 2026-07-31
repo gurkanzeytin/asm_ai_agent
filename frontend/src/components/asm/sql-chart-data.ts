@@ -14,7 +14,17 @@ const MAX_PIE_ITEMS = 8;
 
 export function chartTypeFromRecommendation(value?: string | null): ChartType | null {
   const normalized = value?.toUpperCase();
-  if (normalized === "BAR_CHART" || normalized === "BAR") return "bar";
+  // GROUPED_BAR_CHART / MULTI_SERIES_BAR_CHART are backend bar variants — they
+  // must map to "bar", not fall through to null and let the panel silently
+  // re-guess a default. The frontend never re-derives the chart type; it honors
+  // whatever the backend recommended.
+  if (
+    normalized === "BAR_CHART" ||
+    normalized === "BAR" ||
+    normalized === "GROUPED_BAR_CHART" ||
+    normalized === "MULTI_SERIES_BAR_CHART"
+  )
+    return "bar";
   if (normalized === "LINE_CHART" || normalized === "LINE") return "line";
   if (normalized === "PIE_CHART" || normalized === "PIE") return "pie";
   return null;

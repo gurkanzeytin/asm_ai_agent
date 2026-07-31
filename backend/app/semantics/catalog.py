@@ -283,9 +283,17 @@ _PERIOD_INCREASE_MARKERS = ("artan", "artis", "yukselen", "yukselis")
 _PERIOD_DECREASE_MARKERS = ("azalan", "azalis", "dusen", "dusus")
 
 _GRANULARITY_TERMS = [
-    ("hour", ("saatlik", "saat bazinda", "saatlere gore")),
-    ("day", ("gunluk", "gun bazinda", "gunlere gore", "gun gun", "gune gore")),
-    ("week", ("haftalik", "hafta bazinda", "haftalara gore", "haftaya gore dagilim")),
+    # "<birim> kırılımı/kırılımında" is the same request as "<birim> bazında"
+    # but was matched for none of the granularities, so "Bunu ay kırılımında
+    # göster" kept the previous turn's dimension instead of bucketing by month
+    # (Codex live UI testing, 2026-07-31). Matching is substring-based, so the
+    # bare "kirilim" stem covers -ı/-ında/-ını/-ıyla.
+    ("hour", ("saatlik", "saat bazinda", "saatlere gore", "saat kirilim")),
+    ("day", ("gunluk", "gun bazinda", "gunlere gore", "gun gun", "gune gore", "gun kirilim")),
+    (
+        "week",
+        ("haftalik", "hafta bazinda", "haftalara gore", "haftaya gore dagilim", "hafta kirilim"),
+    ),
     (
         "month",
         (
@@ -298,6 +306,7 @@ _GRANULARITY_TERMS = [
             "ayina ve",
             "ayina gore say",
             "ayina gore goster",
+            "ay kirilim",
         ),
     ),
 ]
@@ -809,6 +818,31 @@ def detect_period_comparison(folded_question: str, detected_date_ranges: int = 0
     ):
         return ["two_explicit_periods"]
     return []
+
+
+# A "göre"/"nazaran" reference only counts as *directional period* wording when
+# it attaches to a date token — a 4-digit year ("2024 e gore") or a month name
+# ("nisana gore"). This deliberately excludes dimension/granularity group-by
+# phrasing that also uses "göre" ("bölümlere göre", "aylara göre"), which must
+# never flip the comparison's baseline/current order.
+_DIRECTIONAL_REFERENCE_RE = re.compile(
+    r"(?:\b\d{4}\b|\b(?:ocak|subat|mart|nisan|mayis|haziran|temmuz|agustos|eylul|ekim|"
+    r"kasim|aralik)[a-z]*)\s+(?:e|a|ye|ya)?\s*(?:gore|nazaran)\b"
+)
+
+
+def has_directional_period_reference(folded_question: str) -> bool:
+    """True when a two-period comparison names a *reference* period the other is
+    measured against — "2025'in 2024'e göre değişimi", "mayısta nisana göre".
+
+    In this construction the first-mentioned period is the subject/current and
+    the second is the reference/baseline, so callers ordering periods by mention
+    must reverse them to keep the [baseline, current] invariant. Symmetric
+    comparisons ("A ile B", "A ve B", "A ile B'yi kıyasla") and group-by "göre"
+    ("bölümlere göre") carry no date-attached reference and return False, so
+    mention order is preserved.
+    """
+    return bool(_DIRECTIONAL_REFERENCE_RE.search(folded_question))
 
 
 def detect_age_group_request(folded_question: str) -> bool:

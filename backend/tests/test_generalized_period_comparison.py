@@ -112,6 +112,34 @@ def test_period_comparison_pipeline_is_general_and_ordered(question, expected):
     assert row.percentage_change == 100 * row.absolute_change / row.baseline_period_count
 
 
+@pytest.mark.parametrize(
+    "question,expected_baseline,expected_current",
+    [
+        # Directional "X'in Y'e göre ..." — X (first mentioned) is the subject
+        # (current), Y (second) is the reference (baseline). Mention order must
+        # be reversed to keep the [baseline, current] plan invariant.
+        ("2025'in 2024'e gore randevu degisimi", "2024", "2025"),
+        ("2025 mayista nisana gore randevu degisimi", "Nisan 2025", "Mayıs 2025"),
+    ],
+)
+def test_directional_comparison_reverses_to_chronological_baseline(
+    question, expected_baseline, expected_current
+):
+    _, plan, _ = _pipeline(question)
+    assert plan.analysis_type == "period_comparison"
+    baseline, current = plan.periods
+    assert baseline.label == expected_baseline
+    assert current.label == expected_current
+
+
+def test_symmetric_comparison_keeps_mention_order():
+    # No directional reference marker → first mentioned stays baseline.
+    _, plan, _ = _pipeline("2025 ile 2024 randevu sayilarini karsilastir.")
+    baseline, current = plan.periods
+    assert baseline.label == "2025"
+    assert current.label == "2024"
+
+
 def _month_pairs():
     values = []
     for index in range(50):
@@ -119,6 +147,10 @@ def _month_pairs():
         second_year = 2000 + (index * 11 + 3) % 31
         first_month = index % 12 + 1
         second_month = (index * 5 + 8) % 12 + 1
+        # Skip identical pairs: comparing a period to itself is a degenerate
+        # self-comparison the duplicate-period compliance guard rejects.
+        if (first_year, first_month) == (second_year, second_month):
+            continue
         values.append((first_year, first_month, second_year, second_month))
     return values
 
@@ -196,6 +228,15 @@ def test_compliance_requires_exactly_two_plan_periods():
     result = PlanComplianceValidator().check(built.sql, invalid)
     assert not result.compliant
     assert "period comparison requires exactly two plan periods" in result.missing
+
+
+def test_compliance_rejects_duplicate_periods():
+    _, plan, built = _pipeline("2022 Aralik ile 2023 Mart randevu sayilarini karsilastir.")
+    baseline, _ = plan.periods
+    duplicated = plan.model_copy(update={"periods": [baseline, baseline.model_copy()]})
+    result = PlanComplianceValidator().check(built.sql, duplicated)
+    assert not result.compliant
+    assert any("duplicate periods" in issue for issue in result.missing)
 
 
 def test_zero_baseline_percentage_is_null_safe_and_contract_complete():

@@ -276,6 +276,15 @@ class TemplateReportRenderer:
         # in live multi-turn testing). get_column_label() covers both.
         query_result = cap_query_result(query_result, DEFAULT_GROUPED_RESULT_LIMIT)
         columns = query_result.columns or _columns_from_rows(query_result.rows)
+        # Respect hidden_columns (e.g. the canonical DoktorId grouping key,
+        # hidden once DoktorAdi is resolved) — otherwise a doctor result
+        # rendered both DoktorAdi and DoktorId, BOTH labelled "Doktor", with
+        # the raw id shown as a thousands-formatted number (live UI
+        # 2026-07-30: "en çok randevusu olan 10 doktor" → two "DOKTOR" columns,
+        # e.g. 6.000.971). Fall back to the full set if hiding leaves nothing.
+        hidden = set(query_result.hidden_columns or [])
+        if hidden:
+            columns = [column for column in columns if column not in hidden] or columns
         branch_note = _single_branch_scope_note(query_result)
         header = "| " + " | ".join(get_column_label(col) for col in columns) + " |"
         separator = "| " + " | ".join("---" for _ in columns) + " |"

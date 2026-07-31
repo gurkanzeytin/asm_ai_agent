@@ -1,5 +1,6 @@
 # ruff: noqa: E501
 
+import re
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -15,7 +16,11 @@ from app.planning.models import QueryPlan
 from app.planning.planner import QueryPlanner
 from app.semantics import catalog
 from app.semantics.models import SemanticFrame
-from app.services.deterministic_sql_builder import DeterministicSQLBuilder, UnsupportedPlan
+from app.services.deterministic_sql_builder import (
+    DeterministicSQL,
+    DeterministicSQLBuilder,
+    UnsupportedPlan,
+)
 from app.services.query_analyzer import QueryAnalyzer
 from app.services.sql_service import SQLService
 from app.sql_validator.validator import SQLValidator
@@ -549,13 +554,49 @@ def test_trend_builder_rejects_multi_metric_explicitly():
     assert "multi-metric" in built.reason
 
 
-def test_period_comparison_rejects_multi_metric_explicitly():
+def test_period_comparison_renders_a_column_pair_per_metric():
+    """Multi-metric comparison ("2024 ve 2025 için toplam, gerçekleşen ve
+    gelmeyen randevuyu karşılaştır") builds one current_/baseline_ pair per
+    metric. It used to be rejected outright and surfaced as "Yanıt
+    Oluşturulamadı" (Codex live UI testing, 2026-07-31). The PRIMARY metric
+    keeps the canonical aliases so the PeriodComparisonResult contract and its
+    renderer are unchanged."""
+    plan = _plan("Bu ay ile gecen ayin randevu sayilarini karsilastir.").model_copy(
+        update={
+            "metrics": [
+                "completed_appointment_count",
+                "appointment_count",
+                "no_show_count",
+            ]
+        }
+    )
+    built = DeterministicSQLBuilder()._period_comparison(plan, adaptive_retry=False)
+    assert isinstance(built, DeterministicSQL)
+    # The plain total is the headline pair, whatever order the planner used.
+    assert "AS current_period_count" in built.sql
+    assert "AS baseline_period_count" in built.sql
+    for metric_id in ("completed_appointment_count", "no_show_count"):
+        assert f"AS current_{metric_id}" in built.sql
+        assert f"AS baseline_{metric_id}" in built.sql
+
+
+def test_period_comparison_skips_rate_metric_instead_of_nesting_aggregates():
+    """A composite rate (`100.0 * SUM(...) / NULLIF(COUNT(*), 0)`) cannot be
+    gated on a period without nesting an aggregate inside an aggregate, which
+    SQL Server rejects. It must be reported through `skipped_metrics`, never
+    emitted."""
     plan = _plan("Bu ay ile gecen ayin randevu sayilarini karsilastir.").model_copy(
         update={"metrics": ["appointment_count", "completed_appointment_rate"]}
     )
     built = DeterministicSQLBuilder()._period_comparison(plan, adaptive_retry=False)
-    assert isinstance(built, UnsupportedPlan)
-    assert "multi-metric" in built.reason
+    assert isinstance(built, DeterministicSQL)
+    assert built.skipped_metrics == ["completed_appointment_rate"]
+    assert "completed_appointment_rate" not in built.sql
+    # No aggregate directly wrapping another aggregate.
+    assert not re.search(
+        r"(?:SUM|COUNT|AVG)\s*\([^()]*?(?:SUM|COUNT|AVG)\s*\(",
+        built.sql.replace("CASE WHEN", ""),
+    )
 
 
 # ═══════════════════════ Compliance: metric/dimension coverage ═══════════════

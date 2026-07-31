@@ -158,6 +158,22 @@ _PRONOUN_PATTERNS = [
     r"\bsunlardan\b",
     r"\bayni\s+kapsam\w*",
     r"\bayni\s+tablo\w*",
+    # Artifact references to the previous answer. Deliberately NOT included:
+    # "aynı gün" (same-day appointments) and "aynı hasta" (one patient across
+    # appointments) are DOMAIN terms, not references to the prior turn — adding
+    # them would date-scope genuine independent questions. "aynı yıllar" is
+    # matched in the plural only for the same reason ("aynı yıl içinde" is
+    # domain wording). Without these, "Aynı veriyi doktor bazında getir" was not
+    # a follow-up at all and silently lost the previous turn's date filter,
+    # answering over ALL time (Codex live UI testing, 2026-07-31).
+    r"\bayni\s+veri\w*",
+    r"\bayni\s+kirilim\w*",
+    r"\bayni\s+yillar\w*",
+    r"\bbu\s+liste\w*",
+    r"\bbu\s+tablo\w*",
+    r"\bbu\s+filtre\w*",
+    r"\bbu\s+analiz\w*",
+    r"\bson\s+sorgu\w*",
     r"\bbu\s+kapsam\w*",
     r"\bbu\s+sonuc\w*",
     r"\baynisini\b",

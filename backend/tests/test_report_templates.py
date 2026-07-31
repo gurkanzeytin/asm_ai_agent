@@ -117,6 +117,32 @@ def test_template_renderer_table():
     assert "| B | 8 |" in rendered.markdown
 
 
+def test_template_renderer_table_hides_hidden_columns():
+    """DoktorId is the canonical grouping key, hidden once DoktorAdi is
+    resolved (doctor_label_resolver). The markdown report table must NOT
+    render a hidden column — otherwise a doctor result shows TWO "Doktor"
+    columns, the second being the raw id formatted with thousands separators
+    (live UI 2026-07-30: "en çok randevusu olan 10 doktor" → e.g. 6.000.971)."""
+    result = _query_result(
+        ["DoktorAdi", "DoktorId", "appointment_count"],
+        [
+            {"DoktorAdi": "ÇAĞATAY ÖKTENLİ", "DoktorId": 7773, "appointment_count": 7922},
+            {"DoktorAdi": "MEHMET SEMİH AKİ", "DoktorId": 2480, "appointment_count": 7386},
+        ],
+    ).model_copy(update={"hidden_columns": ["DoktorId"]})
+
+    rendered = TemplateReportRenderer().render(ReportType.TABLE, result)
+
+    assert rendered is not None
+    assert "| Doktor | Toplam Randevu |" in rendered.markdown
+    header = next(
+        line for line in rendered.markdown.splitlines() if line.startswith("| Doktor")
+    )
+    assert header.count("Doktor") == 1  # DoktorAdi only, DoktorId hidden
+    assert "7.773" not in rendered.markdown  # raw id never shown
+    assert "2.480" not in rendered.markdown
+
+
 def test_template_renderer_table_uses_dimension_labels_not_raw_columns():
     """Table columns are almost always a mix of dimensions and metrics (e.g.
     entity_label + appointment_count) - label_for() only ever consults the

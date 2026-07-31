@@ -11,6 +11,9 @@ describe("SQL grafik veri hazırlama", () => {
     expect(chartTypeFromRecommendation("BAR_CHART")).toBe("bar");
     expect(chartTypeFromRecommendation("LINE_CHART")).toBe("line");
     expect(chartTypeFromRecommendation("PIE_CHART")).toBe("pie");
+    // Backend bar variants must map to "bar", never fall through to null.
+    expect(chartTypeFromRecommendation("GROUPED_BAR_CHART")).toBe("bar");
+    expect(chartTypeFromRecommendation("MULTI_SERIES_BAR_CHART")).toBe("bar");
     expect(chartTypeFromRecommendation("TABLE")).toBeNull();
   });
 
