@@ -446,6 +446,83 @@ async def test_ay_kiriliminda_followup_buckets_by_month():
     assert _date(plan) == ("2024-01-01", "2024-12-31")
 
 
+@pytest.mark.asyncio
+async def test_comparison_followup_dedupes_periods_and_keeps_direction():
+    """A follow-up resolves to the PREVIOUS question prepended to the current
+    one, so each year is detected twice — the comparison used to carry four
+    periods (two duplicate pairs) and die on the duplicate-period guard. The
+    prepending also moves which period is mentioned first, which silently
+    inverted the comparison. Both fixed (Codex live UI testing, 2026-07-31)."""
+    chain = _Chain()
+    await chain.turn("2024 ve 2025 toplam randevuları yan yana karşılaştır.")
+    plan, resolution = await chain.turn(
+        "2025, 2024'e göre yüzde kaç değişti? Artış mı düşüş mü net söyle."
+    )
+    assert resolution.follow_up_detected is True
+    assert len(plan.periods) == 2
+    baseline, current = plan.periods
+    assert baseline.label == "2024"
+    assert current.label == "2025"
+
+    built = DeterministicSQLBuilder().build(plan)
+    assert isinstance(built, DeterministicSQL)
+    assert "N'2025' AS current_period_label" in built.sql
+    assert "N'2024' AS baseline_period_label" in built.sql
+    assert PlanComplianceValidator().check(
+        built.sql, plan, built.expected_aliases, deterministic=True
+    ).compliant
+
+
+@pytest.mark.asyncio
+async def test_scalar_comparison_drops_inherited_ranking_and_limit():
+    """A two-period comparison with no grouping dimension answers with ONE row:
+    nothing to sort, nothing to cap. Change wording resolves a ranking and an
+    earlier "ilk 5" survives in context; compliance then demanded an
+    "ORDER BY ... ASC" / "TOP (5)" that can never exist and the answer died."""
+    chain = _Chain()
+    await chain.turn("2022 yılında en yoğun ilk 5 bölümü toplam randevuya göre listele.")
+    await chain.turn("2024 ve 2025 toplam randevuları yan yana karşılaştır.")
+    plan, _ = await chain.turn("Bu düşüşleri büyükten küçüğe sırala.")
+
+    if len(plan.periods) == 2 and not plan.dimensions:
+        assert plan.ranking is None
+        assert plan.order is None
+        assert plan.limit is None
+        built = DeterministicSQLBuilder().build(plan)
+        assert isinstance(built, DeterministicSQL)
+        assert PlanComplianceValidator().check(
+            built.sql, plan, built.expected_aliases, deterministic=True
+        ).compliant
+
+
+def test_single_window_comparison_uses_previous_window_not_last_30_days():
+    """A comparison plan left with ONE resolved window must compare it against
+    the window immediately before it. It used to fall through to the
+    GETDATE()-relative default, silently answering about the last 30 days
+    instead of the year the plan states."""
+    from app.planning.models import DateFilterPlan
+
+    plan = QueryPlan(
+        question="2025'te düşen bölümler",
+        analysis_type="period_comparison",
+        metrics=["appointment_count"],
+        date_filters=[
+            DateFilterPlan(
+                expression="2025 te",
+                start_date="2025-01-01",
+                end_date="2025-12-31",
+                column="BaslangicTarihi",
+            )
+        ],
+    )
+    built = DeterministicSQLBuilder()._period_comparison(plan, adaptive_retry=False)
+    assert isinstance(built, DeterministicSQL)
+    assert "GETDATE()" not in built.sql
+    assert "'2025-01-01'" in built.sql
+    # Equal-length window ending the day before the current one.
+    assert "'2024-01-02'" in built.sql and "'2024-12-31'" in built.sql
+
+
 def test_same_day_wording_is_not_a_context_reference():
     """Guard for the fix above: 'aynı gün' is a DOMAIN term (same-day
     appointments), not a reference to the previous turn — it must never pull a

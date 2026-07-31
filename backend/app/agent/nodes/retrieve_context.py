@@ -3,7 +3,7 @@ import time
 
 from app.agent.nodes.node_interface import IAgentNode
 from app.agent.state import AgentState
-from app.context.analytical_signals import merge_query_plans
+from app.context.analytical_signals import dedupe_date_filters, merge_query_plans
 from app.planning.models import QueryPlan
 from app.planning.planner import QueryPlanner
 from app.semantics import catalog
@@ -141,9 +141,18 @@ class RetrieveContextNode(IAgentNode):
                             follow_up_detected=state.context_follow_up_detected,
                         )
                     else:
+                        # `resolved_plan` is planned from the RESOLVED question,
+                        # which prepends the previous turn — so it re-detects
+                        # every date mentioned earlier too. Normalise before
+                        # adopting them, or a broad early scope ("2022-2025
+                        # arasında …") keeps riding along with the narrower
+                        # years later turns name, and the window list grows
+                        # every turn (Codex live UI testing, 2026-07-31).
                         query_plan = query_plan.model_copy(
                             update={
-                                "date_filters": list(resolved_plan.date_filters),
+                                "date_filters": dedupe_date_filters(
+                                    list(resolved_plan.date_filters)
+                                ),
                                 "periods": [],
                                 "current_period": None,
                                 "baseline_period": None,

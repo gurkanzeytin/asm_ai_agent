@@ -231,10 +231,16 @@ export function ChatMessage({
                     />
                     <div
                       className={cn(
-                        "line-clamp-2 min-h-10 overflow-hidden break-words font-semibold tabular-nums tracking-tight [overflow-wrap:anywhere]",
-                        valueLength > 32
+                        // NOT `[overflow-wrap:anywhere]` here: that breaks a
+                        // figure mid-digits ("1.241.5 / 38…"), which is
+                        // unreadable and can even be misread as a different
+                        // number. The value wraps at spaces only ("1.241.538"
+                        // / "randevu") and shrinks a step earlier so a
+                        // thousands-separated figure still fits one line.
+                        "line-clamp-2 min-h-10 overflow-hidden font-semibold tabular-nums tracking-tight",
+                        valueLength > 24
                           ? "text-xs leading-5"
-                          : valueLength > 18
+                          : valueLength > 12
                             ? "text-sm leading-5"
                             : "text-xl leading-6",
                         card.isEmpty ? "text-muted-foreground" : "text-foreground",

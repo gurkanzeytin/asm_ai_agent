@@ -309,6 +309,23 @@ _GRANULARITY_TERMS = [
             "ay kirilim",
         ),
     ),
+    # Year bucketing had NO detection terms at all even though the builder
+    # renders it, so "yıl bazında / yıl yıl" questions collapsed to a single
+    # total (live UI testing, 2026-07-31). Deliberately no bare "yil": the
+    # extremely common "2024 yılında …" would then bucket every question.
+    (
+        "year",
+        (
+            "yillik",
+            "yil bazinda",
+            "yillara gore",
+            "yil yil",
+            "her yil",
+            "yil kirilim",
+            "yillar itibariyle",
+            "yil yil ver",
+        ),
+    ),
 ]
 
 _AGE_GROUP_TERMS = ("yas grubu", "yas gruplarina", "yas dagilimi", "yaslara gore", "yas araligi")
@@ -826,9 +843,26 @@ def detect_period_comparison(folded_question: str, detected_date_ranges: int = 0
 # phrasing that also uses "göre" ("bölümlere göre", "aylara göre"), which must
 # never flip the comparison's baseline/current order.
 _DIRECTIONAL_REFERENCE_RE = re.compile(
-    r"(?:\b\d{4}\b|\b(?:ocak|subat|mart|nisan|mayis|haziran|temmuz|agustos|eylul|ekim|"
-    r"kasim|aralik)[a-z]*)\s+(?:e|a|ye|ya)?\s*(?:gore|nazaran)\b"
+    r"\b(\d{4}|ocak|subat|mart|nisan|mayis|haziran|temmuz|agustos|eylul|ekim|"
+    r"kasim|aralik)[a-z]*\s+(?:e|a|ye|ya)?\s*(?:gore|nazaran)\b"
 )
+
+
+def directional_reference_token(folded_question: str) -> str | None:
+    """The date token a directional comparison measures AGAINST — the baseline.
+
+    "2025'in 2024'e göre değişimi" -> "2024"; "mayısta nisana göre" -> "nisan".
+    Keys on the grammatical marker rather than mention order, because a
+    follow-up is resolved by PREPENDING the previous question, which silently
+    changes which period is mentioned first (Codex live UI testing,
+    2026-07-31: "2025, 2024'e göre yüzde kaç değişti?" asked after "2024 ve
+    2025 ... karşılaştır" compared the two years backwards).
+    """
+    matches = list(_DIRECTIONAL_REFERENCE_RE.finditer(folded_question))
+    if not matches:
+        return None
+    # Last mention wins, consistent with `period_change_direction`.
+    return matches[-1].group(1)
 
 
 def has_directional_period_reference(folded_question: str) -> bool:

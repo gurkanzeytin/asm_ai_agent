@@ -88,7 +88,19 @@ class PlanComplianceValidator:
         folded_sql = sql.translate(_FOLD_TABLE).lower()
         missing: list[str] = []
 
-        for date_filter in plan.date_filters:
+        # A period comparison defines its own scope through its two comparison
+        # windows, which `_period_aggregate_issues` validates separately. Date
+        # filters accumulated from EARLIER turns ("2022-2025 arasında …", then
+        # "2023'ten 2024'e", then "2024'ten 2025'e") are vestigial there, and
+        # demanding each of them in the SQL rejected a perfectly correct
+        # two-window comparison (Codex live UI testing, 2026-07-31).
+        comparison_scoped = plan.analysis_type in (
+            "period_comparison",
+            "baseline_comparison",
+            "adaptive_time_comparison",
+            "percentage_change",
+        )
+        for date_filter in [] if comparison_scoped else plan.date_filters:
             # Both bounds must be present - `and` here would only flag a
             # filter as missing when NEITHER bound appears, letting a SQL that
             # kept the lower bound but silently dropped the upper one (e.g.
@@ -189,8 +201,16 @@ class PlanComplianceValidator:
             head = re.match(r"[A-Z]+", aggregation)
             function_name = head.group(0) if head else ""
             if function_name == "COUNT":
+                # A period comparison counts with SUM(CASE WHEN <window> ...),
+                # never a bare COUNT(*). Keyed on the analysis type, not on
+                # `plan.periods` being populated — a comparison that resolved
+                # its windows from `date_filters` carries no `periods` at all
+                # and was rejected for a COUNT( it can never emit (Codex live
+                # UI testing, 2026-07-31).
                 has_conditional_sum = bool(
-                    plan.periods and "sum(" in folded_sql and "case" in folded_sql
+                    (plan.periods or comparison_scoped)
+                    and "sum(" in folded_sql
+                    and "case" in folded_sql
                 )
                 if "count(" not in folded_sql and not has_conditional_sum:
                     missing.append(f"aggregation {plan.aggregation}")
@@ -206,7 +226,19 @@ class PlanComplianceValidator:
 
         # Catalog-driven analytics: ratio plans need a division; grouping dimensions
         # must be visibly present in the SQL.
-        if plan.numerator and plan.denominator and "/" not in folded_sql:
+        # "/" is only a DIVISION outside string literals — the composite-department
+        # CROSS APPLY builds XML in N'...' literals ("</i>"), whose slashes made a
+        # plain grouped COUNT(*) look like it divided and then fail the NULLIF
+        # check below (Codex live UI testing, 2026-07-31).
+        sql_without_literals = re.sub(r"'[^']*'", "''", folded_sql)
+        divides = "/" in sql_without_literals
+        # A follow-up can leave numerator/denominator behind from an earlier
+        # RATE turn while this turn is a plain count ("300 altında olan
+        # bölümleri dahil etme" after a no-show-rate table). The plan only
+        # CLAIMS a ratio when its analysis type says so; enforcing the division
+        # off vestigial fields rejected a perfectly good grouped COUNT(*).
+        claims_ratio = plan.analysis_type in ("ratio", "percentage", "percentage_change")
+        if plan.numerator and plan.denominator and claims_ratio and not divides:
             missing.append(f"ratio division {plan.numerator}/{plan.denominator}")
         # NULLIF protects an ACTUAL division. A "ratio"/"percentage" analysis
         # type whose plan carries no numerator/denominator can legitimately
@@ -215,7 +247,7 @@ class PlanComplianceValidator:
         # SQL and surfaced as "Yanıt Oluşturulamadı" (Codex live UI finding).
         # A ratio plan that lost its division entirely is still caught above.
         if (plan.numerator and plan.denominator) or plan.analysis_type in ("ratio", "percentage"):
-            if "/" in folded_sql and "nullif" not in folded_sql:
+            if divides and "nullif" not in sql_without_literals:
                 missing.append("ratio division-by-zero protection (NULLIF)")
         for dimension in plan.dimensions:
             if dimension in _DERIVED_DIMENSION_SENTINELS:

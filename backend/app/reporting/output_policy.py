@@ -43,7 +43,14 @@ _DATA_MARKER = re.compile(
 # silently overrode that SQL-only signal, executing and returning "data"
 # mode for a question that explicitly asked NOT to run it (2026-07-24, live
 # multi-turn testing).
-_EXECUTION_MARKER = re.compile(r"\b(calistir(?!ma\b)\w*|cek\w*|getir\w*|listele\w*)\b")
+# The `ma\b` exclusion only covered the BARE negation: "çalıştırmaDAN" (without
+# running) still matched as an execution request, so a question that explicitly
+# said not to run it came back executed, with the table alongside the SQL (live
+# UI testing, 2026-07-31). The negative suffixes are enumerated so the positive
+# infinitive "çalıştırmak" (to run) keeps counting as execution.
+_EXECUTION_MARKER = re.compile(
+    r"\b(calistir(?!ma(?:dan|den|yin|yiniz|yalim)?\b)\w*|cek\w*|getir\w*|listele\w*)\b"
+)
 _VISUAL_MARKER = re.compile(
     r"\b(grafik\w*|grafig\w*|chart|gorsel\w*|ciz\w*|cizgi\w*|bar|"
     r"sutun\w*|pasta|oranlama)\b"

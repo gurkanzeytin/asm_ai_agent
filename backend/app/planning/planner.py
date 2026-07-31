@@ -67,6 +67,10 @@ _RELATIONSHIP_CONDITION_DIMENSIONS: dict[str, set[str]] = {
 }
 
 _NEGATION_PATTERN = re.compile(r"\b(olmayan|bulunmayan|almayan)\w*\b|\bhic\b")
+# "elemek" = to eliminate ("1000 altındaki hekimleri ELE"), an exclusion that
+# inverts an aggregate threshold. Guarded against "ele al-" ("bunu ele alalım"
+# = let's consider this), which is the opposite of an exclusion.
+_ELIMINATE_MARKER = re.compile(r"\bele\b(?!\s+al)|\beleyip\b|\belenen\b")
 
 # Sentinel dimension name for the weekday/weekend derived grouping — not a real
 # view column; the SQL builder renders it as a DATEDIFF-based CASE expression
@@ -567,6 +571,43 @@ class QueryPlanner:
                 intelligence["analysis_type"],
                 folded,
             )
+            # A two-period comparison with no grouping dimension answers with a
+            # SINGLE row (current/baseline/change) — there is nothing to sort
+            # and nothing to cap. Change wording ("düşüş", "artış") nonetheless
+            # resolves a ranking direction, and an "ilk 5" from an EARLIER turn
+            # survives in the session context; PlanComplianceValidator then
+            # rejected the SQL for a missing "ORDER BY ... ASC" / "TOP (5)" that
+            # can never exist there, killing the whole answer (Codex live UI
+            # testing, 2026-07-31 — the most frequent error in the comparison
+            # session).
+            scalar_period_comparison = (
+                len(periods) == 2
+                and not intelligence["dimensions"]
+                and intelligence["analysis_type"] in _PERIOD_ANALYSIS_TYPES
+            )
+            if scalar_period_comparison:
+                ranking = None
+                order = None
+
+            # Naming THREE OR MORE separate years ("2022 2023 2024 2025 randevu
+            # sayılarını tek tek ver") is itself the request to see them apart —
+            # a structural signal that does not depend on catching the right
+            # wording. Without it the windows were merged into one grand total
+            # and then labelled with a single year, which reads as a wrong
+            # answer (live UI testing, 2026-07-31). Two windows stay a
+            # comparison; a plan that already groups is left alone.
+            distinct_year_windows = {
+                (date_filter.start_date, date_filter.end_date)
+                for date_filter in date_filters
+            }
+            if (
+                len(distinct_year_windows) >= 3
+                and not intelligence["dimensions"]
+                and not periods
+                and intelligence["granularity"] is None
+            ):
+                intelligence["granularity"] = "year"
+                intelligence["analysis_type"] = "time_trend"
 
             # Defense in depth: the deterministic time-series builder has no
             # TOP(N) support at all (a trend answers with every bucket in the
@@ -610,6 +651,9 @@ class QueryPlanner:
                 and self._singular_ranking_result_requested(folded)
             ):
                 resolved_limit = 1
+            # See `scalar_period_comparison` above: one row, nothing to cap.
+            if scalar_period_comparison:
+                resolved_limit = None
 
             plan = QueryPlan(
                 question=question,
@@ -1497,17 +1541,38 @@ class QueryPlanner:
             return []
 
         periods: list[PeriodPlan] = []
+        # A follow-up resolves to the PREVIOUS question prepended to the current
+        # one ("2024 ve 2025 ... karşılaştır. 2025, 2024'e göre ..."), so each
+        # year is detected twice and the comparison would carry the same window
+        # two or four times — a self-comparison the compliance guard rejects,
+        # surfacing as "Yanıt Oluşturulamadı" on the most natural follow-up
+        # there is (Codex live UI testing, 2026-07-31). Keep first occurrence.
+        seen: set[tuple[str, str]] = set()
         for detected, date_filter in zip(analysis.detected_dates, date_filters, strict=True):
+            start = detected.start_date.isoformat()
+            end = (detected.end_date + timedelta(days=1)).isoformat()
+            if (start, end) in seen:
+                continue
+            seen.add((start, end))
             periods.append(
                 PeriodPlan(
                     label=self._period_label(detected),
-                    start_inclusive=detected.start_date.isoformat(),
-                    end_exclusive=(detected.end_date + timedelta(days=1)).isoformat(),
+                    start_inclusive=start,
+                    end_exclusive=end,
                     column=date_filter.column,
                 )
             )
-        if len(periods) == 2 and catalog.has_directional_period_reference(folded):
-            periods.reverse()
+        if len(periods) == 2:
+            reference = catalog.directional_reference_token(folded)
+            if reference:
+                # [baseline, current]: the period named as the REFERENCE ("…'e
+                # göre") is the baseline, whichever order the text mentions
+                # them in. Falls back to leaving the order alone when the token
+                # matches neither label, so an unrecognised form can never
+                # silently invert the comparison.
+                folded_labels = [self._extractor.fold(period.label) for period in periods]
+                if reference in folded_labels[1] and reference not in folded_labels[0]:
+                    periods.reverse()
         return periods
 
     def _dropped_breakdown_assumptions(self, intelligence: dict) -> list[str]:
@@ -1788,12 +1853,22 @@ class QueryPlanner:
         num = r"(\d{1,3}(?:[ .]\d{3})+|\d+)"
         # "N'den az/küçük", "N'den fazla/çok/büyük" — the apostrophe/suffix
         # ('den/'dan/den/dan) is normalized away, so match an optional gap.
+        # The POSITIONAL words take Turkish relative suffixes in everyday
+        # phrasing — "1000 altındaki hekimler", "500 üzerindeki bölümler",
+        # "100 altındakileri" — so they need a trailing `\w*`. Without it only
+        # the bare "altında"/"üzerinde" forms matched and a very common request
+        # produced no threshold at all (Codex live UI testing, 2026-07-31:
+        # "1000 altındaki hekimleri ele" applied no filter). The COMPARATIVE
+        # words stay anchored: a `\w*` on "az" would swallow "azalan" (a sort
+        # direction) and on "cok" would swallow "coklu".
         less = re.search(
-            rf"\b{num}\s*(?:'?d[ae]n|'?nin|'?in|'?un|'?nun)?\s*(az|kucuk|kucugu|asagi|alti|altinda)\b",
+            rf"\b{num}\s*(?:'?d[ae]n|'?nin|'?in|'?un|'?nun)?\s*"
+            r"(az|kucuk|kucugu|asagi|alt(?:i|inda)\w*)\b",
             folded_question,
         )
         more = re.search(
-            rf"\b{num}\s*(?:'?d[ae]n|'?nin|'?in|'?un|'?nun)?\s*(fazla|cok|buyuk|buyugu|ustu|ustunde|uzeri|uzerinde)\b",
+            rf"\b{num}\s*(?:'?d[ae]n|'?nin|'?in|'?un|'?nun)?\s*"
+            r"(fazla|cok|buyuk|buyugu|ust(?:u|unde)\w*|uzer(?:i|inde)\w*)\b",
             folded_question,
         )
         # "en az N" / "en fazla N" — inclusive bounds ("at least/at most N").
@@ -1812,7 +1887,7 @@ class QueryPlanner:
         excludes = any(
             marker in folded_question
             for marker in ("disarida birak", "disari birak", "haric tut", "haricinde", "cikar")
-        )
+        ) or bool(_ELIMINATE_MARKER.search(folded_question))
         inverse = {">=": "<", "<=": ">", "<": ">=", ">": "<="}
 
         def _bound(operator: str, token: str) -> AggregateThreshold | None:

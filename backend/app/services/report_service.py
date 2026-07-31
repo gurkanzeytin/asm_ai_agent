@@ -59,13 +59,23 @@ class ReportService(IReportService):
             query_result = self._normalize_query_result(query_result)
             report_type = self.classifier.classify(query_result, question=question, sql=sql)
 
-            if report_type == ReportType.ANALYTICAL and self._insights_usable(insights):
-                return self._render_insight_report(
-                    question, insights, query_result, execution_id, start_time
-                )
+            # A typed contract (period comparison, cohort, ...) renders a
+            # precise Turkish sentence carrying the actual numbers, so it is
+            # tried BEFORE reusing the insight narrative — for those shapes the
+            # insight layer has no rule and falls back to a generic sentence.
+            # `render` returns None for any other ANALYTICAL result, which then
+            # takes the insight path exactly as before.
             template_result = self.template_renderer.render(
                 report_type, query_result, question=question
             )
+            if (
+                template_result is None
+                and report_type == ReportType.ANALYTICAL
+                and self._insights_usable(insights)
+            ):
+                return self._render_insight_report(
+                    question, insights, query_result, execution_id, start_time
+                )
             if template_result is not None:
                 latency_ms = (time.perf_counter() - start_time) * 1000
                 self._log_report_telemetry(

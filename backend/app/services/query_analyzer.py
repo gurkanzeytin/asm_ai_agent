@@ -800,6 +800,38 @@ class QueryAnalyzer:
                 )
             )
 
+        # Year spans: "2022-2025 yılları arasında", "2022 ile 2025 arası" — one
+        # continuous range, not the two endpoint years. Detecting only the
+        # endpoints dropped every year in between (Codex live UI testing,
+        # 2026-07-31: "2022-2025 arasında" answered over 2022 and 2025 only).
+        # An "arasındaki FARK / değişim / kıyas" is a COMPARISON of two
+        # separate years, never a span, so it is excluded here and left to the
+        # period-comparison path.
+        year_span_spans: list[tuple[int, int]] = []
+        if not re.search(
+            r"aras\w*\s*(?:ki\s+)?(?:fark|degisim|kiyas|karsilastir)", query_ascii, re.IGNORECASE
+        ):
+            for match in re.finditer(
+                r"\b(20\d{2}|19\d{2})\s*(?:-|–|—|\s+ile\s+|\s+ila\s+)\s*(20\d{2}|19\d{2})"
+                r"(?:\s+yil\w*)?\s+aras\w*",
+                query_ascii,
+                re.IGNORECASE,
+            ):
+                start_year, end_year = int(match.group(1)), int(match.group(2))
+                if start_year > end_year:
+                    start_year, end_year = end_year, start_year
+                if end_year - start_year < 1:
+                    continue
+                year_span_spans.append(match.span())
+                ranges.append(
+                    self._date_range(
+                        match.group(0),
+                        date(start_year, 1, 1),
+                        date(end_year, 12, 31),
+                        "custom",
+                    )
+                )
+
         for index in range(0, len(explicit_dates), 2):
             first = explicit_dates[index]
             first_date = date(
@@ -1016,7 +1048,11 @@ class QueryAnalyzer:
                 + comparison_anchor_year_spans
                 + iso_month_spans
                 + iso_date_spans
-                + numeric_dmy_spans,
+                + numeric_dmy_spans
+                # A year already covered by a "2022-2025 arası" span must not
+                # ALSO surface as its own standalone year, or the plan carries
+                # both the span and its endpoints.
+                + year_span_spans,
             ):
                 continue
             year = int(match.group(1))

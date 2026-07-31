@@ -482,10 +482,12 @@ class TestTimeGrainIntegration:
     def test_explicit_current_grain_overrides_inherited(self, manager):
         _ask(manager, "Aylık trend göster")
         r2 = _ask(manager, "Yıllık göster")
-        # "yillik" isn't a recognized granularity trigger today (see
-        # app.semantics.catalog._GRANULARITY_TERMS) — this pins the documented
-        # limitation rather than asserting behavior the catalog doesn't have.
-        assert r2.resolved_signals.time_grain in (None, "month")
+        # "yillik" IS a granularity trigger now: year bucketing had no
+        # detection terms at all even though the SQL builder renders it, so
+        # "yıl bazında / yıllık" questions collapsed into a single total (live
+        # UI testing, 2026-07-31). The explicit new grain must displace the
+        # inherited monthly one.
+        assert r2.resolved_signals.time_grain == "year"
 
 
 # ─────────────────────────────────────────────

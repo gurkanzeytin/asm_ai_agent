@@ -46,6 +46,37 @@ _GENDER_ALIASES: dict[str, str] = {
     "bilinmiyor": "D",
 }
 
+# Colloquial / abbreviated department names users actually type, mapped to the
+# CLINICAL wording the real department values are built from. These are only
+# search hints: each expansion is matched against the grounded candidate list
+# through the normal prefix/fuzzy pipeline below, so a term with no real
+# department behind it still degrades to `no_match` and is never invented.
+# Without these, "kalp branşında", "KBB", "pediatri" and "kadın doğum" resolved
+# to nothing and the question silently answered over EVERY department (Codex
+# live UI testing, 2026-07-31).
+_DEPARTMENT_ALIASES: dict[str, tuple[str, ...]] = {
+    "kalp": ("kardiyoloji",),
+    "kalp damar": ("kalp ve damar cerrahisi", "kardiyoloji"),
+    "kbb": ("kulak burun bogaz",),
+    "kulak burun": ("kulak burun bogaz",),
+    "pediatri": ("cocuk sagligi", "cocuk"),
+    "cocuk doktoru": ("cocuk sagligi", "cocuk"),
+    "kadin dogum": ("kadin hastaliklari", "kadin dogum"),
+    "kadin dogumu": ("kadin hastaliklari", "kadin dogum"),
+    "dogum": ("kadin hastaliklari", "kadin dogum"),
+    "jinekoloji": ("kadin hastaliklari", "kadin dogum"),
+    "goz": ("goz hastaliklari", "goz"),
+    "cildiye": ("deri", "dermatoloji"),
+    "dermatoloji": ("deri", "dermatoloji"),
+    "dahiliye": ("ic hastaliklari", "dahiliye"),
+    "beyin cerrahi": ("beyin ve sinir cerrahisi", "norosirurji"),
+    "norolojik": ("noroloji",),
+    "ortopedi": ("ortopedi",),
+    "uroloji": ("uroloji",),
+    "onkoloji": ("onkoloji",),
+    "psikiyatri": ("psikiyatri", "ruh sagligi"),
+}
+
 # Cue-word ROOTS (folded), matched via startswith against each token to
 # absorb Turkish suffix inflection ("bölümündeki", "şubesinde", ...) without
 # enumerating every inflected form. Sourced from the same synonym vocabulary
@@ -374,6 +405,45 @@ def resolve_value(field_name: str, original_text: str, candidates: list[str]) ->
             grounded=True,
         )
 
+    # Last resort for departments: expand a colloquial term ("kalp", "KBB",
+    # "pediatri") to the clinical wording and look for it INSIDE the grounded
+    # values — real department names carry qualifiers ("Kulak Burun Boğaz
+    # (Ataşehir)") that defeat prefix and fuzzy matching. Still grounded: only
+    # values that actually exist can be returned, and a term matching several
+    # different departments asks instead of guessing.
+    if field_name == "department":
+        for expansion in _DEPARTMENT_ALIASES.get(normalized_input, ()):
+            hits = sorted(
+                {
+                    candidate
+                    for norm, group in normalized_map.items()
+                    if expansion in norm
+                    for candidate in group
+                }
+            )
+            if len(hits) == 1:
+                return ResolvedValue(
+                    field=field_name,
+                    original_text=original_text,
+                    normalized_text=normalized_input,
+                    matched_value=hits[0],
+                    match_type="alias",
+                    confidence=0.9,
+                    grounded=True,
+                )
+            if len(hits) > 1:
+                return ResolvedValue(
+                    field=field_name,
+                    original_text=original_text,
+                    normalized_text=normalized_input,
+                    matched_value=None,
+                    match_type="ambiguous",
+                    confidence=0.6,
+                    alternatives=_dedupe_preserve_order(hits)[:5],
+                    grounded=False,
+                    clarification_required=True,
+                )
+
     return ResolvedValue(
         field=field_name,
         original_text=original_text,
@@ -491,6 +561,21 @@ def extract_candidate_phrases(question: str) -> dict[str, list[str]]:
             if not any(cleaned.startswith(root) for root in roots):
                 continue
             phrase = _walk_back(index - 1)
+            # The walk-back requires a Capitalized proper-noun run, which real
+            # department VALUES satisfy ("Kardiyoloji bölümünde", "KBB") but
+            # colloquial ones do not ("kalp branşında", "göz polikliniği") — so
+            # the phrase was never extracted and the department filter silently
+            # disappeared, answering over EVERY department (live UI testing,
+            # 2026-07-31). A lowercase token sitting right before the cue word
+            # is accepted only when it is a KNOWN alias; `resolve_value` still
+            # has to ground it against real values, so nothing is invented.
+            if (
+                phrase is None
+                and field_name == "department"
+                and index - 1 >= 0
+                and folded_tokens[index - 1].strip(_STRIP_CHARS) in _DEPARTMENT_ALIASES
+            ):
+                phrase = tokens[index - 1].strip(_STRIP_CHARS)
             if phrase:
                 results.setdefault(field_name, []).append(phrase)
 

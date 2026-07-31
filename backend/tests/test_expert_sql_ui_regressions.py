@@ -12,9 +12,11 @@ from app.planning.compliance import PlanComplianceValidator
 from app.planning.models import DateFilterPlan, QueryPlan, ResolvedFilterPlan
 from app.planning.planner import QueryPlanner
 from app.planning.value_resolver import (
+    extract_candidate_phrases,
     ResolvedValue,
     extract_comparison_pair,
     extract_filter_only_phrase,
+    resolve_value,
 )
 from app.services.deterministic_sql_builder import (
     DeterministicSQLBuilder,
@@ -111,6 +113,43 @@ def test_exclusion_phrase_inverts_more_than_threshold():
     assert plan.aggregate_threshold is not None
     assert plan.aggregate_threshold.operator == "<="
     assert plan.aggregate_threshold.value == 500
+
+
+@pytest.mark.parametrize(
+    ("question", "operator", "value"),
+    [
+        # Positional words take Turkish relative suffixes in everyday phrasing;
+        # only the bare "altında"/"üzerinde" forms used to match, so this common
+        # request applied no filter at all (Codex live UI testing, 2026-07-31).
+        ("2024 bolum bazinda 1000 altindaki hekimleri ele", ">=", 1000),
+        ("2024 bolum bazinda 1000 in altindaki bolumler", "<", 1000),
+        ("2024 bolum bazinda 5000 ustundeki bolumler", ">", 5000),
+        ("2024 bolum bazinda 100 uzerindeki bolumleri goster", ">", 100),
+        ("2024 bolum bazinda 1000 altindakileri cikar", ">=", 1000),
+    ],
+)
+def test_suffixed_positional_thresholds_are_detected(question, operator, value):
+    plan = _planned(question)
+    assert plan.aggregate_threshold is not None, question
+    assert plan.aggregate_threshold.operator == operator
+    assert plan.aggregate_threshold.value == value
+
+
+def test_ele_almak_is_not_an_exclusion():
+    """'ele' means eliminate, but 'ele al-' means to CONSIDER — the opposite.
+    The threshold must not be inverted for the latter."""
+    plan = _planned("2024 bolum bazinda bunu ele alalim 500 den fazla olanlar")
+    assert plan.aggregate_threshold is not None
+    assert plan.aggregate_threshold.operator == ">"
+
+
+def test_azalan_sirala_is_not_read_as_a_less_than_bound():
+    """Guard for the `\\w*` added to the positional words: it must not have been
+    added to 'az', which would swallow 'azalan' (a sort direction)."""
+    plan = _planned("2024 bolum bazinda 1000 den az olanlari azalan sirala")
+    assert plan.aggregate_threshold is not None
+    assert plan.aggregate_threshold.operator == "<"
+    assert plan.aggregate_threshold.value == 1000
 
 
 def test_plain_threshold_without_exclusion_is_unchanged():
@@ -428,3 +467,133 @@ def test_context_resolver_marks_same_filter_year_change_as_followup():
 
     assert resolution.follow_up_detected is True
     assert resolution.retained_query_plan_snapshot is not None
+
+
+# ═══════════ Codex live UI round 2 (2026-07-31): multi-year + branch names ═══
+
+
+_REAL_DEPARTMENTS = [
+    "Kardiyoloji",
+    "Kulak Burun Boğaz (Ataşehir)",
+    "Çocuk Sağlığı ve Hastalıkları",
+    "Kadın Hastalıkları ve Doğum",
+    "Radyoloji",
+    "Medikal Onkoloji",
+]
+
+
+@pytest.mark.parametrize(
+    ("phrase", "expected"),
+    [
+        ("kalp", "Kardiyoloji"),
+        ("KBB", "Kulak Burun Boğaz (Ataşehir)"),
+        ("pediatri", "Çocuk Sağlığı ve Hastalıkları"),
+        ("kadın doğumu", "Kadın Hastalıkları ve Doğum"),
+    ],
+)
+def test_colloquial_department_names_resolve_to_real_values(phrase, expected):
+    """"kalp branşında", "KBB", "pediatri" resolved to nothing, so the question
+    silently answered over EVERY department (Codex live UI testing)."""
+    resolved = resolve_value("department", phrase, _REAL_DEPARTMENTS)
+    assert resolved.grounded is True
+    assert resolved.matched_value == expected
+
+
+def test_department_alias_never_invents_a_missing_department():
+    """The alias is only a search hint: with no matching grounded value it must
+    degrade to no_match, never to a guessed department."""
+    resolved = resolve_value("department", "kalp", ["Radyoloji", "Nöroloji"])
+    assert resolved.grounded is False
+    assert resolved.matched_value is None
+
+
+def test_multiple_year_windows_are_ored_not_anded():
+    """Several windows on the same column are alternatives. ANDing them is
+    unsatisfiable and silently returned ZERO rows while passing every
+    compliance check (Codex live UI testing: "2025 = 0 randevu")."""
+    plan = _planned("2022 2023 2024 2025 randevu sayilarini yil yil ver")
+    assert len(plan.date_filters) >= 2
+    sql = _sql(plan)
+    where = sql.upper().split("WHERE", 1)[1]
+    assert " OR " in where
+    for year in ("2022", "2023", "2024", "2025"):
+        assert f"'{year}-01-01'" in sql
+
+
+def test_single_year_window_is_not_wrapped_in_or():
+    plan = _planned("2024 yilinda bolum bazinda randevu sayisi")
+    sql = _sql(plan)
+    assert "BaslangicTarihi >= '2024-01-01'" in sql
+
+
+def test_year_range_expands_to_a_continuous_span():
+    """"2022-2025 yılları arasında" is ONE span, not its two endpoint years —
+    detecting only the endpoints dropped 2023 and 2024 entirely."""
+    plan = _planned("2022-2025 yillari arasinda toplam randevu sayisi")
+    assert len(plan.date_filters) == 1
+    assert plan.date_filters[0].start_date == "2022-01-01"
+    assert plan.date_filters[0].end_date == "2025-12-31"
+
+
+def test_year_range_wording_for_a_difference_stays_a_comparison():
+    """"2024 ile 2025 arasındaki FARK" compares two years — it must not collapse
+    into one continuous span."""
+    plan = _planned("2024 ile 2025 arasindaki farki ver")
+    starts = {date_filter.start_date for date_filter in plan.date_filters}
+    assert starts == {"2024-01-01", "2025-01-01"}
+
+
+def test_colloquial_department_is_extracted_before_a_brans_cue():
+    """The candidate walk-back requires a Capitalized proper-noun run, which
+    "kalp branşında" / "pediatri bölümünde" do not satisfy — the phrase was
+    never extracted and the department filter silently disappeared, answering
+    over EVERY department (live UI testing, 2026-07-31)."""
+    assert extract_candidate_phrases("2024 yilinda kalp bransinda kac randevu var?")[
+        "department"
+    ] == ["kalp"]
+    assert extract_candidate_phrases("2024 pediatri bolumunde kac randevu")[
+        "department"
+    ] == ["pediatri"]
+
+
+def test_capitalized_department_extraction_is_unchanged():
+    assert extract_candidate_phrases("2024 Kardiyoloji bolumunde kac randevu")[
+        "department"
+    ] == ["Kardiyoloji"]
+
+
+def test_unknown_lowercase_word_before_cue_is_not_a_department_candidate():
+    """Only KNOWN aliases bypass the capitalisation rule."""
+    assert "department" not in extract_candidate_phrases(
+        "2024 zzzz bolumunde kac randevu"
+    )
+
+
+def test_three_or_more_named_years_are_bucketed_per_year():
+    """Naming several years IS the request to see them apart. They used to be
+    merged into one grand total and then labelled with a single year, which
+    reads as a wrong answer (live UI testing, 2026-07-31)."""
+    plan = _planned("2022 2023 2024 2025 yilinin randevu sayilarini tek tek ver")
+    assert plan.grouping_granularity == "year"
+    sql = _sql(plan)
+    # The bucket is the YEAR itself, not its first day — "2022-01-01" in a
+    # year-by-year answer is noise.
+    assert "CAST(YEAR(BaslangicTarihi) AS NVARCHAR(4))" in sql
+    assert "DATEFROMPARTS" not in sql
+    assert "GROUP BY" in sql
+
+
+def test_year_granularity_wording_is_detected():
+    plan = _planned("2022 2023 2024 2025 randevu sayilarini yil bazinda ver")
+    assert plan.grouping_granularity == "year"
+
+
+def test_two_named_years_stay_a_comparison_not_a_year_bucket():
+    plan = _planned("2024 ve 2025 randevu sayilarini karsilastir")
+    assert plan.analysis_type == "period_comparison"
+    assert plan.grouping_granularity != "year"
+
+
+def test_single_year_question_is_not_bucketed():
+    plan = _planned("2024 yilinda kac randevu var")
+    assert plan.grouping_granularity is None

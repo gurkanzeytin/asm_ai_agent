@@ -48,15 +48,21 @@ class TemplateReportRenderer:
         query_result: QueryResult,
         question: str | None = None,
     ) -> TemplateRenderResult | None:
-        if report_type == ReportType.ANALYTICAL:
-            return None
         if report_type == ReportType.EMPTY:
             return self._render_empty(question)
 
-        # Typed deterministic shapes get their own Turkish presentation.
+        # Typed deterministic shapes get their own Turkish presentation, and it
+        # is checked BEFORE the ANALYTICAL bail-out below: a period comparison
+        # classifies as ANALYTICAL, so returning early there meant the precise
+        # "2025 döneminde X, 2024 döneminde Y; … azaldı (%…)" sentence was never
+        # produced. The generic insight narrative that replaced it degraded to
+        # "Sonuç kümesi için temel metrikler hesaplandı." — the user saw a
+        # single KPI and none of the comparison (live UI testing, 2026-07-31).
         typed = self._render_typed(query_result)
         if typed is not None:
             return typed
+        if report_type == ReportType.ANALYTICAL:
+            return None
 
         if report_type == ReportType.SINGLE_VALUE:
             return self._render_single_value(query_result, question)
@@ -158,7 +164,10 @@ class TemplateReportRenderer:
             f"randevu sayısı {format_number(abs(float(absolute)))} adet {direction}"
         )
         if isinstance(percentage, Number):
-            summary += f" ({format_percent(percentage)})"
+            # The direction word already carries the sign ("azaldı"), so a
+            # negative percentage on top of it reads as a double negative
+            # ("azaldı (%-35,3)"). Show the magnitude.
+            summary += f" ({format_percent(abs(float(percentage)))})"
         summary += "."
         lines = ["# Dönem Karşılaştırması", "", summary]
         return TemplateRenderResult("Dönem Karşılaştırması", "\n".join(lines), "comparison")

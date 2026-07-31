@@ -263,3 +263,23 @@ def test_expanded_answer_requires_explicit_detail_request():
     assert should_render_expanded_answer("Ortalama değer kaç?") is False
     assert should_render_expanded_answer("Detaylı rapor ver") is True
     assert should_render_expanded_answer("Sorgulanan metrikleri ve bulguları göster") is True
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Bu son sorgunun SQL'ini çalıştırmadan göster.",
+        "SQL sorgusunu ver, çalıştırmayın.",
+    ],
+)
+def test_suffixed_negative_calistirma_is_sql_only(question):
+    """"çalıştırmaDAN" (without running) matched the execution marker, so a
+    question that explicitly said not to run it came back executed with the
+    table alongside the SQL (live UI testing, 2026-07-31)."""
+    assert determine_requested_response_mode(question) == "sql"
+    assert determine_requested_visible_sections(question) == ["sql"]
+
+
+def test_positive_calistirmak_infinitive_still_executes():
+    """Guard: "çalıştırmak" (to run) is positive and must stay an execution."""
+    assert determine_requested_response_mode("Bu sorguyu çalıştırmak istiyorum") == "data"

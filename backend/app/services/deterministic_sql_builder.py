@@ -10,6 +10,7 @@ the existing LLM fallback path.
 
 import re
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 
 from app.database_intelligence.value_catalog import FIELD_COLUMNS
 from app.planning.models import QueryPlan
@@ -1403,7 +1404,13 @@ class DeterministicSQLBuilder:
         if grain == "week":
             return f"DATEADD(WEEK, DATEDIFF(WEEK, 0, {column}), 0)"
         if grain == "year":
-            return f"DATEFROMPARTS(YEAR({column}), 1, 1)"
+            # A yearly bucket reads as the YEAR, not as its first day: rendering
+            # DATEFROMPARTS(...) put "2022-01-01" in the Dönem column, which is
+            # noise for a year-by-year answer (live UI testing, 2026-07-31).
+            # `period_start` carries the "text" presentation format, so a
+            # 4-character year is shown verbatim — never thousand-separated —
+            # and still sorts correctly, lexicographically and numerically.
+            return f"CAST(YEAR({column}) AS NVARCHAR(4))"
         # month (default): SQL Server-standard first-of-month expression.
         return f"DATEFROMPARTS(YEAR({column}), MONTH({column}), 1)"
 
@@ -1448,15 +1455,29 @@ class DeterministicSQLBuilder:
         clauses: list[str] = []
         seen_dates: set[tuple[str | None, str, str]] = set()
         prefix = f"{qualifier}." if qualifier else ""
+        # Several windows on the SAME column are alternatives, not simultaneous
+        # requirements: "2022 2023 2024 2025 randevu sayıları" wants the union of
+        # those years. ANDing them ("… >= 2022-01-01 AND … < 2022-12-31 AND …
+        # >= 2025-01-01 …") is unsatisfiable and silently returns ZERO rows —
+        # a wrong answer that passes every compliance check, since each filter
+        # really is present (Codex live UI testing, 2026-07-31: "2025 = 0
+        # randevu", "Sonuç bulunamadı" on multi-year questions).
+        ranges_by_column: dict[str, list[str]] = {}
         for date_filter in plan.date_filters:
             key = (date_filter.column, date_filter.start_date, date_filter.end_date)
             if key in seen_dates:
                 continue
             seen_dates.add(key)
             column = date_filter.column or DATE_COLUMN
-            clauses.append(
+            ranges_by_column.setdefault(column, []).append(
                 f"{prefix}{column} >= '{date_filter.start_date}' AND {prefix}{column} < DATEADD(day, 1, '{date_filter.end_date}')"
             )
+        for column_ranges in ranges_by_column.values():
+            if len(column_ranges) == 1:
+                clauses.append(column_ranges[0])
+            else:
+                joined = " OR ".join(f"({one})" for one in column_ranges)
+                clauses.append(f"({joined})")
         structured = self._render_structured_filters(plan)
         if qualifier:
             structured = [self._qualify_columns(filter_sql, qualifier) for filter_sql in structured]
@@ -1738,9 +1759,49 @@ class DeterministicSQLBuilder:
                 current_filter.expression or current_filter.start_date,
                 baseline_filter.expression or baseline_filter.start_date,
             )
+        # A comparison plan carrying exactly ONE resolved window ("2025'te ...
+        # düşen bölümler", where the second period was lost in the context
+        # merge) must compare THAT window against the one immediately before
+        # it. Falling through to the GETDATE()-relative default below silently
+        # answered about the last 30 days instead of the year the plan states —
+        # a wrong answer, and one PlanComplianceValidator then rejected for the
+        # missing date filter (Codex live UI testing, 2026-07-31).
+        if len(plan.date_filters) == 1:
+            window = plan.date_filters[0]
+            span = self._previous_window(window.start_date, window.end_date)
+            if span is not None:
+                previous_start, previous_end = span
+                column = window.column or DATE_COLUMN
+                current = (
+                    f"{column} >= '{window.start_date}' "
+                    f"AND {column} < DATEADD(day, 1, '{window.end_date}')"
+                )
+                baseline = (
+                    f"{column} >= '{previous_start}' "
+                    f"AND {column} < DATEADD(day, 1, '{previous_end}')"
+                )
+                return (
+                    current,
+                    baseline,
+                    window.expression or window.start_date,
+                    "önceki dönem",
+                )
         if adaptive_retry:
             return LAST_90, PREVIOUS_90, "son 90 gün", "önceki 90 gün"
         return LAST_30, PREVIOUS_30, "son 30 gün", "önceki 30 gün"
+
+    def _previous_window(self, start_date: str, end_date: str) -> tuple[str, str] | None:
+        """The equal-length window ending the day before `start_date`."""
+        try:
+            start = date.fromisoformat(start_date)
+            end = date.fromisoformat(end_date)
+        except ValueError:
+            return None
+        if end < start:
+            return None
+        length = (end - start).days + 1
+        previous_end = start - timedelta(days=1)
+        return (previous_end - timedelta(days=length - 1)).isoformat(), previous_end.isoformat()
 
     def _period_predicate(self, period) -> str:
         column = period.column or DATE_COLUMN

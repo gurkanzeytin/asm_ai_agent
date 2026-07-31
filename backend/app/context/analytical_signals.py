@@ -430,6 +430,12 @@ def _replace_period_change_direction(calculations: list[str], direction: str) ->
     ] + [f"period_change_direction:{direction}"]
 
 
+def dedupe_date_filters(date_filters: list) -> list:
+    """Public alias — also used by RetrieveContextNode, which adopts date
+    filters re-planned from the resolved (previous-question-prepended) text."""
+    return _dedupe_date_filters(date_filters)
+
+
 def _dedupe_date_filters(date_filters: list) -> list:
     deduped = []
     seen_dates: set[tuple[str | None, str, str]] = set()
@@ -439,7 +445,30 @@ def _dedupe_date_filters(date_filters: list) -> list:
             continue
         seen_dates.add(key)
         deduped.append(date_filter)
-    return deduped
+    # Windows accumulate across turns, so a broad early scope ("2022-2025
+    # arasında …") stayed alongside the narrower years later turns name
+    # explicitly ("2023'ten 2024'e farkı"). Naming a year inside that span
+    # supersedes it: keep the explicit narrower windows and drop the enclosing
+    # one (Codex live UI testing, 2026-07-31 — five accumulated filters by the
+    # third turn). Only drops a window that STRICTLY contains another.
+    if len(deduped) < 2:
+        return deduped
+    kept = []
+    for candidate in deduped:
+        encloses_another = any(
+            other is not candidate
+            and other.column == candidate.column
+            and candidate.start_date <= other.start_date
+            and candidate.end_date >= other.end_date
+            and (
+                candidate.start_date != other.start_date
+                or candidate.end_date != other.end_date
+            )
+            for other in deduped
+        )
+        if not encloses_another:
+            kept.append(candidate)
+    return kept or deduped
 
 
 def _replaced_dimension_concepts(folded: str) -> set[str]:
@@ -991,4 +1020,34 @@ def merge_query_plans(
                 repeat_updates["order"] = None
         if repeat_updates:
             merged_plan = merged_plan.model_copy(update=repeat_updates)
+    # Same rule as the repeat-behavior block above, for a two-period comparison
+    # that ends up WITHOUT a grouping dimension: it answers with a single
+    # current/baseline/change row, so there is nothing to sort and nothing to
+    # cap. A change-direction follow-up ("düşenleri göster") sets a ranking
+    # right above, and an "ilk 5" from an earlier turn survives in `retained`;
+    # PlanComplianceValidator then rejected the SQL for a missing "ORDER BY
+    # ... ASC" / "TOP (5)" that can never exist there, and the whole answer
+    # died as "Yanıt Oluşturulamadı" (Codex live UI testing, 2026-07-31).
+    # `updates` only carries date_filters when this turn changed them, so an
+    # accumulated list inherited untouched from `retained` never got deduped.
+    # Normalise the FINAL plan unconditionally.
+    normalized_dates = _dedupe_date_filters(merged_plan.date_filters)
+    if normalized_dates != merged_plan.date_filters:
+        merged_plan = merged_plan.model_copy(update={"date_filters": normalized_dates})
+    # `len(periods) <= 2` rather than `== 2`: a comparison that resolved its two
+    # windows from `date_filters` carries no `periods` at all, and is just as
+    # single-rowed. A >2-period breakdown does order by period label, so it is
+    # deliberately excluded.
+    if (
+        len(merged_plan.periods) <= 2
+        and not merged_plan.dimensions
+        and merged_plan.analysis_type in _PERIOD_ANALYSIS_TYPES
+    ):
+        scalar_updates = {
+            field: None
+            for field in ("ranking", "order", "limit")
+            if getattr(merged_plan, field) is not None
+        }
+        if scalar_updates:
+            merged_plan = merged_plan.model_copy(update=scalar_updates)
     return merged_plan
