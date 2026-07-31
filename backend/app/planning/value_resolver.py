@@ -87,7 +87,7 @@ _DEPARTMENT_ALIASES: dict[str, tuple[str, ...]] = {
 # randevular" would silently fail to cue appointment_source at all.
 _FIELD_CUE_ROOTS: dict[str, tuple[str, ...]] = {
     "branch": ("sube", "hastane", "lokasyon", "merkez"),
-    "department": ("bolum", "brans", "klinik", "poliklinik"),
+    "department": ("bolum", "brans", "klinik", "poliklinik", "servis", "departman"),
     "service": ("hizmet", "islem"),
     "category": ("kategori",),
     "appointment_source": ("kaynak", "kaynag"),

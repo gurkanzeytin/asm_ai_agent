@@ -1,195 +1,306 @@
-# AI Reporting Agent Backend (Refactored Clean Architecture)
+# ASM AI Agent — Randevu Analitiği
 
-This is a production-ready, highly modular Clean Architecture backend structure for the AI Reporting Agent project. The architecture is framework-agnostic and isolates core entities, services, and agent execution nodes from frameworks like FastAPI and LangGraph.
+Doğal Türkçe sorulardan randevu raporları üreten yapay zekâ ajanı.
 
-## Core Architectural Layout
+Kullanıcı `"2024 ve 2025 randevu sayılarını karşılaştır"` yazar; sistem soruyu anlar, güvenli SQL üretir, SQL Server üzerinde çalıştırır ve sonucu Türkçe özet, tablo veya grafik olarak sunar. Takip sorularını hatırlar: `"bunu bölüm bazında kır"` dediğinizde önceki kapsamı korur.
+
+---
+
+## İçindekiler
+
+- [Ne yapar?](#ne-yapar)
+- [Mimari](#mimari)
+- [Teknoloji](#teknoloji)
+- [Kurulum](#kurulum)
+- [Çalıştırma](#çalıştırma)
+- [Testler](#testler)
+- [Geliştirme](#geliştirme)
+- [Proje yapısı](#proje-yapısı)
+- [Tasarım kararları](#tasarım-kararları)
+
+---
+
+## Ne yapar?
+
+**Doğal dil → SQL → Rapor**
+
+| Yetenek | Örnek soru |
+|---|---|
+| Temel metrikler | `2024 yılında toplam kaç randevu var?` |
+| Kırılım / dağılım | `Randevuları bölüm bazında kır` |
+| Sıralama & limit | `En yoğun ilk 10 bölümü getir` |
+| Dönem karşılaştırma | `2024 ve 2025 randevu sayılarını karşılaştır` |
+| Çoklu metrik karşılaştırma | `2024 ve 2025 için toplam, gerçekleşen ve gelmeyen randevuyu karşılaştır` |
+| Yıl bazında kırılım | `2022 2023 2024 2025 randevu sayılarını tek tek ver` |
+| Oran analizleri | `Gelmeme oranı en yüksek bölümler` |
+| Eşik / filtre | `1000 altındaki bölümleri ele` |
+| Trend | `2023 aylık randevu trendini göster` |
+| Çıktı biçimi | `Çizgi grafik yap` · `Grafik değil, sadece tablo` · `SQL'i çalıştırmadan ver` |
+
+### Konuşma hafızası
+
+Takip sorularında yıl, metrik, kırılım ve filtreler korunur:
 
 ```
-. (Project Root)
-├── .gitignore
-├── requirements.txt            # Python package dependencies
-├── .env.example                # Example environment variables template
-├── README.md                   # Project documentation
-│
-└── backend/
-    ├── app/                    # Primary application package
-    │   ├── main.py             # FastAPI entrypoint
-    │   │
-    │   ├── api/                # Controllers & API routes
-    │   │   ├── deps.py         # Dependencies registry (e.g. database sessions)
-    │   │   └── v1/
-    │   │       ├── api.py      # Route mapping aggregator
-    │   │       └── endpoints/
-    │   │           ├── health.py  # Diagnostic check routes
-    │   │           └── reports.py # Agent execution endpoints
-    │   │
-    │   ├── agent/              # Agent workflow state, node layout & orchestration
-    │   │   ├── state.py        # Lifecycle state tracker type definition
-    │   │   ├── workflow.py     # Link and compile nodes into graphs
-    │   │   └── nodes/          # Isolated single-responsibility nodes
-    │   │       ├── analyze_question.py
-    │   │       ├── load_schema.py
-    │   │       ├── generate_sql.py
-    │   │       ├── validate_sql.py
-    │   │       ├── execute_query.py
-    │   │       └── generate_report.py
-    │   │
-    │   ├── core/               # App configuration & logging
-    │   │   ├── config.py       # Pydantic Settings env parser
-    │   │   └── logging.py      # Structured JSON/Console logging setup
-    │   │
-    │   ├── database/           # Relational DB engine & session makers
-    │   │   ├── base.py         # Alembic migration metadata registry
-    │   │   └── session.py      # SQLAlchemy session builders
-    │   │
-    │   ├── llm/                # Abstract LLM layer interfaces
-    │   │   ├── provider.py     # Base abstract LLMProvider
-    │   │   ├── ollama.py       # Ollama integration (Qwen3 8B)
-    │   │   ├── prompt_builder.py # Markdown file loader and formatter
-    │   │   └── parser.py       # Dynamic parser tools (e.g. SQL tag cleaner)
-    │   │
-    │   ├── prompts/            # External markdown files for prompt engineering
-    │   │   ├── system_prompt.md
-    │   │   ├── sql_generation.md
-    │   │   └── report_generation.md
-    │   │
-    │   ├── models/             # Database ORM classes
-    │   │   └── base.py         # Base declarative models
-    │   │
-    │   ├── repositories/       # Core repository data layers
-    │   │   └── base.py         # Generic CRUD SQL patterns
-    │   │
-    │   ├── schemas/            # Request/Response serializations (Pydantic v2)
-    │   │   ├── health.py
-    │   │   └── report.py
-    │   │
-    │   ├── services/           # Decoupled business logic services
-    │   │   ├── health_service.py
-    │   │   ├── sql_service.py
-    │   │   └── reporting_service.py
-    │   │
-    │   ├── shared/             # Shared constants, custom exceptions, and types
-    │   │   ├── constants.py
-    │   │   ├── exceptions.py
-    │   │   └── types.py
-    │   │
-    │   └── validators/         # Safety & validation filters
-    │       └── sql_validator.py # Secure SQL read-only verification
-    │
-    └── tests/                  # Integration and Unit testing suites
-        ├── conftest.py         # Pytest session setup (in-memory db client)
-        └── test_health.py      # Route assertion specs
+> 2024 gelmeyen randevu sayısı nedir?     →  30.191
+> Bunu bölüm bazında kır.                 →  58 bölüm  (2024 kapsamı + metrik korunur)
+> İlk 5 bölümü göster.                    →  ilk 5 satır
 ```
 
-## Quick Start
+### Güvenlik ve dürüstlük ilkeleri
 
-### 1. Installation
-Create and activate your virtual environment:
+- Yalnızca izin verilen görünüm sorgulanır (`DATABASE_ALLOWED_OBJECTS`); üretilen SQL çalıştırılmadan önce doğrulanır.
+- Bölüm/doktor gibi değerler **veritabanındaki gerçek değerlere** bağlanır. Eşleşme yoksa uydurulmaz; birden fazla eşleşme varsa kullanıcıya sorulur.
+- Cevaplanamayan soru bir çökme değil, yönlendirilmiş bir cevaptır (`NO_RESULT_GUIDANCE`, `ASK_CLARIFICATION`, `OUT_OF_SCOPE`).
+- Bir kısıt uygulanamadıysa cevap bunu **açıkça söyler**, sessizce kapsam daraltmaz.
+
+---
+
+## Mimari
+
+LangGraph tabanlı çok düğümlü bir iş akışı. Her düğüm tek sorumluluk taşır ve hata durumunda çökmez — hatayı duruma yazıp akışı sürdürür.
+
+```
+                    ┌─────────────────┐
+                    │  analyze_intent │   niyet + konuşma bağlamı
+                    └────────┬────────┘
+             ┌───────────────┼────────────────┐
+             │               │                │
+      sohbet / yardım   netleştirme      veri sorusu
+             │               │                │
+            END             END               ▼
+                              ┌───────────────────────┐
+                              │   retrieve_context    │  şema + NLU + QueryPlan
+                              └───────────┬───────────┘
+                              ┌───────────▼───────────┐
+                              │ resolve_filter_values │  değerleri gerçek veriye bağla
+                              └───────────┬───────────┘
+                              ┌───────────▼───────────┐
+                              │     generate_sql      │  deterministik üretici + LLM yedeği
+                              └───────────┬───────────┘
+                              ┌───────────▼───────────┐
+                              │     validate_sql      │  plan uyumu + güvenlik
+                              └───────────┬───────────┘
+                              ┌───────────▼───────────┐
+                              │      execute_sql      │  SQL Server
+                              └───────────┬───────────┘
+                              ┌───────────▼───────────┐
+                              │    analyze_results    │  deterministik analitik
+                              └───────────┬───────────┘
+                              ┌───────────▼───────────┐
+                              │   generate_insights   │  → observations → report
+                              └───────────┬───────────┘
+                                         END
+```
+
+### Deterministik çekirdek
+
+Projenin ayırt edici yanı: **SQL'in çoğu LLM'siz üretilir.**
+
+`QueryPlanner` soruyu tipli bir `QueryPlan`'e çevirir (metrikler, boyutlar, dönemler, filtreler, eşikler). `DeterministicSQLBuilder` bu plandan doğrudan T-SQL üretir. LLM yalnızca planın karşılamadığı durumlarda devreye girer.
+
+Kazanç: aynı soru her seferinde aynı SQL'i üretir, saniyenin altında yanıtlanır ve `PlanComplianceValidator` üretilen SQL'in plandaki her kısıtı taşıdığını doğrular.
+
+### Katmanlar
+
+| Katman | Sorumluluk |
+|---|---|
+| `semantics/` | Anlamsal çözümleme, metrik/boyut katalogları, eşanlamlılar |
+| `planning/` | `QueryPlan` üretimi, değer bağlama, plan–SQL uyum denetimi |
+| `services/` | Sorgu analizi, deterministik SQL üretimi, SQL doğrulama |
+| `context/` | Konuşma hafızası, takip sorusu çözümleme, plan birleştirme |
+| `analytics/` | Sonuç profilleme, tipli sonuç sözleşmeleri, grafik önerisi |
+| `insights/` | Bulgu üretimi ve anlatı |
+| `reporting/` | Çıktı politikası (metin / tablo / grafik / SQL), Türkçe şablonlar |
+
+---
+
+## Teknoloji
+
+| Alan | Teknoloji |
+|---|---|
+| Backend | Python 3.12 · FastAPI · LangGraph · SQLAlchemy (async) · Pydantic v2 |
+| Veritabanı | Microsoft SQL Server (aioodbc · ODBC Driver 18) |
+| LLM | Ollama (yerel, `qwen3:8b`) · gömme: `nomic-embed-text` · opsiyonel uzak sağlayıcı |
+| Frontend | React 19 · TanStack Router/Query · Vite · Tailwind · Recharts · Motion |
+
+---
+
+## Kurulum
+
+### Gereksinimler
+
+- Python 3.12+
+- Node.js 20+
+- Microsoft SQL Server + ODBC Driver 18
+- [Ollama](https://ollama.com) (yerel LLM için)
+
+### 1. Python ortamı
 
 ```bash
-python -m venv venv
-# Windows (cmd/PowerShell)
-venv\Scripts\activate
-# Linux/macOS
-source venv/bin/activate
-
-pip install -r requirements.txt
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-### 2. Database (Microsoft SQL Server)
-
-The runtime database is **Microsoft SQL Server** — there is no local/dummy database:
-
-- **Server**: `ASMPSHISBCK2` (default instance)
-- **Database**: `PusulaComed`
-- **Allowed object**: `dbo.vw_RandevuRaporu` (VIEW — the only queryable object)
-- **Authentication**: Windows Authentication (the Windows identity of the process
-  running the backend; no username/password is ever configured)
-
-Requirements:
-
-- **Microsoft ODBC Driver 18 for SQL Server** must be installed on the host.
-- The Windows account running the backend needs SELECT permission on the view.
-
-The application is strictly **read-only**: the SQL validation layer only accepts a
-single SELECT (or CTE ending in SELECT) referencing `dbo.vw_RandevuRaporu`, and
-rejects DML/DDL, EXEC, multiple statements, SQL comments, system catalogs, temporary
-tables, and any other object.
-
-Verify connectivity safely (prints no row data):
+### 2. Ortam değişkenleri
 
 ```bash
-cd backend
-python scripts/verify_mssql_connection.py
+copy .env.example .env
 ```
 
-### 3. Environment Configuration
-Create a `.env` file mapping configurations:
+`.env` içinde en azından şunları kendi ortamınıza göre düzenleyin:
+
+```ini
+DB_SERVER=SUNUCU_ADINIZ
+DB_DATABASE=VERITABANI_ADI
+DB_TRUSTED_CONNECTION=true                    # Windows kimlik doğrulaması
+DATABASE_ALLOWED_OBJECTS=dbo.vw_RandevuRaporu
+LLM_PROVIDER=ollama
+OLLAMA_MODEL=qwen3:8b
+```
+
+> `DATABASE_ALLOWED_OBJECTS` bir güvenlik sınırıdır: ajan yalnızca burada listelenen nesneleri sorgulayabilir.
+
+### 3. LLM modelleri
 
 ```bash
-cp .env.example .env
+ollama pull qwen3:8b
+ollama pull nomic-embed-text
 ```
 
-Key database variables (see `.env.example` for the full list): `DB_SERVER`,
-`DB_DATABASE`, `DB_DRIVER`, `DATABASE_SCHEMA`, `DATABASE_ALLOWED_OBJECTS`.
-
-Ensure your Ollama local service is running (configured with Qwen3 8B model):
-```bash
-ollama run qwen3:8b
-```
-
-### 4. Startup dev server
-Change directories to `backend/` and run uvicorn:
+### 4. Frontend bağımlılıkları
 
 ```bash
-cd backend
-uvicorn app.main:app --reload
+cd frontend && npm install
 ```
-- **Interactive docs UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Status diagnostics**: [http://localhost:8000/api/v1/health](http://localhost:8000/api/v1/health)
 
-### 5. Tests
-Execute tests from the `backend/` directory:
+---
+
+## Çalıştırma
+
+### VS Code (önerilen)
+
+**`Ctrl+Shift+B`** — backend ve frontend birlikte başlar.
+
+`F5` → *Backend + Frontend* ikisini hata ayıklama modunda başlatır.
+
+### Terminal
 
 ```bash
-pytest
+cd backend; ..\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000 --reload
 ```
 
-## Development Setup
+```bash
+cd frontend; npm run dev
+```
 
-This project uses standard linting, formatting, and hooks configuration to keep styles consistent.
+| Servis | Adres |
+|---|---|
+| Arayüz | http://localhost:5173 |
+| API | http://localhost:8000 |
+| API dokümanı | http://localhost:8000/docs |
+| Sağlık kontrolü | http://localhost:8000/health |
 
-### 1. Pre-commit Hooks Setup
-Ensure dependencies are installed, then hook pre-commit into your git repository:
+> `uvicorn` komutunu doğrudan çağırmayın — `python -m uvicorn` kullanın. Windows'ta `uvicorn.exe` kısayolu "Erişim engellendi" hatası verebilir.
+
+---
+
+## Testler
+
+```bash
+cd backend; ..\.venv\Scripts\python.exe -m pytest tests -q
+```
+
+```bash
+cd frontend; npm test
+```
+
+Testler LLM veya veritabanı gerektirmez; planlama, SQL üretimi, uyum denetimi ve konuşma bağlamı sahte bağımlılıklarla uçtan uca çalışır.
+
+### Değerlendirme paketi
+
+Gerçek kullanıcı senaryolarını toplu koşturmak için:
+
+```bash
+cd backend; ..\.venv\Scripts\python.exe -m tools.evaluation run --suite expert
+```
+
+Vakalar `backend/app/resources/evaluation_cases.json` içinde; sonuçlar `backend/evaluation/results/` altına yazılır.
+
+---
+
+## Geliştirme
+
+Kod stili `pre-commit` ile otomatik denetlenir:
 
 ```bash
 pre-commit install
 ```
 
-The hooks will run automatically before each git commit, preventing poorly formatted code or unused variables from reaching remote branches.
+Elle çalıştırmak için:
 
-### 2. Style Verification & Formatting Commands
-To manually format and check the codebase:
-
-- **Code Formatter (Black)**:
-  ```bash
-  black .
-  ```
-- **Code Linter (Ruff)**:
-  ```bash
-  ruff check .
-  ```
-- **Import Sorting (isort)**:
-  ```bash
-  isort .
-  ```
-- **Execute pre-commit hooks on all files**:
-  ```bash
-  pre-commit run --all-files
-  ```
-
-### 3. Running Test Suite
-Execute pytest from the `backend/` directory:
 ```bash
-pytest
+black .            # biçimlendirme
+ruff check .       # linting
+isort .            # import sıralama
+pre-commit run --all-files
 ```
+
+---
+
+## Proje yapısı
+
+```
+asm_ai_agent/
+├── backend/
+│   ├── app/
+│   │   ├── main.py                    # FastAPI giriş noktası
+│   │   ├── api/v1/endpoints/          # /report · /context · /health
+│   │   ├── agent/
+│   │   │   ├── graph.py               # LangGraph iş akışı
+│   │   │   ├── state.py               # Akış durumu
+│   │   │   └── nodes/                 # analyze_intent, generate_sql, ...
+│   │   ├── semantics/                 # Anlamsal çözümleme ve kataloglar
+│   │   ├── planning/                  # QueryPlan, değer bağlama, uyum denetimi
+│   │   ├── services/                  # Sorgu analizi, deterministik SQL üretimi
+│   │   ├── context/                   # Konuşma hafızası ve takip çözümleme
+│   │   ├── analytics/                 # Sonuç analizi ve grafik önerisi
+│   │   ├── insights/                  # Bulgu ve anlatı üretimi
+│   │   ├── reporting/                 # Çıktı politikası ve Türkçe şablonlar
+│   │   ├── database_intelligence/     # Şema keşfi ve değer katalogları
+│   │   ├── resources/                 # Kataloglar, eşanlamlılar, test setleri
+│   │   └── prompts/                   # LLM istem şablonları (markdown)
+│   ├── tests/                         # Test paketi
+│   └── tools/
+│       ├── evaluation/                # Değerlendirme paketi
+│       └── benchmark/                 # LLM başarım ölçümü
+├── frontend/
+│   └── src/
+│       ├── components/asm/            # Sohbet arayüzü, tablo, grafik panelleri
+│       ├── hooks/                     # Sohbet denetleyicisi
+│       ├── lib/                       # API istemcisi, biçimlendirme, çıktı niyeti
+│       └── locales/tr.ts              # Türkçe arayüz metinleri
+└── docs/                              # Özellik bazlı tasarım ve inceleme notları
+```
+
+---
+
+## Tasarım kararları
+
+**Deterministik önce, LLM sonra.** SQL üretimi kural tabanlıdır; LLM yalnızca yedektir. Bu, tekrarlanabilirlik ve hız sağlar.
+
+**Düğümler çökmez.** Her düğüm hatayı `state.errors`'a yazar ve akış devam eder. Kullanıcı boş ekran değil, açıklayıcı bir cevap görür.
+
+**Değerler her zaman veriye bağlıdır.** Filtre değerleri serbest metinden türetilmez; gerçek veritabanı değerlerine eşlenir. Eşleşme yoksa uydurulmaz.
+
+**Kısıtlar kaybolmaz.** `PlanComplianceValidator`, üretilen SQL'in plandaki her tarih, filtre, kırılım ve eşiği taşıdığını doğrular; taşımıyorsa sorgu reddedilir.
+
+**Türkçe dil işleme yerleşiktir.** Ek çekimleri (`altındaki`, `çalıştırmadan`), eşanlamlılar (`kalp` → Kardiyoloji, `hekim` → doktor) ve olumsuzluk kalıpları (`hariç tut`, `grafik olmasın`) doğrudan desteklenir.
+
+---
+
+## Notlar
+
+- Veritabanı bağlantısı Windows kimlik doğrulaması ile yapılandırılmıştır (`DB_TRUSTED_CONNECTION=true`).
+- Yerel LLM yanıt süresi donanıma bağlıdır. Deterministik yolla yanıtlanan sorular LLM kullanmaz ve saniyenin altında döner.
+- `docs/` klasöründe her özellik için tasarım, uygulama ve inceleme notları bulunur.

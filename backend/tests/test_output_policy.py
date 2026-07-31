@@ -283,3 +283,38 @@ def test_suffixed_negative_calistirma_is_sql_only(question):
 def test_positive_calistirmak_infinitive_still_executes():
     """Guard: "çalıştırmak" (to run) is positive and must stay an execution."""
     assert determine_requested_response_mode("Bu sorguyu çalıştırmak istiyorum") == "data"
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Grafiği kaldır, tablo ve kısa yorum ver",
+        "Pasta grafik yapma, tabloyu ver",
+        "Grafiği sil, tablo göster",
+    ],
+)
+def test_chart_removal_verbs_suppress_the_chart(question):
+    """"kaldır"/"sil" REMOVE an already-rendered chart and "yapma" is the
+    negative imperative — all three left the chart on screen (live UI testing,
+    2026-08-01)."""
+    assert "chart" not in determine_requested_visible_sections(question)
+
+
+def test_positive_yapmak_infinitive_still_requests_a_chart():
+    """Guard: "grafik yapmak istiyorum" is positive and must stay a chart."""
+    assert determine_requested_response_mode("Grafik yapmak istiyorum") == "visualization"
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Bunu yönetici özeti olarak ver",
+        "Kısa yorumu ver",
+        "Bunu özetle",
+        "Sonucu değerlendirir misin",
+    ],
+)
+def test_suffixed_answer_markers_are_detected(question):
+    """The stems were anchored, so the most management-facing phrasing of all —
+    "yönetici özeti" — carried no answer signal (live UI testing, 2026-08-01)."""
+    assert "answer" in determine_requested_visible_sections(question)

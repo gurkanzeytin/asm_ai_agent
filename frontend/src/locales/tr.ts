@@ -49,10 +49,10 @@ export const tr = {
   },
 
   welcome: {
-    titleBefore: "Randevu verilerinizi birlikte",
-    titleHighlight: "analiz edelim",
+    titleBefore: "Bugün size nasıl yardımcı",
+    titleHighlight: "olabilirim",
     description:
-      "Doğal Türkçe ile sorun; bölüm, şube, doktor ve tarih bazında randevu sayıları, gelmeme ve gerçekleşme oranları, dönem karşılaştırmaları ve dağılımları tablo ya da grafik olarak alın.",
+      "Kurumunuz hakkında sorular sorun, veritabanında sorgular çalıştırın, belgeleri analiz edin veya doğal dille raporlar oluşturun.",
   },
 
   details: {

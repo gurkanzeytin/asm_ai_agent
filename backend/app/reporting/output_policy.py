@@ -72,7 +72,13 @@ _VISUAL_MARKER = re.compile(
 _VISUAL_NEGATED = re.compile(
     r"\b(?:grafik\w*|grafig\w*|chart|gorsel\w*|ciz\w*|cizgi\w*|bar|"
     r"sutun\w*|pasta|oranlama)\b(?:\s+\w+){0,2}?\s+"
-    r"(?:degil|olmasin|istemiyorum|istemem|gerek\s+yok|gerekmiyor|cikarma|koyma)\b"
+    # "kaldır"/"sil" REMOVE an already-rendered chart, and "yapma" is the
+    # negative imperative of "yapmak" — both left the chart on screen (live UI
+    # testing, 2026-08-01). "yapma" enumerates its negative suffixes so the
+    # positive infinitive "yapmak" ("grafik yapmak istiyorum") still asks for
+    # a chart.
+    r"(?:degil|olmasin|istemiyorum|istemem|gerek\s+yok|gerekmiyor|cikarma|koyma"
+    r"|kaldir\w*|sil|silelim|yapma(?:yin|yiniz|yalim)?)\b"
 )
 
 
@@ -116,9 +122,13 @@ def _wants_data(intent_probe: str) -> bool:
     return bool(_DATA_MARKER.search(intent_probe)) and not _DATA_NEGATED.search(intent_probe)
 
 
+# Suffixed forms are the normal way these words appear ("yönetici ÖZETİ",
+# "kısa YORUMU", "sonucu DEĞERLENDİRİR misin") — anchoring the bare stem meant
+# the single most management-facing phrasing of all, "yönetici özeti", carried
+# no answer signal at all (live UI testing, 2026-08-01).
 _ANSWER_MARKER = re.compile(
-    r"\b(yanitla|cevapla|yorum|yorumla|ozet|rapor|analiz|acikla|"
-    r"degerlendir|ne anlama|sonucunu yorumla)\b"
+    r"\b(yanitla\w*|cevapla\w*|yorum\w*|ozet\w*|rapor\w*|analiz\w*|acikla\w*|"
+    r"degerlendir\w*|ne anlama)\b"
 )
 _EXPANDED_ANSWER_MARKER = re.compile(
     r"\b(detay\w*|detayli|ayrinti\w*|kapsamli|rapor\w*|bulgu\w*|"

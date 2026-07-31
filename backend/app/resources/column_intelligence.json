@@ -635,7 +635,16 @@
         "bolumlere gore",
         "branslara gore",
         "kliniklere gore",
-        "brans bazinda"
+        "brans bazinda",
+        "departman",
+        "departmana gore",
+        "departmanlara gore",
+        "departman bazinda",
+        "servis",
+        "servisler",
+        "servise gore",
+        "servislere gore",
+        "servis bazinda"
       ],
       "supported_operations": [
         "filter",

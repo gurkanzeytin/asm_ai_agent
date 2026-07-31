@@ -4,7 +4,7 @@ read-only object whitelisting, T-SQL pagination, and retryable error handling.
 No test in this module opens a real database connection.
 """
 
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, quote_plus, urlsplit
 
 import pytest
 
@@ -130,6 +130,61 @@ def test_non_mssql_database_url_rejected():
     with pytest.raises(Exception) as excinfo:
         Settings(_env_file=None, DATABASE_URL="sqlite+aiosqlite:///./anything.db")
     assert "mssql+aioodbc" in str(excinfo.value)
+
+
+def test_disabling_windows_auth_is_rejected():
+    with pytest.raises(Exception) as excinfo:
+        Settings(_env_file=None, DB_TRUSTED_CONNECTION=False)
+    assert "Windows Authentication" in str(excinfo.value)
+
+
+def test_explicit_url_username_password_rejected():
+    with pytest.raises(Exception) as excinfo:
+        Settings(
+            _env_file=None,
+            DATABASE_URL=(
+                "mssql+aioodbc://report_user:secret@SRV/Db"
+                "?driver=ODBC+Driver+18+for+SQL+Server"
+            ),
+        )
+    assert "username or password" in str(excinfo.value)
+
+
+def test_explicit_url_sql_auth_query_parameters_rejected():
+    with pytest.raises(Exception) as excinfo:
+        Settings(
+            _env_file=None,
+            DATABASE_URL=(
+                "mssql+aioodbc://@SRV/Db"
+                "?driver=ODBC+Driver+18+for+SQL+Server&UID=report_user&PWD=secret"
+            ),
+        )
+    assert "SQL authentication parameters" in str(excinfo.value)
+
+
+def test_explicit_odbc_connect_sql_auth_rejected():
+    odbc = quote_plus(
+        "DRIVER={ODBC Driver 18 for SQL Server};"
+        "SERVER=SRV;"
+        "DATABASE=Db;"
+        "UID=report_user;"
+        "PWD=secret;"
+    )
+    with pytest.raises(Exception) as excinfo:
+        Settings(_env_file=None, DATABASE_URL=f"mssql+aioodbc:///?odbc_connect={odbc}")
+    assert "SQL authentication" in str(excinfo.value)
+
+
+def test_explicit_url_cannot_disable_windows_auth():
+    with pytest.raises(Exception) as excinfo:
+        Settings(
+            _env_file=None,
+            DATABASE_URL=(
+                "mssql+aioodbc://@SRV/Db"
+                "?driver=ODBC+Driver+18+for+SQL+Server&Trusted_Connection=no"
+            ),
+        )
+    assert "Windows Authentication" in str(excinfo.value)
 
 
 # ---------------------------------------------------------------------------

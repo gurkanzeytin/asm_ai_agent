@@ -10,6 +10,11 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 # the CWD, which silently picks up a different .env when the app is launched
 # from backend/ (per README) instead of the repo root where .env.example lives.
 _REPO_ROOT_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
+_SQL_AUTH_CREDENTIAL_KEYS = frozenset(
+    {"uid", "user", "user id", "userid", "username", "pwd", "password"}
+)
+_WINDOWS_AUTH_KEYS = frozenset({"trusted_connection", "integrated security"})
+_WINDOWS_AUTH_DISABLED_VALUES = frozenset({"", "0", "false", "no"})
 
 
 def parse_comma_separated_list(v: str | list[str]) -> list[str]:
@@ -406,6 +411,53 @@ class Settings(BaseSettings):
             (parts.scheme, parts.netloc, parts.path, encoded_query, parts.fragment)
         )
 
+    def _validate_windows_auth_database_url(self, database_url: str) -> None:
+        """Rejects explicit database URLs that configure SQL credentials or disable Windows auth."""
+        parts = urlsplit(database_url)
+        if parts.username or parts.password:
+            raise ValueError(
+                "DATABASE_URL must not include a username or password. SQL Server access "
+                "uses Windows Authentication from the backend process identity."
+            )
+
+        for key, value in parse_qsl(parts.query, keep_blank_values=True):
+            normalized_key = key.strip().lower()
+            if normalized_key == "odbc_connect":
+                self._validate_windows_auth_odbc_string(unquote_plus(value))
+                continue
+            if normalized_key in _SQL_AUTH_CREDENTIAL_KEYS:
+                raise ValueError(
+                    "DATABASE_URL must not include SQL authentication parameters. "
+                    "Remove UID/User/PWD/Password values and use Windows Authentication."
+                )
+            if (
+                normalized_key in _WINDOWS_AUTH_KEYS
+                and value.strip().lower() in _WINDOWS_AUTH_DISABLED_VALUES
+            ):
+                raise ValueError(
+                    "DATABASE_URL must not disable Windows Authentication. "
+                    "Use Trusted_Connection=yes or Integrated Security=SSPI."
+                )
+
+    def _validate_windows_auth_odbc_string(self, odbc_connection_string: str) -> None:
+        """Rejects SQL credentials or disabled integrated auth inside odbc_connect."""
+        entries = [
+            (key.strip().lower(), value.strip().lower())
+            for entry in odbc_connection_string.split(";")
+            if entry.strip() and "=" in entry
+            for key, value in [entry.split("=", 1)]
+        ]
+        for key, value in entries:
+            if key in _SQL_AUTH_CREDENTIAL_KEYS:
+                raise ValueError(
+                    "ODBC connection strings must not include SQL authentication "
+                    "parameters. Use Windows Authentication only."
+                )
+            if key in _WINDOWS_AUTH_KEYS and value in _WINDOWS_AUTH_DISABLED_VALUES:
+                raise ValueError(
+                    "ODBC connection strings must not disable Windows Authentication."
+                )
+
     @model_validator(mode="after")
     def _validate_nvidia_provider_requirements(self) -> "Settings":
         """Requires NVIDIA_API_KEY only when NVIDIA is the active LLM provider.
@@ -424,6 +476,11 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _resolve_database_url(self) -> "Settings":
         """Constructs and validates the SQL Server connection URL at startup."""
+        if not self.DB_TRUSTED_CONNECTION:
+            raise ValueError(
+                "DB_TRUSTED_CONNECTION must remain true. SQL Server access uses Windows "
+                "Authentication from the backend process identity."
+            )
         if not self.DATABASE_URL:
             missing = [
                 name
@@ -448,6 +505,8 @@ class Settings(BaseSettings):
                 "DATABASE_URL must use the async SQL Server scheme 'mssql+aioodbc://...'. "
                 "Microsoft SQL Server is the only supported runtime database."
             )
+        else:
+            self._validate_windows_auth_database_url(self.DATABASE_URL)
         if self.ENVIRONMENT == "development":
             self.DATABASE_URL = self._apply_development_odbc_options(self.DATABASE_URL)
         return self

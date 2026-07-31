@@ -597,3 +597,23 @@ def test_two_named_years_stay_a_comparison_not_a_year_bucket():
 def test_single_year_question_is_not_bucketed():
     plan = _planned("2024 yilinda kac randevu var")
     assert plan.grouping_granularity is None
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "2024 servis bazinda randevu sayisi",
+        "2024 departman bazinda randevu sayisi",
+        "2024 servislere gore randevu sayisi",
+    ],
+)
+def test_servis_and_departman_map_to_the_department_dimension(question):
+    """Management vocabulary: in this data GenelRandevuBolumAdi holds exactly
+    what a manager calls a "servis" (Kardiyoloji, Radyoloji, ...)."""
+    assert _planned(question).dimensions == ["GenelRandevuBolumAdi"]
+
+
+def test_hizmet_still_maps_to_the_service_column():
+    """Guard: adding "servis" to the department vocabulary must not swallow the
+    genuinely separate HizmetAdi (service/procedure name) column."""
+    assert _planned("2024 hizmet bazinda randevu sayisi").dimensions == ["HizmetAdi"]
