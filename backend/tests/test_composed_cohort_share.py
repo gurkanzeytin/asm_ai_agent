@@ -17,6 +17,7 @@ from app.agent.nodes.resolve_filter_values import ResolveFilterValuesNode
 from app.agent.state import AgentState
 from app.database_intelligence.models import ViewMetadata
 from app.database_intelligence.value_catalog import ValueCatalog
+from app.planning.models import InlineMetric, MetricPredicate
 from app.planning.planner import QueryPlanner
 from app.planning.predicates import extract_measure_threshold
 from app.planning.value_resolver import (
@@ -24,6 +25,7 @@ from app.planning.value_resolver import (
     ValueResolver,
     extract_candidate_phrases,
     extract_cohort_share_mentions,
+    extract_nested_share_segments,
 )
 from app.services.deterministic_sql_builder import DeterministicSQLBuilder
 from app.services.query_analyzer import QueryAnalyzer
@@ -263,9 +265,27 @@ async def test_threshold_share_renders_for_any_bound(minutes):
     assert SQLValidator().validate(sql).valid
 
 
+@pytest.mark.parametrize(
+    "word,value",
+    [
+        ("on beş", 15),
+        ("otuz", 30),
+        ("kırk", 40),
+        ("kırk beş", 45),
+        ("elli", 50),
+        ("yüz", 100),
+    ],
+)
+def test_common_written_number_thresholds_are_parsed_without_guessing(word, value):
+    predicate = extract_measure_threshold(f"{word} dakikadan uzun randevuların oranı")
+
+    assert predicate is not None
+    assert predicate.values == [float(value)]
+
+
 @pytest.mark.asyncio
 async def test_threshold_without_share_wording_is_a_row_filter():
-    """"…sayısı" counts the cohort; only "…oranı" needs the full denominator."""
+    """ "…sayısı" counts the cohort; only "…oranı" needs the full denominator."""
     plan = await _resolved_plan("60 dakikadan uzun randevu sayısı nedir?")
     sql = DeterministicSQLBuilder().build(plan).sql
 
@@ -289,7 +309,7 @@ async def test_threshold_without_share_wording_is_a_row_filter():
     ],
 )
 async def test_foreign_cohort_is_a_negation_predicate(question):
-    """"Yabancı" names a SET of values, not one, so it cannot be grounded like
+    """ "Yabancı" names a SET of values, not one, so it cannot be grounded like
     an ordinary filter value. Curated in view_semantics.json so the home-country
     assumption stays visible and configurable."""
     plan = await _resolved_plan(question)
@@ -337,7 +357,7 @@ async def test_only_one_percentage_per_answer():
 
 @pytest.mark.asyncio
 async def test_a_period_change_percentage_is_not_a_share_of_total():
-    """"Bu farkı yüzde olarak özetle" asks how much the two periods differ, not
+    """ "Bu farkı yüzde olarak özetle" asks how much the two periods differ, not
     what each group's slice of the whole is — both are "yüzde"."""
     question = "2025 Mayis ile Haziran 2025 arasindaki farki yuzde olarak ozetle."
     plan = await _resolved_plan(question)
@@ -401,6 +421,117 @@ async def test_a_breakdown_still_works_beside_a_named_cohort():
 
     assert plan.dimensions == ["GenelRandevuBolumAdi"]
     assert "SUM(CASE WHEN Uyruk = N'Bulgaristan' THEN 1 ELSE 0 END)" in sql
+
+
+# ---------------------------------------------------------------------------
+# General conditional numerator/denominator algebra (two and three parts)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "question,expected",
+    [
+        (
+            "Yabancı hastalar içinde kadın hasta oranı nedir?",
+            ("Yabancı hastalar", "kadın hasta oranı nedir?"),
+        ),
+        (
+            "Kadın hastalar içindeki yabancıların payı nedir?",
+            ("Kadın hastalar", "yabancıların payı nedir?"),
+        ),
+        (
+            "Kardiyoloji randevuları içerisinde gelmeme yüzdesi",
+            ("Kardiyoloji randevuları", "gelmeme yüzdesi"),
+        ),
+    ],
+)
+def test_nested_share_extraction_is_structural(question, expected):
+    assert extract_nested_share_segments(question) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "question,numerator,denominator",
+    [
+        (
+            "Yabancı hastalar içinde kadın hasta oranı nedir?",
+            "Uyruk <> N'Türkiye' AND CinsiyetId = N'K'",
+            "Uyruk <> N'Türkiye'",
+        ),
+        (
+            "Kadın hastalar içinde yabancıların oranı nedir?",
+            "CinsiyetId = N'K' AND Uyruk <> N'Türkiye'",
+            "CinsiyetId = N'K'",
+        ),
+        (
+            "Kardiyoloji randevuları içinde gelmeme oranı nedir?",
+            "',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' "
+            "LIKE N'%,Kardiyoloji,%' AND RandevuDurumu = N'Gelmedi'",
+            "',' + REPLACE(GenelRandevuBolumAdi, ', ', ',') + ',' LIKE N'%,Kardiyoloji,%'",
+        ),
+    ],
+)
+async def test_two_part_share_uses_conditional_denominator(question, numerator, denominator):
+    plan = await _resolved_plan(question)
+    sql = DeterministicSQLBuilder().build(plan).sql
+    spec = plan.metric_specs[SHARE_ALIAS]
+
+    assert numerator in sql
+    assert f"NULLIF(SUM(CASE WHEN {denominator} THEN 1 ELSE 0 END), 0)" in sql
+    assert len(spec.denominator_predicates) == 1
+    assert len(spec.numerator_predicates) == 2
+    assert SQLValidator().validate(sql).valid
+
+
+@pytest.mark.asyncio
+async def test_three_part_share_combines_every_grounded_condition():
+    plan = await _resolved_plan("Yabancı hastalar içinde kadınların gelmeme oranı nedir?")
+    sql = DeterministicSQLBuilder().build(plan).sql
+    spec = plan.metric_specs[SHARE_ALIAS]
+
+    assert ("Uyruk <> N'Türkiye' AND RandevuDurumu = N'Gelmedi' AND CinsiyetId = N'K'") in sql or (
+        "Uyruk <> N'Türkiye' AND CinsiyetId = N'K' AND RandevuDurumu = N'Gelmedi'"
+    ) in sql
+    assert len(spec.numerator_predicates) == 3
+    assert len(spec.denominator_predicates) == 1
+    assert "no_show_rate" not in plan.metrics
+    assert SQLValidator().validate(sql).valid
+
+
+@pytest.mark.asyncio
+async def test_metric_cohort_predicates_do_not_leak_into_outer_where():
+    plan = await _resolved_plan("Yabancı hastalar içinde kadınların gelmeme oranı nedir?")
+    sql = DeterministicSQLBuilder().build(plan).sql
+    where_clause = sql.split("WHERE", 1)[1].split("GROUP BY")[0] if "WHERE" in sql else ""
+
+    assert "Uyruk" not in where_clause
+    assert "CinsiyetId" not in where_clause
+    assert "RandevuDurumu" not in where_clause
+
+
+def test_inline_metric_rejects_a_partially_invalid_conjunction():
+    builder = DeterministicSQLBuilder()
+    spec = InlineMetric(
+        shape="rate",
+        predicate=MetricPredicate(column="CinsiyetId", operator="=", values=["K"]),
+        numerator_predicates=[
+            MetricPredicate(column="CinsiyetId", operator="=", values=["K"]),
+            MetricPredicate(column="DROP TABLE", operator="=", values=["x"]),
+        ],
+        label="test",
+    )
+
+    assert builder._inline_metric_expr(spec) is None
+
+
+@pytest.mark.asyncio
+async def test_temporal_inside_phrase_remains_outer_scope_not_a_denominator_cohort():
+    plan = await _resolved_plan("2024 yılı içinde kadın hasta oranı nedir?")
+    spec = plan.metric_specs[SHARE_ALIAS]
+
+    assert spec.denominator_predicates == []
+    assert spec.predicate.column == "CinsiyetId"
+    assert plan.date_filters
 
 
 # ---------------------------------------------------------------------------

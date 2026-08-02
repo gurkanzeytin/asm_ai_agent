@@ -175,6 +175,7 @@
         "birden fazla randevusu olan",
         "tekrar eden hasta",
         "birden fazla gelen",
+        "birden fazla kez gelen",
         "tek seferlik"
       ],
       "compositional_signals": [
@@ -261,12 +262,13 @@
         "ayni hasta birden fazla doktorla islem",
         "birden fazla doktorla islem gormus",
         "ayni gun coklu doktor",
-        "ayni gun birden fazla doktor"
+        "ayni gun birden fazla doktor",
+        "ayni gun farkli doktorlara gorunen"
       ],
       "compositional_signals": [
         ["hasta", "kisi"],
         ["ayni", "tek", "bir"],
-        ["gun", "gunde", "tarih", "tarihte", "takvim tarihi"],
+        ["gun", "gunde", "gununde", "tarih", "tarihte", "takvim tarihi", "takvim gunu"],
         ["doktor", "hekim"],
         ["birden fazla", "birden cok", "iki ayri", "farkli", "degisik", "coklu"]
       ],
@@ -660,9 +662,9 @@
         "ayni gun icinde"
       ],
       "compositional_signals": [
-        ["ayni", "gununde"],
+        ["ayni", "gununde", "randevu gunu"],
         ["gun", "gunu", "gunuyle", "tarih"],
-        ["alinan", "alinip", "olusturulan", "olusturuldugu", "olusturma", "kayit", "kaydedilen"],
+        ["alinan", "alinip", "olusturulan", "olusturuldugu", "olusturma", "kayit", "kaydedilen", "verilen"],
         ["randevu", "kac", "sayi", "adet"]
       ],
       "compatible_dimensions_group": "organizational",
@@ -712,7 +714,10 @@
         "protokol acilis suresi",
         "protokol ne kadar gec",
         "protokol acilis gecikme",
-        "protokol acilisi randevudan"
+        "protokol acilisi randevudan",
+        "protokolu en gec acilan",
+        "randevu saatinden sonra protokol acilisi",
+        "protokol acilma gecikmesi"
       ],
       "compositional_signals": [
         ["protokol"],
@@ -739,7 +744,8 @@
       "synonyms": [
         "fiili sure",
         "gercek sure",
-        "tarihlere gore sure"
+        "tarihlere gore sure",
+        "fiili gorusme suresi"
       ],
       "compositional_signals": [
         ["fiili", "gercek"],
@@ -1037,6 +1043,7 @@
       "synonyms": [
         "gecersiz tarih",
         "hatali tarih araligi",
+        "tarih araligi bozuk",
         "tarihi bozuk",
         "baslangictan once",
         "veri kalitesi sorunlu",
@@ -1045,9 +1052,9 @@
         "bitis baslangictan erken"
       ],
       "compositional_signals": [
-        ["baslangic", "baslama"],
-        ["bitis"],
-        ["erken", "once", "sonra"]
+        ["baslangic", "baslama", "tarih", "tarih araligi"],
+        ["bitis", "aralik"],
+        ["erken", "once", "sonra", "bozuk", "hatali", "gecersiz"]
       ],
       "compatible_dimensions_group": "organizational",
       "default_time_column": "BaslangicTarihi",
@@ -1102,12 +1109,13 @@
         "planlanandan uzun",
         "sure uyusmazligi",
         "sure farki tutmayan",
+        "randevu suresi tarih farkiyla tutmuyor",
         "kayitli sure tutmayan",
         "saat farki tutmayan"
       ],
       "compositional_signals": [
         ["sure", "dakika", "tarih farki"],
-        ["uyusmayan", "tutmayan", "celisen", "celiski", "tutarsiz"]
+        ["uyusmayan", "tutmayan", "tutmuyor", "celisen", "celiski", "tutarsiz"]
       ],
       "compatible_dimensions_group": "organizational",
       "default_time_column": "BaslangicTarihi",
@@ -1305,7 +1313,8 @@
         "beklemede olanlarin orani",
         "bekleyenlerin orani",
         "bekleyenlerin payi",
-        "bekliyor olanlarin payi"
+        "bekliyor olanlarin payi",
+        "bekleme sirasindakilerin orani"
       ],
       "compositional_signals": [
         ["bekleyen", "bekleme", "bekleme sirasi", "bekleme sirasinda", "sirada duran", "kuyruk"],

@@ -345,6 +345,18 @@ def test_explicit_multi_metric_conjunction_preserves_both():
     assert "no_show_count" in matched
 
 
+def test_group_comparison_is_not_misread_as_multiple_metrics():
+    assert not catalog.has_explicit_multi_metric_request(
+        fold("Bekleme oranını randevu tiplerine göre karşılaştır.")
+    )
+
+
+def test_two_named_measures_can_be_compared_without_a_ve_conjunction():
+    assert catalog.has_explicit_multi_metric_request(
+        fold("Randevu sayısını gelmeme oranıyla kıyasla.")
+    )
+
+
 # ═══════════════════ F — Conditional metric family sweep ════════════════════
 
 

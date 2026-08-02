@@ -485,16 +485,44 @@ def _spans_overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
 
 # Explicit multi-metric wording: the ONLY signal that overrides metric
 # specificity (a matched conditional metric otherwise always wins over the
-# generic base metric it specializes) — reuses the same conjunction/
-# comparison vocabulary already established elsewhere in this codebase
-# (app.context.merge_policy._METRIC_ADD_CONJUNCTION, ontology.GOAL_MARKERS
-# COMPARE) for "the user explicitly wants more than one metric together".
-_MULTI_METRIC_MARKERS = (" ve ", "birlikte", "karsilastir", "kiyasla")
+# generic base metric it specializes). Conjunction/additive wording is direct;
+# a comparison verb is accepted only when at least two real, non-grouping
+# metric phrases are present.
+_MULTI_METRIC_MARKERS = (" ve ", "birlikte", "bir de ", " ekle")
+_METRIC_COMPARISON_MARKERS = ("karsilastir", "kiyasla")
 
 
 def has_explicit_multi_metric_request(folded_question: str) -> bool:
-    """Whether wording explicitly asks to keep multiple measures together."""
-    return any(marker in folded_question for marker in _MULTI_METRIC_MARKERS)
+    """Whether wording explicitly asks to keep multiple measures together.
+
+    ``karşılaştır``/``kıyasla`` alone is deliberately not enough: users very
+    commonly compare the groups of one metric ("bekleme oranını randevu
+    tiplerine göre karşılaştır"). Treating that verb as multi-metric prevents
+    the more specific composed metric from replacing a generic grouped count.
+    A real multi-metric request still carries a conjunction ("sayı ve oran"),
+    ``birlikte``, or an additive continuation ("bir de ... ekle").
+    """
+    if any(marker in folded_question for marker in _MULTI_METRIC_MARKERS):
+        return True
+    if not any(marker in folded_question for marker in _METRIC_COMPARISON_MARKERS):
+        return False
+
+    # Comparison verbs need two *measure mentions*, not merely two catalog
+    # matches. A specialized phrase can legitimately match both its generic
+    # and specific metric ("birden fazla gelen hasta sayısı" -> unique patient
+    # + repeat patient), while still asking for one measure. Count/rate/duration
+    # vocabulary gives us the grammatical measure heads without that overlap.
+    measure_patterns = (
+        r"\b(?:sayi|adet|miktar|toplam|rakam)\w*\b",
+        r"\b(?:oran|yuzde|pay)\w*\b",
+        r"\b(?:sure|dakika)\w*\b",
+    )
+    mention_counts = [
+        len(re.findall(pattern, folded_question)) for pattern in measure_patterns
+    ]
+    return sum(count > 0 for count in mention_counts) >= 2 or any(
+        count >= 2 for count in mention_counts
+    )
 
 
 def match_metrics(folded_question: str) -> list[str]:
@@ -965,7 +993,10 @@ def period_change_direction(folded_question: str) -> str | None:
 
 def match_granularity(folded_question: str) -> str | None:
     for granularity, terms in _GRANULARITY_TERMS:
-        if any(term in folded_question for term in terms):
+        # Whole-token matching matters here: the substring "gunluk" exists
+        # inside "yogunluk", which used to turn "bugün trafik/yoğunluk nasıl"
+        # into an unintended daily trend instead of today's scalar count.
+        if any(_term_in(folded_question, term) for term in terms):
             return granularity
     return None
 

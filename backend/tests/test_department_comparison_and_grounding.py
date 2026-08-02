@@ -10,6 +10,7 @@ Covers the fixes for the benchmark failures observed on 2026-07-23:
 """
 
 import pytest
+from tools.benchmark.metrics import Outcome, QuestionRun, Reason, classify
 
 from app.database_intelligence.value_catalog import _split_composite_values
 from app.planning.compliance import PlanComplianceValidator
@@ -24,7 +25,6 @@ from app.services.deterministic_sql_builder import (
     _DEPARTMENT_SPLIT_ALIAS,
     DeterministicSQLBuilder,
 )
-from tools.benchmark.metrics import Outcome, QuestionRun, Reason, classify
 
 
 def _plan(**overrides) -> QueryPlan:
@@ -49,7 +49,7 @@ class TestQuestionWordCandidates:
 
 
 class TestPronounInflectionsAreNeverValueCandidates:
-    """"Bunu şubeye göre kır" ("break this down by branch") walked back from
+    """ "Bunu şubeye göre kır" ("break this down by branch") walked back from
     the "şube" cue straight into "Bunu" and asked the user to disambiguate
     it as a BRANCH NAME ("'Bunu' değerine uygun bir şube bulunamadı...")
     instead of resolving as a follow-up pronoun - only the nominative
@@ -119,7 +119,7 @@ class TestCompositeSplitting:
 
 
 class TestDepartmentGroupBySplitting:
-    """"En az/çok randevusu olan N bölümü göster" - GROUP BY on the raw
+    """ "En az/çok randevusu olan N bölümü göster" - GROUP BY on the raw
     composite GenelRandevuBolumAdi column used to produce one row per
     distinct COMBINATION (425+ of them) instead of one row per atomic
     department: a bottom-N question returned nonsense like "Nöroşirurji,
@@ -187,9 +187,7 @@ class TestDepartmentGroupBySplitting:
         assert compliance.compliant, compliance.missing
 
     def test_bottom_n_ranking_still_applies_top_and_order(self):
-        plan = self._grouped_plan(
-            analysis_type="bottom_n", limit=5, ranking="ASC", order="ASC"
-        )
+        plan = self._grouped_plan(analysis_type="bottom_n", limit=5, ranking="ASC", order="ASC")
         built = DeterministicSQLBuilder().build(plan)
 
         assert hasattr(built, "sql"), getattr(built, "reason", "")
@@ -212,9 +210,7 @@ class TestDepartmentGroupBySplitting:
     def test_non_department_dimension_never_gets_the_cross_apply(self):
         """Regression guard: a plan with no department dimension at all must
         render exactly like before - no CROSS APPLY, no behavior change."""
-        built = DeterministicSQLBuilder().build(
-            self._grouped_plan(dimensions=["SubeAdi"])
-        )
+        built = DeterministicSQLBuilder().build(self._grouped_plan(dimensions=["SubeAdi"]))
 
         assert hasattr(built, "sql"), getattr(built, "reason", "")
         assert "CROSS APPLY" not in built.sql
@@ -260,20 +256,16 @@ class TestComparisonPair:
         # The multi-word walk must not swallow a trailing cue noun like
         # "Bölümü" — "bolum" is a _NEVER_CANDIDATE_ROOTS entry precisely so it
         # never gets treated as part of the entity name itself.
-        pair = extract_comparison_pair(
-            "Kardiyoloji ile Psikiyatri Bölümü'nü karşılaştır."
-        )
+        pair = extract_comparison_pair("Kardiyoloji ile Psikiyatri Bölümü'nü karşılaştır.")
         assert pair == ("Kardiyoloji", "Psikiyatri")
 
     def test_mi_pattern_multi_word(self):
-        pair = extract_comparison_pair(
-            "Hangisi daha yoğun: Ortopedi mi Kadın Doğum mu?"
-        )
+        pair = extract_comparison_pair("Hangisi daha yoğun: Ortopedi mi Kadın Doğum mu?")
         assert pair == ("Ortopedi", "Kadın Doğum")
 
 
 class TestComparisonEntityEnumeration:
-    """"A, B ve C" enumerations — only 3+ (the 2-value case stays with
+    """ "A, B ve C" enumerations — only 3+ (the 2-value case stays with
     extract_comparison_pair, whose anchoring is deliberately narrower)."""
 
     def test_three_entity_enumeration(self):
@@ -303,9 +295,10 @@ class TestComparisonEntityEnumeration:
         # "Kalp ve Damar Cerrahisi" is a REAL department name whose own "ve"
         # this loose scan mis-splits — the >=3 threshold plus the caller's
         # all-or-nothing grounding rule is what keeps that harmless.
-        assert extract_comparison_entities(
-            "Kalp ve Damar Cerrahisi bölümünü Ortopedi ile karşılaştır"
-        ) == []
+        assert (
+            extract_comparison_entities("Kalp ve Damar Cerrahisi bölümünü Ortopedi ile karşılaştır")
+            == []
+        )
 
     def test_field_cue_enumeration_is_a_multi_value_filter(self):
         # A field cue ("bölümleri") makes a 3+-value list a multi-value FILTER,
@@ -428,7 +421,7 @@ class TestEntityComparisonSQL:
         assert result.compliant, result.missing
 
     def test_rate_metric_pair_compares_rates_not_counts(self):
-        """"Kardiyoloji ile Nöroloji'nin gelmeme ORANINI karşılaştır" must
+        """ "Kardiyoloji ile Nöroloji'nin gelmeme ORANINI karşılaştır" must
         compare the two no-show RATES, not their raw appointment counts (live
         2026-07-28: the count pair contract reported 18615 vs 6483 appointments
         for a rate question). A non-count metric delegates to the per-entity
@@ -573,15 +566,21 @@ class TestEntityBreakdownSQL:
         assert built.result_schema == "EntityComparisonResult"
         assert "UNION ALL" not in built.sql
 
-    def test_multi_metric_breakdown_is_unsupported(self):
+    def test_multi_metric_breakdown_renders_every_metric(self):
         plan = self._set_plan(
             ["Kardiyoloji", "Ortopedi", "Nöroloji"],
             metrics=["appointment_count", "no_show_rate"],
         )
         built = DeterministicSQLBuilder().build(plan)
 
-        assert not hasattr(built, "sql")
-        assert "multi-metric entity breakdown" in built.reason
+        assert hasattr(built, "sql"), getattr(built, "reason", "")
+        assert built.sql.count("AS appointment_count") == 3
+        assert built.sql.count("AS no_show_rate") == 3
+        assert built.expected_aliases == [
+            "entity_label",
+            "appointment_count",
+            "no_show_rate",
+        ]
 
 
 class TestEntityComparisonPresentation:
@@ -655,7 +654,10 @@ class TestScalarDistinctCounts:
 
         analysis = QueryAnalyzer().analyze(question)
         return QueryPlanner().build_plan(
-            question, analysis, tables=[], views=[ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])]
+            question,
+            analysis,
+            tables=[],
+            views=[ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])],
         )
 
     def test_kac_doktor_var_is_a_single_scalar(self):
@@ -773,8 +775,8 @@ async def test_three_value_department_filter_vs_comparison(monkeypatch):
     from app.agent.nodes.resolve_filter_values import ResolveFilterValuesNode
     from app.agent.state import AgentState
     from app.database_intelligence.models import ViewMetadata
-    from app.services.query_analyzer import QueryAnalyzer
     from app.planning.planner import QueryPlanner
+    from app.services.query_analyzer import QueryAnalyzer
 
     depts = ["Kardiyoloji", "Nöroloji", "Ortopedi"]
 
@@ -786,8 +788,12 @@ async def test_three_value_department_filter_vs_comparison(monkeypatch):
     node = ResolveFilterValuesNode(_R())
 
     async def _run(question: str):
-        plan = QueryPlanner().build_plan(question, QueryAnalyzer().analyze(question), [], views=[view])
-        state = await node.execute(AgentState(question=question, raw_question=question, query_plan=plan))
+        plan = QueryPlanner().build_plan(
+            question, QueryAnalyzer().analyze(question), [], views=[view]
+        )
+        state = await node.execute(
+            AgentState(question=question, raw_question=question, query_plan=plan)
+        )
         return state.query_plan
 
     filt = await _run("2024 Kardiyoloji, Noroloji ve Ortopedi bolumlerinde toplam kac randevu var")
@@ -804,7 +810,7 @@ async def test_three_value_department_filter_vs_comparison(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_department_exclusion_breakdown_and_total(monkeypatch):
-    """"X hariç ..." grounds the excluded name and drops the positive
+    """ "X hariç ..." grounds the excluded name and drops the positive
     department filter it mis-parsed into, so filter+exclusion never cancel to
     zero rows. A breakdown excludes the ATOMIC value (composite rows keep their
     other departments); a plain total excludes at the row level (#4 ileri
@@ -812,8 +818,8 @@ async def test_department_exclusion_breakdown_and_total(monkeypatch):
     from app.agent.nodes.resolve_filter_values import ResolveFilterValuesNode
     from app.agent.state import AgentState
     from app.database_intelligence.models import ViewMetadata
-    from app.services.query_analyzer import QueryAnalyzer
     from app.planning.planner import QueryPlanner
+    from app.services.query_analyzer import QueryAnalyzer
 
     depts = ["Kardiyoloji", "Radyoloji", "Nöroloji", "Ortopedi"]
 
@@ -825,8 +831,12 @@ async def test_department_exclusion_breakdown_and_total(monkeypatch):
     node = ResolveFilterValuesNode(_R())
 
     async def _run(question: str):
-        plan = QueryPlanner().build_plan(question, QueryAnalyzer().analyze(question), [], views=[view])
-        state = await node.execute(AgentState(question=question, raw_question=question, query_plan=plan))
+        plan = QueryPlanner().build_plan(
+            question, QueryAnalyzer().analyze(question), [], views=[view]
+        )
+        state = await node.execute(
+            AgentState(question=question, raw_question=question, query_plan=plan)
+        )
         return state.query_plan
 
     brk = await _run("2024 Kardiyoloji haric bolum bazinda randevu sayisi")

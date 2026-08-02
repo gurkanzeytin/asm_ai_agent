@@ -12,7 +12,7 @@ from app.application_models.workflow_models import QueryResult
 from app.database_intelligence.models import ViewMetadata
 from app.llm.schemas import LLMResponse
 from app.planning.compliance import PlanComplianceValidator
-from app.planning.models import DateFilterPlan, QueryPlan
+from app.planning.models import DateFilterPlan, PeriodPlan, QueryPlan
 from app.planning.planner import QueryPlanner
 from app.semantics import catalog
 from app.semantics.models import SemanticFrame
@@ -73,7 +73,9 @@ def _plan(question: str) -> QueryPlan:
 async def test_deterministic_builder_selection_skips_llm():
     provider = _Provider()
     service = SQLService(provider, _Parser(), SQLValidator())
-    generated = await service.generate_sql("prompt", query_plan=_plan("Subelere gore gelmeme oranlari nedir?"))
+    generated = await service.generate_sql(
+        "prompt", query_plan=_plan("Subelere gore gelmeme oranlari nedir?")
+    )
     assert generated.sql_source == "deterministic"
     assert provider.calls == 0
     assert "NULLIF" in generated.sql
@@ -145,7 +147,9 @@ def test_metric_sql_mapping_excludes_unverified_metrics():
 
 
 def test_cohort_sql_generation_and_contract():
-    built = DeterministicSQLBuilder().build(_plan("Randevusunu son dakika alanlarin gelme durumu nasil?"))
+    built = DeterministicSQLBuilder().build(
+        _plan("Randevusunu son dakika alanlarin gelme durumu nasil?")
+    )
     assert not isinstance(built, UnsupportedPlan)
     assert built.result_schema == "CohortResult"
     assert "DATEDIFF(hour, CreatedDate, BaslangicTarihi) BETWEEN 0 AND 24" in built.sql
@@ -154,7 +158,9 @@ def test_cohort_sql_generation_and_contract():
 
 
 def test_period_pair_sql_generation():
-    built = DeterministicSQLBuilder().build(_plan("Bu ay ile gecen ayin randevu sayilarini karsilastir."))
+    built = DeterministicSQLBuilder().build(
+        _plan("Bu ay ile gecen ayin randevu sayilarini karsilastir.")
+    )
     assert not isinstance(built, UnsupportedPlan)
     assert built.result_schema == "PeriodComparisonResult"
     assert "current_period_count" in built.sql
@@ -190,7 +196,7 @@ def test_generic_negation_hint_routes_to_llm_not_literal_sql():
 
 
 def test_top_percentile_renders_top_n_percent():
-    """"en üstteki %10'u göster" is a TOP (N) PERCENT slice, not TOP N rows and
+    """ "en üstteki %10'u göster" is a TOP (N) PERCENT slice, not TOP N rows and
     not an unfiltered dump of every group (live 2026-07-28: returned all
     doctors, the %10 was ignored/mis-read as a row limit)."""
     plan = _plan("2024 yilinda doktorlar arasinda randevu sayisi en ustteki %10 u goster")
@@ -228,7 +234,14 @@ def test_variance_sql_generation_uses_cte_summary():
 def test_result_alias_contract_and_normalization():
     result = _result(
         ["cohort_total_count", "completed_rate", "cancelled_rate", "no_show_rate"],
-        [{"cohort_total_count": Decimal("10"), "completed_rate": Decimal("80.5"), "cancelled_rate": None, "no_show_rate": Decimal("5")}],
+        [
+            {
+                "cohort_total_count": Decimal("10"),
+                "completed_rate": Decimal("80.5"),
+                "cancelled_rate": None,
+                "no_show_rate": Decimal("5"),
+            }
+        ],
     )
     normalized = TypedResultNormalizer().normalize(
         result,
@@ -250,18 +263,42 @@ def test_typed_result_validation_warning_on_missing_alias():
 
 def test_result_reasoning_uses_typed_contract():
     result = _result(
-        ["group_count", "total_appointments", "average_appointments", "minimum_appointments", "maximum_appointments", "max_to_average_ratio", "top_10_percent_share"],
-        [{"group_count": 5, "total_appointments": 100, "average_appointments": 20, "minimum_appointments": 5, "maximum_appointments": 50, "max_to_average_ratio": 2.5, "top_10_percent_share": 40}],
+        [
+            "group_count",
+            "total_appointments",
+            "average_appointments",
+            "minimum_appointments",
+            "maximum_appointments",
+            "max_to_average_ratio",
+            "top_10_percent_share",
+        ],
+        [
+            {
+                "group_count": 5,
+                "total_appointments": 100,
+                "average_appointments": 20,
+                "minimum_appointments": 5,
+                "maximum_appointments": 50,
+                "max_to_average_ratio": 2.5,
+                "top_10_percent_share": 40,
+            }
+        ],
     )
-    outcome = ResultReasoner().reason(result, QueryPlan(question="q"), result_schema="VarianceResult")
+    outcome = ResultReasoner().reason(
+        result, QueryPlan(question="q"), result_schema="VarianceResult"
+    )
     assert any("ortalama" in finding for finding in outcome.findings)
 
 
 def test_adaptive_retry_updates_deterministic_windows():
-    built = DeterministicSQLBuilder().build(_plan("Randevusunu son dakika alanlarin gelme durumu nasil?"), adaptive_retry=True)
+    built = DeterministicSQLBuilder().build(
+        _plan("Randevusunu son dakika alanlarin gelme durumu nasil?"), adaptive_retry=True
+    )
     assert not isinstance(built, UnsupportedPlan)
     assert "BETWEEN 0 AND 48" in built.sql
-    period = DeterministicSQLBuilder().build(_plan("Bu aralar hangi subede gelmeme orani artmis?"), adaptive_retry=True)
+    period = DeterministicSQLBuilder().build(
+        _plan("Bu aralar hangi subede gelmeme orani artmis?"), adaptive_retry=True
+    )
     assert not isinstance(period, UnsupportedPlan)
     assert "DATEADD(day, -90" in period.sql
     assert "DATEADD(day, -180" in period.sql
@@ -288,10 +325,18 @@ def test_deterministic_sql_compliance_and_raw_detail_prevention():
 @pytest.mark.parametrize(
     "question,schema,contains",
     [
-        ("Randevusunu son dakika alanlarin gelme durumu nasil?", "CohortResult", "cohort_total_count"),
+        (
+            "Randevusunu son dakika alanlarin gelme durumu nasil?",
+            "CohortResult",
+            "cohort_total_count",
+        ),
         ("Bu aralar hangi subede gelmeme orani artmis?", "AnomalyResult", "rate_point_change"),
         ("Doktorlar arasinda cok fark var mi?", "VarianceResult", "top_10_percent_share"),
-        ("Bu ay ile gecen ayin randevu sayilarini karsilastir.", "PeriodComparisonResult", "percentage_change"),
+        (
+            "Bu ay ile gecen ayin randevu sayilarini karsilastir.",
+            "PeriodComparisonResult",
+            "percentage_change",
+        ),
         ("Subelere gore gelmeme oranlari nedir?", "RatioResult", "no_show_rate"),
     ],
 )
@@ -310,8 +355,7 @@ def test_five_acceptance_questions(question, schema, contains):
 
 def test_standard_builder_emits_one_column_per_metric_with_distinct_aliases():
     plan = _plan(
-        "Subelere gore randevu sayisi, gerceklesme orani ve ortalama randevu "
-        "suresini karsilastir"
+        "Subelere gore randevu sayisi, gerceklesme orani ve ortalama randevu suresini karsilastir"
     )
     built = DeterministicSQLBuilder().build(plan)
     assert not isinstance(built, UnsupportedPlan)
@@ -353,7 +397,10 @@ def test_appointments_per_patient_repeat_behavior_builds_deterministic_sql():
 
     built = DeterministicSQLBuilder().build(plan)
     assert not isinstance(built, UnsupportedPlan)
-    assert "CAST(COUNT(*) AS FLOAT) / NULLIF(COUNT(DISTINCT HastaId), 0) AS appointments_per_patient" in built.sql
+    assert (
+        "CAST(COUNT(*) AS FLOAT) / NULLIF(COUNT(DISTINCT HastaId), 0) AS appointments_per_patient"
+        in built.sql
+    )
     assert "BaslangicTarihi >= '2025-01-01'" in built.sql
 
 
@@ -488,9 +535,7 @@ def test_same_day_multi_service_patient_is_scalar_until_breakdown_is_explicit():
 
 
 def test_same_day_multi_doctor_patient_routes_to_relationship_cte():
-    plan = _plan(
-        "2024 yilinda ayni gun ayni hasta birden fazla doktorla islem gormus mu?"
-    )
+    plan = _plan("2024 yilinda ayni gun ayni hasta birden fazla doktorla islem gormus mu?")
 
     assert plan.analysis_type == "repeat_behavior"
     assert plan.metrics == ["same_day_multi_doctor_patient_count"]
@@ -583,9 +628,7 @@ def test_multi_period_patient_overlap_uses_or_scoped_presence_cte():
     )
     assert compliance.compliant is True
 
-    by_branch = _plan(
-        "Hem 2023 hem 2024 icinde islem goren hastalari subelere gore kir."
-    )
+    by_branch = _plan("Hem 2023 hem 2024 icinde islem goren hastalari subelere gore kir.")
     assert by_branch.metrics == ["multi_period_patient_overlap_count"]
     assert by_branch.dimensions == ["SubeAdi"]
     by_branch_sql = DeterministicSQLBuilder().build(by_branch)
@@ -632,16 +675,26 @@ def test_singular_service_ranking_and_first_doctor_list_are_aggregates():
     assert "Id AS Id" not in doctor_sql.sql
 
 
-def test_trend_builder_rejects_multi_metric_explicitly():
-    plan = QueryPlanner().build_plan(
-        "Aylik randevu egilimini goster",
-        QueryAnalyzer().analyze("Aylik randevu egilimini goster"),
-        tables=[],
-        views=[VIEW],
-    ).model_copy(update={"metrics": ["appointment_count", "completed_appointment_rate"]})
+def test_trend_builder_renders_every_verified_metric():
+    plan = (
+        QueryPlanner()
+        .build_plan(
+            "Aylik randevu egilimini goster",
+            QueryAnalyzer().analyze("Aylik randevu egilimini goster"),
+            tables=[],
+            views=[VIEW],
+        )
+        .model_copy(update={"metrics": ["appointment_count", "completed_appointment_rate"]})
+    )
     built = DeterministicSQLBuilder()._trend(plan)
-    assert isinstance(built, UnsupportedPlan)
-    assert "multi-metric" in built.reason
+    assert isinstance(built, DeterministicSQL)
+    assert "AS appointment_count" in built.sql
+    assert "AS completed_appointment_rate" in built.sql
+    assert built.expected_aliases == [
+        "period_start",
+        "appointment_count",
+        "completed_appointment_rate",
+    ]
 
 
 def test_period_comparison_renders_a_column_pair_per_metric():
@@ -670,18 +723,19 @@ def test_period_comparison_renders_a_column_pair_per_metric():
         assert f"AS baseline_{metric_id}" in built.sql
 
 
-def test_period_comparison_skips_rate_metric_instead_of_nesting_aggregates():
-    """A composite rate (`100.0 * SUM(...) / NULLIF(COUNT(*), 0)`) cannot be
-    gated on a period without nesting an aggregate inside an aggregate, which
-    SQL Server rejects. It must be reported through `skipped_metrics`, never
-    emitted."""
+def test_period_comparison_scopes_composite_rate_in_scalar_subqueries():
+    """A composite rate cannot be wrapped in another conditional aggregate.
+    It is evaluated in a read-only scalar subquery for each period instead, so
+    the requested metric is preserved without illegal nested aggregates."""
     plan = _plan("Bu ay ile gecen ayin randevu sayilarini karsilastir.").model_copy(
         update={"metrics": ["appointment_count", "completed_appointment_rate"]}
     )
     built = DeterministicSQLBuilder()._period_comparison(plan, adaptive_retry=False)
     assert isinstance(built, DeterministicSQL)
-    assert built.skipped_metrics == ["completed_appointment_rate"]
-    assert "completed_appointment_rate" not in built.sql
+    assert built.skipped_metrics == []
+    assert "AS current_completed_appointment_rate" in built.sql
+    assert "AS baseline_completed_appointment_rate" in built.sql
+    assert built.sql.count("SELECT 100.0 * SUM(CASE") >= 2
     # No aggregate directly wrapping another aggregate.
     assert not re.search(
         r"(?:SUM|COUNT|AVG)\s*\([^()]*?(?:SUM|COUNT|AVG)\s*\(",
@@ -689,13 +743,45 @@ def test_period_comparison_skips_rate_metric_instead_of_nesting_aggregates():
     )
 
 
+def test_three_period_breakdown_renders_two_and_three_metric_requests():
+    plan = QueryPlan(
+        question="2023, 2024 ve 2025 için sayı, süre ve gelmeme oranı",
+        output_table="dbo.vw_RandevuRaporu",
+        fact_table="dbo.vw_RandevuRaporu",
+        analysis_type="period_comparison",
+        metrics=["appointment_count", "appointment_duration_average", "no_show_rate"],
+        periods=[
+            PeriodPlan(
+                label=str(year),
+                start_inclusive=f"{year}-01-01",
+                end_exclusive=f"{year + 1}-01-01",
+                column="BaslangicTarihi",
+            )
+            for year in (2023, 2024, 2025)
+        ],
+    )
+
+    built = DeterministicSQLBuilder()._multi_period_breakdown(plan)
+
+    assert isinstance(built, DeterministicSQL)
+    assert built.sql.count("AS appointment_count") == 3
+    assert built.sql.count("AS appointment_duration_average") == 3
+    assert built.sql.count("AS no_show_rate") == 3
+    assert built.expected_aliases == [
+        "period_label",
+        "appointment_count",
+        "appointment_duration_average",
+        "no_show_rate",
+    ]
+    assert SQLValidator().validate(built.sql).valid
+
+
 # ═══════════════════════ Compliance: metric/dimension coverage ═══════════════
 
 
 def test_compliance_flags_missing_metric_in_multi_metric_plan():
     plan = _plan(
-        "Subelere gore randevu sayisi, gerceklesme orani ve ortalama randevu "
-        "suresini karsilastir"
+        "Subelere gore randevu sayisi, gerceklesme orani ve ortalama randevu suresini karsilastir"
     )
     sql = (
         "SELECT SubeAdi AS SubeAdi, "
@@ -711,8 +797,7 @@ def test_compliance_flags_missing_metric_in_multi_metric_plan():
 
 def test_compliance_passes_when_all_metrics_present():
     plan = _plan(
-        "Subelere gore randevu sayisi, gerceklesme orani ve ortalama randevu "
-        "suresini karsilastir"
+        "Subelere gore randevu sayisi, gerceklesme orani ve ortalama randevu suresini karsilastir"
     )
     built = DeterministicSQLBuilder().build(plan)
     assert not isinstance(built, UnsupportedPlan)

@@ -67,7 +67,15 @@ _PERFORMANCE_TRIGGERS = (
     "durumumuz nasil", "genel gidisat", "performans ozeti", "isler nasil",
 )
 _LAST_MINUTE_TRIGGERS = (
-    "son dakika", "son anda", "gunu gunune alan",
+    "son dakika",
+    "son anda",
+    "gunu gunune alan",
+    "24 saat kala",
+    "24 saatten az kala",
+    "acele randevu",
+    "acele alan",
+    "gec alan",
+    "gec alinan",
 )
 _VARIANCE_TRIGGERS = (
     "cok fark var mi", "fark var mi", "farklilik var mi", "arasinda cok fark",

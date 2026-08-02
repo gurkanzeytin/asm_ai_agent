@@ -1,0 +1,296 @@
+{
+  "version": 1,
+  "view": "dbo.vw_RandevuRaporu",
+  "cases": [
+    {
+      "id": "MENTOR-SURPRISE-001",
+      "question": "2024 takvim yılında bir randevu ortalama kaç dakika sürdü?",
+      "category": "period_duration",
+      "difficulty": "medium",
+      "blind": true,
+      "suite": "mentor_surprise_v1",
+      "expected": {"analysis_type": "duration_analysis", "metrics": ["appointment_duration_average"], "sql_source": "deterministic", "result_contract": "DistributionResult"},
+      "sql_requirements": {"must_use_columns": ["RandevuSuresi", "BaslangicTarihi"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-002",
+      "question": "2025 boyunca takvim günü başına ortalama randevu adedimiz neydi?",
+      "category": "calendar_average",
+      "difficulty": "hard",
+      "blind": true,
+      "suite": "mentor_surprise_v1",
+      "expected": {"analysis_type": "average", "metrics": ["daily_average_appointment_count"], "sql_source": "deterministic", "result_contract": "CountResult"},
+      "sql_requirements": {"must_use_columns": ["BaslangicTarihi"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-003",
+      "question": "Fiili görüşme süresini şube ve hizmet kırılımında ortalama olarak ver.",
+      "category": "duration_multi_dimension",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "mentor_surprise_regression_v1",
+      "expected": {"analysis_type": "duration_analysis", "metrics": ["actual_duration_from_dates"], "dimensions": ["SubeAdi", "HizmetAdi"], "sql_source": "deterministic", "result_contract": "DistributionResult"},
+      "sql_requirements": {"must_use_columns": ["BaslangicTarihi", "BitisTarihi", "SubeAdi", "HizmetAdi"], "must_include_features": ["group_by"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-004",
+      "question": "Planlanan süre ile gerçekleşen süre arasındaki ortalama sapmayı bölümlere göre göster.",
+      "category": "duration_difference_breakdown",
+      "difficulty": "hard",
+      "blind": true,
+      "suite": "mentor_surprise_v1",
+      "expected": {"analysis_type": "duration_analysis", "metrics": ["duration_difference"], "dimensions": ["GenelRandevuBolumAdi"], "sql_source": "deterministic", "result_contract": "DistributionResult"},
+      "sql_requirements": {"must_use_columns": ["RandevuSuresi", "BaslangicTarihi", "BitisTarihi", "GenelRandevuBolumAdi"], "must_include_features": ["group_by"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-005",
+      "question": "Protokolü en geç açılan ilk 5 bölümü ortalama gecikmeye göre sırala.",
+      "category": "protocol_delay_ranking",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "mentor_surprise_regression_v1",
+      "expected": {"analysis_type": "top_n", "metrics": ["protocol_opening_delay_average"], "dimensions": ["GenelRandevuBolumAdi"], "sql_source": "deterministic", "result_contract": "DistributionResult"},
+      "sql_requirements": {"must_use_columns": ["ProtokolAcilisTarihi", "BaslangicTarihi", "GenelRandevuBolumAdi"], "must_include_features": ["group_by"], "must_include_sql": ["TOP (5)", "ORDER BY"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-006",
+      "question": "2024'te gelmeme yüzdesi kadın ve erkeklerde nasıl dağıldı?",
+      "category": "status_ratio_dimension",
+      "difficulty": "hard",
+      "blind": true,
+      "suite": "mentor_surprise_v1",
+      "expected": {"analysis_type": "ratio", "metrics": ["no_show_rate"], "dimensions": ["CinsiyetId"], "sql_source": "deterministic", "result_contract": "RatioResult"},
+      "sql_requirements": {"must_use_columns": ["RandevuDurumu", "CinsiyetId", "BaslangicTarihi"], "must_include_features": ["group_by", "null_safe_division"], "must_not_include_features": ["status_where_breaks_denominator"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-007",
+      "question": "Bekleme sırasındakilerin oranını randevu tiplerine göre karşılaştır.",
+      "category": "waiting_ratio_dimension",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "mentor_surprise_regression_v1",
+      "expected": {"analysis_type": "ratio", "metrics": ["waiting_rate"], "dimensions": ["RandevuTipiAdi"], "sql_source": "deterministic", "result_contract": "RatioResult"},
+      "sql_requirements": {"must_use_columns": ["RandevuDurumu", "RandevuTipiAdi"], "must_include_features": ["group_by", "null_safe_division"], "must_not_include_features": ["status_where_breaks_denominator"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-008",
+      "question": "Şube ve hizmet ikilisine göre toplam randevu hacmini çıkar.",
+      "category": "volume_multi_dimension",
+      "difficulty": "hard",
+      "blind": true,
+      "suite": "mentor_surprise_v1",
+      "expected": {"analysis_type": "cross_analysis", "metrics": ["appointment_count"], "dimensions": ["SubeAdi", "HizmetAdi"], "sql_source": "deterministic", "result_contract": "DistributionResult"},
+      "sql_requirements": {"must_use_columns": ["SubeAdi", "HizmetAdi"], "must_include_features": ["group_by"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-009",
+      "question": "Bölüm bazında 2025 randevu sayısını 2024 ile kıyasla.",
+      "category": "period_comparison_dimension",
+      "difficulty": "hard",
+      "blind": true,
+      "suite": "mentor_surprise_v1",
+      "expected": {"analysis_type": "period_comparison", "metrics": ["appointment_count"], "dimensions": ["GenelRandevuBolumAdi"], "sql_source": "deterministic", "result_contract": "DistributionResult"},
+      "sql_requirements": {"must_use_columns": ["BaslangicTarihi", "GenelRandevuBolumAdi"], "must_include_features": ["group_by", "current_period", "baseline_period"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-010",
+      "question": "Doktor bilgisi girilmemiş kayıtların aylık gidişatını göster.",
+      "category": "data_quality_trend",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "mentor_surprise_regression_v1",
+      "expected": {"analysis_type": "time_trend", "metrics": ["missing_doctor_count"], "sql_source": "deterministic", "result_contract": "TrendResult"},
+      "sql_requirements": {"must_use_columns": ["DoktorId", "BaslangicTarihi"], "must_include_features": ["group_by"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-011",
+      "question": "Aynı gün oluşturulan randevuların payını kaynak kanalına göre ver.",
+      "category": "same_day_ratio_dimension",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "mentor_surprise_regression_v1",
+      "expected": {"analysis_type": "ratio", "metrics": ["same_day_booking_rate"], "dimensions": ["GenelRandevuKaynakAdi"], "sql_source": "deterministic", "result_contract": "RatioResult"},
+      "sql_requirements": {"must_use_columns": ["CreatedDate", "BaslangicTarihi", "GenelRandevuKaynakAdi"], "must_include_features": ["group_by", "null_safe_division"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-012",
+      "question": "Birden fazla kez gelen hasta sayısını şubelere göre karşılaştır.",
+      "category": "repeat_patient_dimension",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "mentor_surprise_regression_v1",
+      "expected": {"analysis_type": "repeat_behavior", "metrics": ["repeat_patient_count"], "dimensions": ["SubeAdi"], "sql_source": "deterministic", "result_contract": "DistributionResult"},
+      "sql_requirements": {"must_use_columns": ["HastaId", "SubeAdi"], "must_include_features": ["group_by"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-013",
+      "question": "Aynı gün farklı doktorlara görünen hasta sayısı şube kırılımında kaç?",
+      "category": "same_day_multi_doctor_dimension",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "mentor_surprise_regression_v1",
+      "expected": {"analysis_type": "repeat_behavior", "metrics": ["same_day_multi_doctor_patient_count"], "dimensions": ["SubeAdi"], "sql_source": "deterministic", "result_contract": "DistributionResult"},
+      "sql_requirements": {"must_use_columns": ["HastaId", "DoktorId", "BaslangicTarihi", "SubeAdi"], "must_include_features": ["group_by"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-014",
+      "question": "Otuz dakikadan uzun randevuların oranını bölüm bazında hesapla.",
+      "category": "threshold_ratio_dimension",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "mentor_surprise_regression_v1",
+      "expected": {"analysis_type": "ratio", "dimensions": ["GenelRandevuBolumAdi"], "sql_source": "deterministic", "result_contract": "RatioResult"},
+      "sql_requirements": {"must_use_columns": ["RandevuSuresi", "GenelRandevuBolumAdi"], "must_include_features": ["group_by", "null_safe_division"], "must_include_sql": ["RandevuSuresi > 30"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-015",
+      "question": "2024 randevularının uyruklara göre dağılımını özetle.",
+      "category": "nationality_distribution_period",
+      "difficulty": "medium",
+      "blind": true,
+      "suite": "mentor_surprise_v1",
+      "expected": {"analysis_type": "distribution", "metrics": ["appointment_count"], "dimensions": ["Uyruk"], "sql_source": "deterministic", "result_contract": "DistributionResult"},
+      "sql_requirements": {"must_use_columns": ["Uyruk", "BaslangicTarihi"], "must_include_features": ["group_by"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-016",
+      "question": "Gerçek işlem dakikasını lokasyon ve servis bazında ortalama olarak dök.",
+      "category": "fresh_duration_multi_dimension",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "mentor_surprise_regression_v1",
+      "expected": {"analysis_type": "duration_analysis", "metrics": ["actual_duration_from_dates"], "dimensions": ["SubeAdi", "GenelRandevuBolumAdi"], "sql_source": "deterministic", "result_contract": "DistributionResult"},
+      "sql_requirements": {"must_use_columns": ["BaslangicTarihi", "BitisTarihi", "SubeAdi", "GenelRandevuBolumAdi"], "must_include_features": ["group_by"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-017",
+      "question": "Randevu saatinden sonra protokol açılışı en uzun süren ilk 3 şubeyi bul.",
+      "category": "fresh_protocol_delay_ranking",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "mentor_surprise_regression_v1",
+      "expected": {"analysis_type": "top_n", "metrics": ["protocol_opening_delay_average"], "dimensions": ["SubeAdi"], "sql_source": "deterministic", "result_contract": "DistributionResult"},
+      "sql_requirements": {"must_use_columns": ["ProtokolAcilisTarihi", "BaslangicTarihi", "SubeAdi"], "must_include_features": ["group_by"], "must_include_sql": ["TOP (3)", "ORDER BY"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-018",
+      "question": "Sırada bekleyen randevuların yüzdesini cinsiyet kırılımında hesapla.",
+      "category": "fresh_waiting_ratio_dimension",
+      "difficulty": "hard",
+      "blind": true,
+      "suite": "mentor_surprise_v1",
+      "expected": {"analysis_type": "ratio", "metrics": ["waiting_rate"], "dimensions": ["CinsiyetId"], "sql_source": "deterministic", "result_contract": "RatioResult"},
+      "sql_requirements": {"must_use_columns": ["RandevuDurumu", "CinsiyetId"], "must_include_features": ["group_by", "null_safe_division"], "must_not_include_features": ["status_where_breaks_denominator"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-019",
+      "question": "Bölümü boş bırakılan kayıtların haftalık seyrini çıkar.",
+      "category": "fresh_data_quality_trend",
+      "difficulty": "hard",
+      "blind": true,
+      "suite": "mentor_surprise_v1",
+      "expected": {"analysis_type": "time_trend", "metrics": ["missing_department_count"], "sql_source": "deterministic", "result_contract": "TrendResult"},
+      "sql_requirements": {"must_use_columns": ["GenelRandevuBolumAdi", "BaslangicTarihi"], "must_include_features": ["group_by"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-020",
+      "question": "Randevu günü verilen kayıtların yüzdesini randevu türü bazında ver.",
+      "category": "fresh_same_day_ratio_dimension",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "mentor_surprise_regression_v1",
+      "expected": {"analysis_type": "ratio", "metrics": ["same_day_booking_rate"], "dimensions": ["RandevuTipiAdi"], "sql_source": "deterministic", "result_contract": "RatioResult"},
+      "sql_requirements": {"must_use_columns": ["CreatedDate", "BaslangicTarihi", "RandevuTipiAdi"], "must_include_features": ["group_by", "null_safe_division"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-021",
+      "question": "Birden çok randevusu bulunan kişi sayısını bölümlere göre ver.",
+      "category": "fresh_repeat_patient_dimension",
+      "difficulty": "hard",
+      "blind": true,
+      "suite": "mentor_surprise_v1",
+      "expected": {"analysis_type": "repeat_behavior", "metrics": ["repeat_patient_count"], "dimensions": ["GenelRandevuBolumAdi"], "sql_source": "deterministic", "result_contract": "DistributionResult"},
+      "sql_requirements": {"must_use_columns": ["HastaId", "GenelRandevuBolumAdi"], "must_include_features": ["group_by"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-022",
+      "question": "Tek takvim gününde birden çok hekime giden kişileri hizmet bazında say.",
+      "category": "fresh_same_day_multi_doctor_dimension",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "mentor_surprise_regression_v1",
+      "expected": {"analysis_type": "repeat_behavior", "metrics": ["same_day_multi_doctor_patient_count"], "dimensions": ["HizmetAdi"], "sql_source": "deterministic", "result_contract": "DistributionResult"},
+      "sql_requirements": {"must_use_columns": ["HastaId", "DoktorId", "BaslangicTarihi", "HizmetAdi"], "must_include_features": ["group_by"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-023",
+      "question": "Kırk beş dakikayı aşanların payını şubelere göre hesapla.",
+      "category": "fresh_threshold_ratio_dimension",
+      "difficulty": "hard",
+      "blind": true,
+      "suite": "mentor_surprise_v1",
+      "expected": {"analysis_type": "ratio", "dimensions": ["SubeAdi"], "sql_source": "deterministic", "result_contract": "RatioResult"},
+      "sql_requirements": {"must_use_columns": ["RandevuSuresi", "SubeAdi"], "must_include_features": ["group_by", "null_safe_division"], "must_include_sql": ["RandevuSuresi > 45"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-024",
+      "question": "Gerçek süreyi şube ve hizmet kırılımında ortalama göster.",
+      "category": "fresh2_duration_multi_dimension",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "mentor_surprise_regression_v1",
+      "expected": {"analysis_type": "duration_analysis", "metrics": ["actual_duration_from_dates"], "dimensions": ["SubeAdi", "HizmetAdi"], "sql_source": "deterministic", "result_contract": "DistributionResult"},
+      "sql_requirements": {"must_use_columns": ["BaslangicTarihi", "BitisTarihi", "SubeAdi", "HizmetAdi"], "must_include_features": ["group_by"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-025",
+      "question": "Protokol açılma gecikmesi en fazla olan ilk 4 hizmeti sırala.",
+      "category": "fresh2_protocol_delay_ranking",
+      "difficulty": "hard",
+      "blind": true,
+      "suite": "mentor_surprise_v1",
+      "expected": {"analysis_type": "top_n", "metrics": ["protocol_opening_delay_average"], "dimensions": ["HizmetAdi"], "sql_source": "deterministic", "result_contract": "DistributionResult"},
+      "sql_requirements": {"must_use_columns": ["ProtokolAcilisTarihi", "BaslangicTarihi", "HizmetAdi"], "must_include_features": ["group_by"], "must_include_sql": ["TOP (4)", "ORDER BY"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-026",
+      "question": "Aynı tarihte kaydedilen randevuların oranını kaynaklara göre hesapla.",
+      "category": "fresh2_same_day_ratio_dimension",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "mentor_surprise_regression_v1",
+      "expected": {"analysis_type": "ratio", "metrics": ["same_day_booking_rate"], "dimensions": ["GenelRandevuKaynakAdi"], "sql_source": "deterministic", "result_contract": "RatioResult"},
+      "sql_requirements": {"must_use_columns": ["CreatedDate", "BaslangicTarihi", "GenelRandevuKaynakAdi"], "must_include_features": ["group_by", "null_safe_division"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-027",
+      "question": "Bir takvim tarihinde farklı hekim gören hasta sayısını şubelere göre ver.",
+      "category": "fresh2_same_day_multi_doctor_dimension",
+      "difficulty": "hard",
+      "blind": true,
+      "suite": "mentor_surprise_v1",
+      "expected": {"analysis_type": "repeat_behavior", "metrics": ["same_day_multi_doctor_patient_count"], "dimensions": ["SubeAdi"], "sql_source": "deterministic", "result_contract": "DistributionResult"},
+      "sql_requirements": {"must_use_columns": ["HastaId", "DoktorId", "BaslangicTarihi", "SubeAdi"], "must_include_features": ["group_by"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-028",
+      "question": "Tarihlerden hesaplanan fiili süreyi bölüm ve randevu tipi kırılımında ver.",
+      "category": "fresh3_duration_multi_dimension",
+      "difficulty": "hard",
+      "blind": true,
+      "suite": "mentor_surprise_v1",
+      "expected": {"analysis_type": "cross_analysis", "metrics": ["actual_duration_from_dates"], "dimensions": ["GenelRandevuBolumAdi", "RandevuTipiAdi"], "sql_source": "deterministic", "result_contract": "DistributionResult"},
+      "sql_requirements": {"must_use_columns": ["BaslangicTarihi", "BitisTarihi", "GenelRandevuBolumAdi", "RandevuTipiAdi"], "must_include_features": ["group_by"]}
+    },
+    {
+      "id": "MENTOR-SURPRISE-029",
+      "question": "Oluşturma tarihi randevu tarihiyle aynı olanların payını şubelere göre ver.",
+      "category": "fresh3_same_day_ratio_dimension",
+      "difficulty": "hard",
+      "blind": true,
+      "suite": "mentor_surprise_v1",
+      "expected": {"analysis_type": "ratio", "metrics": ["same_day_booking_rate"], "dimensions": ["SubeAdi"], "sql_source": "deterministic", "result_contract": "RatioResult"},
+      "sql_requirements": {"must_use_columns": ["CreatedDate", "BaslangicTarihi", "SubeAdi"], "must_include_features": ["group_by", "null_safe_division"]}
+    }
+  ]
+}

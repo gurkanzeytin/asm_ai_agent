@@ -19,6 +19,8 @@ from app.planning.value_resolver import (
     extract_comparison_pair,
     extract_exclusion_phrase,
     extract_filter_only_phrase,
+    extract_gender_mentions,
+    extract_nested_share_segments,
     fold,
 )
 from app.semantics import view_mapping
@@ -279,6 +281,7 @@ class ResolveFilterValuesNode(IAgentNode):
         if cleared_department_filter:
             update["department_filter"] = None
         plan = plan.model_copy(update=update)
+        plan = await self._apply_nested_cohort_share(plan)
         plan = await self._apply_cohort_share(plan)
         plan = self._apply_measure_threshold(plan)
 
@@ -373,29 +376,53 @@ class ResolveFilterValuesNode(IAgentNode):
         *,
         extra_update: dict | None = None,
         drop_prefixes: tuple[str, ...] = (),
+        numerator_predicates: list[MetricPredicate] | None = None,
+        denominator_predicates: list[MetricPredicate] | None = None,
+        drop_rate_metrics: bool = False,
     ) -> QueryPlan:
         """Attaches a plan-composed share metric.
 
         The single place a composed metric is put on a plan, so the invariants
         that keep a share honest hold on every path into it.
         """
-        column = predicate.column
+        numerator_predicates = numerator_predicates or [predicate]
+        denominator_predicates = denominator_predicates or []
+        metric_columns = {item.column for item in [*numerator_predicates, *denominator_predicates]}
         # INVARIANT 1 — the cohort column carries the share and appears nowhere
         # else. Left as a GROUP BY dimension each row is one cohort value, so
         # the share reads 100% on its own row and 0% on every other; left as a
         # WHERE filter the denominator shrinks to the cohort itself and the
         # share is 100% everywhere. Both are the failure this metric exists to
         # remove, so neither is left to the callers to remember.
-        dimensions = [dimension for dimension in plan.dimensions if dimension != column]
+        dimensions = [dimension for dimension in plan.dimensions if dimension not in metric_columns]
         resolved_filters = {
             field: resolved
             for field, resolved in plan.resolved_filters.items()
-            if FIELD_COLUMNS.get(field, (None, None))[0] != column
+            if FIELD_COLUMNS.get(field, (None, None))[0] not in metric_columns
         }
-        update: dict = {"dimensions": dimensions, "resolved_filters": resolved_filters}
-        if column == "GenelRandevuBolumAdi":
+        planned_dimensions = [
+            dimension
+            for dimension in plan.planned_dimensions
+            if dimension.column not in metric_columns
+        ]
+        extra_filters = [
+            extra
+            for extra in plan.extra_filters
+            if not any(extra.strip().startswith(f"{column} ") for column in metric_columns)
+            and not (
+                extra.strip().upper().startswith("NEGATION:")
+                and any(item.operator == "<>" for item in numerator_predicates)
+            )
+        ]
+        update: dict = {
+            "dimensions": dimensions,
+            "planned_dimensions": planned_dimensions,
+            "resolved_filters": resolved_filters,
+            "extra_filters": extra_filters,
+        }
+        if "GenelRandevuBolumAdi" in metric_columns:
             update["department_filter"] = None
-        if column == "SubeAdi":
+        if "SubeAdi" in metric_columns:
             update["branch_filters"] = []
 
         # INVARIANT 2 — one share per answer. `share_of_total` renders a second
@@ -416,17 +443,139 @@ class ResolveFilterValuesNode(IAgentNode):
             for metric in plan.metrics
             if metric not in (_COHORT_SHARE_ALIAS, "appointment_count")
             and not metric.startswith(drop_prefixes or ("\0",))
+            and not (drop_rate_metrics and metric.endswith(("_rate", "_ratio")))
         ]
-        spec = InlineMetric(shape="rate", predicate=predicate, label=label)
+        spec = InlineMetric(
+            shape="rate",
+            predicate=predicate,
+            numerator_predicates=numerator_predicates,
+            denominator_predicates=denominator_predicates,
+            label=label,
+        )
         return plan.model_copy(
             update={
                 **update,
                 **(extra_update or {}),
                 "derived_calculations": derived,
                 "metrics": [_COHORT_SHARE_ALIAS, *metrics, "appointment_count"],
+                "planned_metrics": [
+                    metric for metric in plan.planned_metrics if metric.metric_id in metrics
+                ],
                 "metric_specs": {**plan.metric_specs, _COHORT_SHARE_ALIAS: spec},
                 "analysis_type": "ratio",
             }
+        )
+
+    async def _predicates_for_cohort_phrase(
+        self, phrase: str, plan: QueryPlan
+    ) -> list[tuple[MetricPredicate, str]]:
+        """Ground every independently recognizable cohort condition in text.
+
+        This is the vocabulary-to-algebra boundary. Metadata resolves named
+        sets and statuses; the value resolver grounds ordinary field values.
+        The result contains data-only predicates and can be combined freely.
+        """
+        grounded: list[tuple[MetricPredicate, str]] = []
+        folded_phrase = fold(phrase)
+
+        named = view_mapping.named_cohort(folded_phrase, plan.output_table)
+        if named:
+            grounded.append(
+                (
+                    MetricPredicate(
+                        column=named["column"],
+                        operator=named["operator"],
+                        values=[named["value"]],
+                    ),
+                    named["label"],
+                )
+            )
+
+        status = view_mapping.resolve_status_value(folded_phrase, plan.output_table)
+        if status:
+            grounded.append(
+                (
+                    MetricPredicate(
+                        column=view_mapping.status_column(plan.output_table),
+                        operator="=",
+                        values=[status],
+                    ),
+                    status,
+                )
+            )
+
+        candidates = extract_candidate_phrases(phrase)
+        mentions = extract_cohort_share_mentions(phrase)
+        # The denominator side has no share word of its own ("Kardiyoloji
+        # randevuları İÇİNDE ..."). Appending one lets the same generic,
+        # grounded cohort extractor identify its value without new vocabulary.
+        if not mentions:
+            mentions = extract_cohort_share_mentions(f"{phrase} oranı")
+        gender_mentions = extract_gender_mentions(phrase)
+        if gender_mentions:
+            candidates.setdefault("gender", [gender_mentions[0]])
+        for field_name, mention in mentions.items():
+            if field_name == UNRESOLVED_COHORT_FIELD:
+                resolved_field, resolved = await self._field_for_value(mention)
+                if resolved_field is not None:
+                    candidates.setdefault(resolved_field, [mention])
+                else:
+                    continue
+            else:
+                candidates.setdefault(field_name, [mention])
+
+        for field_name, phrases in candidates.items():
+            column, _tier = FIELD_COLUMNS.get(field_name, (None, None))
+            if column is None or column == view_mapping.status_column(plan.output_table):
+                continue
+            resolved = await self.resolver.resolve(field_name, phrases[0])
+            if not resolved.grounded or not resolved.matched_value:
+                continue
+            grounded.append(
+                (
+                    MetricPredicate(column=column, operator="=", values=[resolved.matched_value]),
+                    _cohort_display_name(column, resolved),
+                )
+            )
+
+        unique: list[tuple[MetricPredicate, str]] = []
+        seen: set[tuple[str, str, tuple[str | float, ...]]] = set()
+        for item in grounded:
+            predicate = item[0]
+            key = (predicate.column, predicate.operator, tuple(predicate.values))
+            if key not in seen:
+                seen.add(key)
+                unique.append(item)
+        return unique
+
+    async def _apply_nested_cohort_share(self, plan: QueryPlan) -> QueryPlan:
+        """Compose `A within B/C share` as a conditional numerator/denominator.
+
+        Denominator predicates define A. Numerator predicates contain A plus
+        every independently grounded condition on the measured side. Two and
+        three-condition questions therefore use the same plan shape.
+        """
+        segments = extract_nested_share_segments(plan.question)
+        if segments is None:
+            return plan
+        denominator_phrase, measured_phrase = segments
+        denominator_items = await self._predicates_for_cohort_phrase(denominator_phrase, plan)
+        measured_items = await self._predicates_for_cohort_phrase(measured_phrase, plan)
+        if not denominator_items or not measured_items:
+            return plan
+
+        denominator_predicates = [item[0] for item in denominator_items]
+        numerator_predicates = [*denominator_predicates, *(item[0] for item in measured_items)]
+        denominator_label = " + ".join(item[1] for item in denominator_items)
+        measured_label = " + ".join(item[1] for item in measured_items)
+        return self._composed_share(
+            plan,
+            measured_items[-1][0],
+            f"{denominator_label} içinde {measured_label} oranı",
+            numerator_predicates=numerator_predicates,
+            denominator_predicates=denominator_predicates,
+            drop_rate_metrics=True,
+            extra_update={"numerator": None, "denominator": None},
         )
 
     async def _apply_cohort_share(self, plan: QueryPlan) -> QueryPlan:

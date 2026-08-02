@@ -65,6 +65,17 @@ def _consumed_columns(plan: QueryPlan) -> set[str]:
     if plan.branch_filters:
         used.add("SubeAdi")
 
+    # A composed metric consumes its cohort columns inside CASE predicates,
+    # even though those columns must deliberately be absent from the outer
+    # WHERE/GROUP BY to keep a conditional denominator honest.
+    for spec in plan.metric_specs.values():
+        predicates = [
+            *spec.numerator_predicates,
+            *spec.denominator_predicates,
+            *([spec.predicate] if spec.predicate is not None else []),
+        ]
+        used |= {predicate.column for predicate in predicates}
+
     for column in list(used):
         used |= _EQUIVALENT_COLUMNS.get(column, frozenset())
     return used
@@ -114,15 +125,16 @@ def unbound_value_mentions(plan: QueryPlan) -> list[str]:
     süre farkı" answered over every department).
     """
     mentions: list[str] = []
+    consumed = _consumed_columns(plan)
     for field_name, phrases in extract_candidate_phrases(plan.question).items():
-        if field_name not in plan.resolved_filters:
+        column, _tier = FIELD_COLUMNS.get(field_name, (None, None))
+        if field_name not in plan.resolved_filters and column not in consumed:
             mentions.extend(phrases[:1])
 
     pair = extract_comparison_pair(plan.question)
     if pair and not (plan.department_filter or plan.branch_filters):
         grounded_any = any(
-            resolved.grounded and resolved.values
-            for resolved in plan.resolved_filters.values()
+            resolved.grounded and resolved.values for resolved in plan.resolved_filters.values()
         )
         if not grounded_any:
             mentions.extend(pair)
@@ -141,9 +153,7 @@ def ratio_without_ratio_metric(plan: QueryPlan) -> bool:
         return False
     if plan.numerator and plan.denominator:
         return False
-    if any(
-        calculation.startswith("share_of_total:") for calculation in plan.derived_calculations
-    ):
+    if any(calculation.startswith("share_of_total:") for calculation in plan.derived_calculations):
         # A per-group share of the total is a real answer to "…oranı"; the
         # builder renders it as its own `pay_yuzdesi` column rather than as a
         # rate metric, so metric names alone cannot see it.

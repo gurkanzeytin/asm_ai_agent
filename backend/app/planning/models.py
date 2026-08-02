@@ -1,4 +1,3 @@
-
 from pydantic import BaseModel, Field
 
 
@@ -45,15 +44,22 @@ class PlannedMetric(BaseModel):
     `expression`/`alias` stay unset until the SQL builder resolves them.
     """
 
-    metric_id: str = Field(..., description="Metric catalog id (app/resources/metric_catalog.json).")
-    expression: str | None = Field(default=None, description="Resolved SQL expression, set by the SQL builder.")
+    metric_id: str = Field(
+        ..., description="Metric catalog id (app/resources/metric_catalog.json)."
+    )
+    expression: str | None = Field(
+        default=None, description="Resolved SQL expression, set by the SQL builder."
+    )
     alias: str | None = Field(default=None, description="SELECT alias chosen by the SQL builder.")
     aggregation_type: str | None = Field(
         default=None, description="Catalog formula_type: count_rows | avg | conditional_rate | ..."
     )
-    format_type: str | None = Field(default=None, description="Catalog result_type: integer | float | percentage.")
+    format_type: str | None = Field(
+        default=None, description="Catalog result_type: integer | float | percentage."
+    )
     conditional_filter: str | None = Field(
-        default=None, description="Status/condition predicate the metric's formula depends on, if any."
+        default=None,
+        description="Status/condition predicate the metric's formula depends on, if any.",
     )
     source_columns: list[str] = Field(
         default_factory=list, description="Catalog required_columns this metric depends on."
@@ -91,9 +97,7 @@ class MetricPredicate(BaseModel):
     """
 
     column: str = Field(..., description="Real view column the condition applies to.")
-    operator: str = Field(
-        ..., description="One of =, <>, >, >=, <, <=, IS NULL, IS NOT NULL."
-    )
+    operator: str = Field(..., description="One of =, <>, >, >=, <, <=, IS NULL, IS NOT NULL.")
     values: list[str | float] = Field(
         default_factory=list,
         description="Right-hand operand(s); empty for IS NULL / IS NOT NULL.",
@@ -110,7 +114,25 @@ class InlineMetric(BaseModel):
 
     shape: str = Field(..., description="Aggregate shape; 'rate' is the only one built today.")
     predicate: MetricPredicate | None = Field(
-        default=None, description="Condition the shape aggregates over."
+        default=None,
+        description=(
+            "Legacy single numerator condition. Used when numerator_predicates "
+            "is empty so previously serialized plans remain valid."
+        ),
+    )
+    numerator_predicates: list[MetricPredicate] = Field(
+        default_factory=list,
+        description=(
+            "Grounded row conditions joined with AND to form the numerator. "
+            "Empty falls back to the legacy predicate field."
+        ),
+    )
+    denominator_predicates: list[MetricPredicate] = Field(
+        default_factory=list,
+        description=(
+            "Grounded row conditions joined with AND to form a conditional "
+            "denominator. Empty means all rows in the outer query scope."
+        ),
     )
     label: str = Field(..., description="Turkish label shown to the user for this metric.")
 
@@ -125,7 +147,9 @@ class AggregateThreshold(BaseModel):
     """
 
     operator: str = Field(..., description="Comparison operator: one of <, <=, >, >=.")
-    value: float = Field(..., description="Right-hand numeric bound the aggregate is compared against.")
+    value: float = Field(
+        ..., description="Right-hand numeric bound the aggregate is compared against."
+    )
     metric: str | None = Field(
         default=None,
         description="Metric id the threshold applies to; None means the plan's primary metric.",
@@ -141,8 +165,11 @@ class ResolvedFilterPlan(BaseModel):
     `clarification_required=True` and `alternatives` instead of a guessed value.
     """
 
-    field: str = Field(..., description="branch|doctor|department|service|category|"
-        "appointment_source|appointment_status|appointment_type|nationality|gender.")
+    field: str = Field(
+        ...,
+        description="branch|doctor|department|service|category|"
+        "appointment_source|appointment_status|appointment_type|nationality|gender.",
+    )
     values: list[str] = Field(default_factory=list, description="Grounded canonical values.")
     source: str = Field(default="grounded_value_resolver", description="Resolution source.")
     confidence: float = Field(default=0.0, description="0-1 match confidence.")
@@ -258,9 +285,7 @@ class QueryPlan(BaseModel):
     projection: list[str] = Field(
         default_factory=list, description="Descriptive column(s) the SELECT must return."
     )
-    distinct: bool = Field(
-        default=False, description="Whether the output requires DISTINCT rows."
-    )
+    distinct: bool = Field(default=False, description="Whether the output requires DISTINCT rows.")
     # ── Agent Intelligence Foundation (catalog-driven analytics) ──
     metrics: list[str] = Field(
         default_factory=list, description="Metric catalog ids resolved from the question."
@@ -277,7 +302,8 @@ class QueryPlan(BaseModel):
         "multi-metric plan on their own.",
     )
     planned_dimensions: list[PlannedDimension] = Field(
-        default_factory=list, description="Catalog/schema-resolved shape of every entry in `dimensions`."
+        default_factory=list,
+        description="Catalog/schema-resolved shape of every entry in `dimensions`.",
     )
     numerator: str | None = Field(
         default=None, description="Numerator metric id for ratio/percentage analyses."
@@ -369,8 +395,10 @@ class ComplianceResult(BaseModel):
         default_factory=list, description="Human-readable list of missing constraints."
     )
     missing_metrics: list[str] = Field(
-        default_factory=list, description="Metric catalog ids from plan.metrics absent from the generated SQL."
+        default_factory=list,
+        description="Metric catalog ids from plan.metrics absent from the generated SQL.",
     )
     missing_dimensions: list[str] = Field(
-        default_factory=list, description="Dimension columns from plan.dimensions absent from the generated SQL."
+        default_factory=list,
+        description="Dimension columns from plan.dimensions absent from the generated SQL.",
     )

@@ -27,12 +27,16 @@ from tools.evaluation.scorers import (
     score_sql_semantics,
 )
 
+from app.agent.nodes.resolve_filter_values import ResolveFilterValuesNode
+from app.agent.state import AgentState
 from app.analytics.result_contracts import TypedResultNormalizer
 from app.application_models.workflow_models import QueryResult
 from app.core.config import settings
 from app.database_intelligence.models import ViewMetadata
+from app.database_intelligence.value_catalog import ValueCatalog
 from app.planning.models import QueryPlan
 from app.planning.planner import QueryPlanner
+from app.planning.value_resolver import ValueResolver
 from app.services.answerability import AnswerabilityGuard
 from app.services.deterministic_sql_builder import (
     DeterministicSQL,
@@ -45,11 +49,34 @@ from app.sql_validator.validator import SQLValidator
 VIEW = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
 
 
+class _OfflineValueCatalog(ValueCatalog):
+    """No-I/O grounding catalog for the schema-only evaluation runner.
+
+    It intentionally grounds no deployment-specific values, while still
+    allowing the production plan-enrichment node to apply schema-independent
+    rules such as numeric threshold shares and curated named cohorts.
+    """
+
+    def __init__(self) -> None:
+        pass
+
+    async def get_distinct_values(self, field_name: str) -> list[str]:
+        return []
+
+    async def search_candidates(
+        self, field_name: str, prefix: str, limit: int = 10
+    ) -> list[str]:
+        return []
+
+
 class EvaluationRunner:
     def __init__(self) -> None:
         self.analyzer = QueryAnalyzer()
         self.answerability = AnswerabilityGuard(query_analyzer=self.analyzer)
         self.planner = QueryPlanner()
+        self.plan_enricher = ResolveFilterValuesNode(
+            resolver=ValueResolver(catalog=_OfflineValueCatalog())
+        )
         self.builder = DeterministicSQLBuilder()
         self.validator = SQLValidator()
         self.normalizer = TypedResultNormalizer()
@@ -132,6 +159,16 @@ class EvaluationRunner:
         if ambiguity is None:
             analysis = self.analyzer.analyze(case.question)
             plan = self.planner.build_plan(case.question, analysis, tables=[], views=[VIEW])
+            enriched = asyncio.run(
+                self.plan_enricher.execute(
+                    AgentState(
+                        question=case.question,
+                        raw_question=case.question,
+                        query_plan=plan,
+                    )
+                )
+            )
+            plan = enriched.query_plan
         stages.append(score_query_plan(case, plan))
 
         if mode == EvaluationMode.PLANNER_ONLY or ambiguity is not None or plan is None:

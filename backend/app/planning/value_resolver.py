@@ -101,7 +101,14 @@ _FIELD_CUE_ROOTS: dict[str, tuple[str, ...]] = {
 # Quantifier/scope words that must never anchor a candidate phrase — these are
 # generic-scope wording ("tüm", "bütün", ...), not a real value mention.
 _GENERIC_QUANTIFIERS = {
-    "tum", "tüm", "butun", "bütün", "her", "genel", "geneli", "genelinde",
+    "tum",
+    "tüm",
+    "butun",
+    "bütün",
+    "her",
+    "genel",
+    "geneli",
+    "genelinde",
 }
 
 # "genel" is almost always the generic-scope word above ("genel olarak",
@@ -133,19 +140,79 @@ _GENERIC_QUANTIFIER_EXCEPTIONS: dict[str, set[str]] = {
 # Phase 10) - adding them here carries none of that risk, it only stops them
 # from being treated as a literal filter value.
 _QUESTION_WORDS = {
-    "kac", "kacar", "kacinci", "hangi", "hangisi", "hangileri",
-    "ne", "neler", "nedir", "neyi", "neye",
-    "kim", "kimler", "kimin",
-    "nasil", "neden", "nicin", "niye",
-    "nerede", "nereye", "nereden", "nereli", "nere", "neresi",
-    "bu", "su", "o", "iste",
-    "sonuc", "sonucu", "sonucun", "sonuca", "sonucta", "sonuctan",
-    "bunu", "bunun", "buna", "bunda", "bundan", "bununla",
-    "bunlar", "bunlari", "bunlarin", "bunlara", "bunlarda", "bunlardan", "bunlarla",
-    "sunu", "sunun", "suna", "sunda", "sundan", "sununla",
-    "sunlar", "sunlari", "sunlarin", "sunlara", "sunlarda", "sunlardan", "sunlarla",
-    "onu", "onun", "ona", "onda", "ondan", "onunla",
-    "onlar", "onlari", "onlarin", "onlara", "onlarda", "onlardan", "onlarla",
+    "kac",
+    "kacar",
+    "kacinci",
+    "hangi",
+    "hangisi",
+    "hangileri",
+    "ne",
+    "neler",
+    "nedir",
+    "neyi",
+    "neye",
+    "kim",
+    "kimler",
+    "kimin",
+    "nasil",
+    "neden",
+    "nicin",
+    "niye",
+    "nerede",
+    "nereye",
+    "nereden",
+    "nereli",
+    "nere",
+    "neresi",
+    "bu",
+    "su",
+    "o",
+    "iste",
+    "sonuc",
+    "sonucu",
+    "sonucun",
+    "sonuca",
+    "sonucta",
+    "sonuctan",
+    "bunu",
+    "bunun",
+    "buna",
+    "bunda",
+    "bundan",
+    "bununla",
+    "bunlar",
+    "bunlari",
+    "bunlarin",
+    "bunlara",
+    "bunlarda",
+    "bunlardan",
+    "bunlarla",
+    "sunu",
+    "sunun",
+    "suna",
+    "sunda",
+    "sundan",
+    "sununla",
+    "sunlar",
+    "sunlari",
+    "sunlarin",
+    "sunlara",
+    "sunlarda",
+    "sunlardan",
+    "sunlarla",
+    "onu",
+    "onun",
+    "ona",
+    "onda",
+    "ondan",
+    "onunla",
+    "onlar",
+    "onlari",
+    "onlarin",
+    "onlara",
+    "onlarda",
+    "onlardan",
+    "onlarla",
 }
 
 # AI-INTELLIGENCE-017 regression fix: bare domain/dimension nouns (folded
@@ -182,15 +249,27 @@ def _is_dimension_noun(folded_word: str) -> bool:
         for root in _NEVER_CANDIDATE_ROOTS
     )
 
+
 # Distribution/grouping wording (folded) — when this appears near a field's
 # own dimension noun, the phrase names a GROUPING, not a filter value
 # ("randevu durumlarının dağılımı", "şubelere göre"). See classify_value_intent().
 _GROUPING_MARKERS: tuple[str, ...] = (
-    "dagilim", "bazinda", "bazli", "gore", "kirilim", "gruplandir", "gruplarina",
+    "dagilim",
+    "bazinda",
+    "bazli",
+    "gore",
+    "kirilim",
+    "gruplandir",
+    "gruplarina",
 )
 
 _FILTER_INTENT_MARKERS: tuple[str, ...] = (
-    "sadece", "sinirla", "sinirlandir", "filtrele", "olan", "icin",
+    "sadece",
+    "sinirla",
+    "sinirlandir",
+    "filtrele",
+    "olan",
+    "icin",
 )
 
 # Aggregate "use everything / clear this filter" clarification replies (item
@@ -199,10 +278,16 @@ ALL_REPLY_PATTERN = re.compile(r"\b(hepsini|hepsi|tumu|tamamini|tamami|butununu)
 
 # Ordinal clarification replies ("ilkini", "ikincisini", ...) -> 0-based index.
 ORDINAL_REPLY_INDEX: dict[str, int] = {
-    "ilkini": 0, "ilk": 0, "birincisini": 0, "birinci": 0,
-    "ikincisini": 1, "ikinci": 1,
-    "ucuncusunu": 2, "ucuncu": 2,
-    "dorduncusunu": 3, "dorduncu": 3,
+    "ilkini": 0,
+    "ilk": 0,
+    "birincisini": 0,
+    "birinci": 0,
+    "ikincisini": 1,
+    "ikinci": 1,
+    "ucuncusunu": 2,
+    "ucuncu": 2,
+    "dorduncusunu": 3,
+    "dorduncu": 3,
 }
 
 _FIELD_LABELS_TR: dict[str, str] = {
@@ -560,9 +645,7 @@ def extract_candidate_phrases(question: str) -> dict[str, list[str]]:
                 break
             exception_words = _GENERIC_QUANTIFIER_EXCEPTIONS.get(folded_word)
             is_exception = bool(
-                exception_words
-                and phrase_tokens
-                and fold(phrase_tokens[0]) in exception_words
+                exception_words and phrase_tokens and fold(phrase_tokens[0]) in exception_words
             )
             if not is_exception and _is_dimension_noun(folded_word):
                 break
@@ -610,9 +693,7 @@ def extract_candidate_phrases(question: str) -> dict[str, list[str]]:
     # must remain a grouping/calculation request.
     folded_question = fold(question)
     matched_gender_aliases = [
-        alias
-        for alias in _GENDER_ALIASES
-        if re.search(rf"\b{re.escape(alias)}\b", folded_question)
+        alias for alias in _GENDER_ALIASES if re.search(rf"\b{re.escape(alias)}\b", folded_question)
     ]
     matched_gender_codes = {_GENDER_ALIASES[alias] for alias in matched_gender_aliases}
     if len(matched_gender_codes) == 1 and (
@@ -757,6 +838,78 @@ def extract_cohort_share_mentions(question: str) -> dict[str, str]:
     return results
 
 
+_NESTED_SHARE_MARKERS = (
+    "icindeki",
+    "icinde",
+    "icerisindeki",
+    "icerisinde",
+    "arasindaki",
+    "arasinda",
+    "grubunda",
+)
+
+
+def extract_nested_share_segments(question: str) -> tuple[str, str] | None:
+    """Return ``(denominator cohort, measured cohort/condition)``.
+
+    This is deliberately structural rather than vocabulary-specific. It does
+    not decide what either side means and it never creates a database
+    predicate; the caller must ground both sides. Consequently the same parser
+    serves gender, nationality, department, service, status and future fields.
+
+    Only an explicit containment relation with share wording on its right is
+    accepted. A temporal phrase such as "2024 içinde" may have the same marker,
+    but its left side cannot ground as a cohort and is therefore rejected by
+    the caller without a guess.
+    """
+    folded = fold(question)
+    if not any(token.startswith(_COHORT_SHARE_WORDS) for token in folded.split()):
+        return None
+    for marker in _NESTED_SHARE_MARKERS:
+        match = re.search(rf"\b{re.escape(marker)}\b", folded)
+        if match is None:
+            continue
+        # `fold` performs one-character translations, so these offsets also
+        # index the original string. Preserve its casing: proper-name grounding
+        # intentionally uses capitalization as evidence (Kardiyoloji, Gebze).
+        denominator = question[: match.start()].strip(" ,;:-")
+        measured = question[match.end() :].strip(" ,;:-")
+        if (
+            denominator
+            and measured
+            and any(word.startswith(_COHORT_SHARE_WORDS) for word in fold(measured).split())
+        ):
+            return denominator, measured
+    return None
+
+
+def extract_gender_mentions(question: str) -> list[str]:
+    """Return distinct curated gender aliases, including Turkish suffixes.
+
+    In a three-condition phrase ("kadınların gelmeme oranı") gender is not the
+    token adjacent to the share word and is therefore correctly absent from
+    `extract_cohort_share_mentions`. It is still an explicit cohort condition.
+    This helper reuses the resolver's alias vocabulary instead of duplicating
+    gender codes in the composition node.
+    """
+    tokens = [token.strip(_STRIP_CHARS) for token in fold(question).split()]
+    mentions: list[str] = []
+    aliases = sorted(_GENDER_ALIASES, key=len, reverse=True)
+    for token in tokens:
+        for alias in aliases:
+            if " " in alias:
+                continue
+            if token == alias or (
+                len(alias) >= 4
+                and token.startswith(alias)
+                and token[len(alias) :] in {"lar", "lerin", "larin", "in", "i", "a", "da", "dan"}
+            ):
+                if alias not in mentions:
+                    mentions.append(alias)
+                break
+    return mentions
+
+
 def extract_filter_only_phrase(question: str) -> str | None:
     """Extracts a terse follow-up value after "sadece/yalniz".
 
@@ -768,9 +921,7 @@ def extract_filter_only_phrase(question: str) -> str | None:
         return None
 
     tokens = question.split()
-    cleaned = [
-        _APOSTROPHE_SUFFIX.sub("", token).strip(_STRIP_CHARS) for token in tokens
-    ]
+    cleaned = [_APOSTROPHE_SUFFIX.sub("", token).strip(_STRIP_CHARS) for token in tokens]
     folded_tokens = [fold(token) for token in cleaned]
     markers = {"sadece", "yalniz", "yalnizca"}
     for index, folded_token in enumerate(folded_tokens):
@@ -800,9 +951,7 @@ def extract_exclusion_phrase(question: str) -> str | None:
     against real values, so a mis-read never invents a filter.
     """
     tokens = question.split()
-    cleaned = [
-        _APOSTROPHE_SUFFIX.sub("", token).strip(_STRIP_CHARS) for token in tokens
-    ]
+    cleaned = [_APOSTROPHE_SUFFIX.sub("", token).strip(_STRIP_CHARS) for token in tokens]
     folded_tokens = [fold(token) for token in cleaned]
     for index, folded_token in enumerate(folded_tokens):
         if folded_token not in _EXCLUSION_MARKERS:
@@ -824,7 +973,14 @@ def extract_exclusion_phrase(question: str) -> str | None:
 # Wording that marks an explicit two-value comparison ("X ile Y'yi
 # karşılaştır", "hangisi daha yoğun: X mi Y mi"). Folded substrings.
 _COMPARISON_CONTEXT_MARKERS: tuple[str, ...] = (
-    "karsilastir", "kiyasla", "daha", "hangisi", "hangi", "fark", "versus", " vs ",
+    "karsilastir",
+    "kiyasla",
+    "daha",
+    "hangisi",
+    "hangi",
+    "fark",
+    "versus",
+    " vs ",
 )
 
 _APOSTROPHE_SUFFIX = re.compile(r"['’`].*$")
@@ -866,9 +1022,7 @@ def extract_comparison_entities(question: str) -> list[str]:
     # keeps this loose gate safe — a spurious enumeration whose fragments don't
     # all ground on one field is dropped whole (#4 ileri filtreler, 2026-07-29).
     _field_cue = any(
-        root in folded_question
-        for roots in _FIELD_CUE_ROOTS.values()
-        for root in roots
+        root in folded_question for roots in _FIELD_CUE_ROOTS.values() for root in roots
     )
     if not _field_cue and not any(
         marker in folded_question for marker in _COMPARISON_CONTEXT_MARKERS
@@ -876,15 +1030,12 @@ def extract_comparison_entities(question: str) -> list[str]:
         return []
 
     raw_tokens = question.split()
-    cleaned = [
-        _APOSTROPHE_SUFFIX.sub("", token).strip(_STRIP_CHARS) for token in raw_tokens
-    ]
+    cleaned = [_APOSTROPHE_SUFFIX.sub("", token).strip(_STRIP_CHARS) for token in raw_tokens]
     folded_tokens = [fold(token) for token in cleaned]
     # A trailing comma both ENDS the current mention and continues the chain,
     # so it has to be read before `_STRIP_CHARS` removes it above.
     ends_with_comma = [
-        _APOSTROPHE_SUFFIX.sub("", token).rstrip(".;:!?").endswith(",")
-        for token in raw_tokens
+        _APOSTROPHE_SUFFIX.sub("", token).rstrip(".;:!?").endswith(",") for token in raw_tokens
     ]
 
     def _is_candidate(index: int) -> bool:
@@ -902,11 +1053,7 @@ def extract_comparison_entities(question: str) -> list[str]:
         while True:
             run: list[str] = []
             comma_terminated = False
-            while (
-                cursor < len(cleaned)
-                and len(run) < _MAX_PHRASE_TOKENS
-                and _is_candidate(cursor)
-            ):
+            while cursor < len(cleaned) and len(run) < _MAX_PHRASE_TOKENS and _is_candidate(cursor):
                 run.append(cleaned[cursor])
                 comma_terminated = ends_with_comma[cursor]
                 cursor += 1
@@ -939,9 +1086,7 @@ def extract_comparison_pair(question: str) -> tuple[str, str] | None:
         return None
 
     tokens = question.split()
-    cleaned = [
-        _APOSTROPHE_SUFFIX.sub("", token).strip(_STRIP_CHARS) for token in tokens
-    ]
+    cleaned = [_APOSTROPHE_SUFFIX.sub("", token).strip(_STRIP_CHARS) for token in tokens]
     folded_tokens = [fold(token) for token in cleaned]
 
     def _is_candidate(index: int) -> bool:

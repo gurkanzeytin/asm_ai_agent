@@ -8,12 +8,19 @@ from tools.evaluation.dataset import (
     select_cases,
     validate_evaluation_dataset,
 )
-from tools.evaluation.models import EvaluationDataset, EvaluationMode, FailureCode
+from tools.evaluation.models import (
+    EvaluationCase,
+    EvaluationDataset,
+    EvaluationMode,
+    ExpectedEvaluation,
+    FailureCode,
+)
 from tools.evaluation.report import compare_with_previous, write_run_reports
 from tools.evaluation.runner import EvaluationRunner
 from tools.evaluation.scorers import (
     score_final_answer,
     score_result_contract,
+    score_routing,
     score_sql_semantics,
 )
 
@@ -34,6 +41,20 @@ def test_evaluation_case_schema_validation():
         "E2E-RW-006",
         "E2E-RW-007",
     }
+
+
+def test_controlled_limitation_is_not_scored_as_unnecessary_clarification():
+    case = EvaluationCase(
+        id="CONTROLLED-LIMITATION",
+        question="Doktor maaşları nedir?",
+        category="unanswerable",
+        expected=ExpectedEvaluation(answerable=False),
+    )
+
+    scored = score_routing(case, clarification_required=True)
+
+    assert scored.passed
+    assert scored.failures == []
 
 
 def test_unknown_column_rejection():
@@ -93,12 +114,79 @@ def test_colloquial_blind_v2_is_separate_curated_evaluation_data():
     assert len({case.category for case in cases}) >= 12
 
     production_questions = {
-        example.question.casefold()
-        for example in examples.load_golden_dataset().questions
+        example.question.casefold() for example in examples.load_golden_dataset().questions
     }
-    assert not production_questions.intersection(
-        case.question.casefold() for case in cases
+    assert not production_questions.intersection(case.question.casefold() for case in cases)
+
+
+def test_mentor_surprise_v1_is_a_separate_manually_authored_holdout():
+    dataset = load_evaluation_dataset()
+    cases = select_cases(dataset, suite="mentor_surprise_v1")
+
+    assert len(cases) == 15
+    assert {case.id for case in cases} == {
+        "MENTOR-SURPRISE-001",
+        "MENTOR-SURPRISE-002",
+        "MENTOR-SURPRISE-004",
+        "MENTOR-SURPRISE-006",
+        "MENTOR-SURPRISE-008",
+        "MENTOR-SURPRISE-009",
+        "MENTOR-SURPRISE-015",
+        "MENTOR-SURPRISE-018",
+        "MENTOR-SURPRISE-019",
+        "MENTOR-SURPRISE-021",
+        "MENTOR-SURPRISE-023",
+        "MENTOR-SURPRISE-025",
+        "MENTOR-SURPRISE-027",
+        "MENTOR-SURPRISE-028",
+        "MENTOR-SURPRISE-029",
+    }
+    assert all(case.blind and case.suite == "mentor_surprise_v1" for case in cases)
+    assert len({case.question.casefold() for case in cases}) == len(cases)
+    assert len({case.category for case in cases}) == len(cases)
+
+    production_questions = {
+        example.question.casefold() for example in examples.load_golden_dataset().questions
+    }
+    assert not production_questions.intersection(case.question.casefold() for case in cases)
+
+
+def test_mentor_surprise_failures_are_promoted_to_a_deterministic_regression_gate():
+    cases = select_cases(load_evaluation_dataset(), suite="mentor_surprise_regression_v1")
+    assert {case.id for case in cases} == {
+        "MENTOR-SURPRISE-003",
+        "MENTOR-SURPRISE-005",
+        "MENTOR-SURPRISE-007",
+        *(f"MENTOR-SURPRISE-{index:03d}" for index in range(10, 15)),
+        "MENTOR-SURPRISE-016",
+        "MENTOR-SURPRISE-017",
+        "MENTOR-SURPRISE-020",
+        "MENTOR-SURPRISE-022",
+        "MENTOR-SURPRISE-024",
+        "MENTOR-SURPRISE-026",
+    }
+    assert all(not case.blind for case in cases)
+
+    run = EvaluationRunner().run(
+        suite="mentor_surprise_regression_v1",
+        mode=EvaluationMode.SQL_GENERATION,
     )
+    assert run.summary.passed == len(cases), [
+        failure.model_dump() for result in run.results for failure in result.failures
+    ]
+
+
+def test_compositional_query_algebra_suite_is_a_deterministic_regression_gate():
+    cases = select_cases(load_evaluation_dataset(), suite="compositional_query_algebra_v1")
+    assert {case.id for case in cases} == {f"COMPOSE-ALG-{index:03d}" for index in range(1, 8)}
+
+    run = EvaluationRunner().run(
+        suite="compositional_query_algebra_v1",
+        mode=EvaluationMode.SQL_GENERATION,
+    )
+    assert run.summary.passed == len(cases), [
+        failure.model_dump() for result in run.results for failure in result.failures
+    ]
 
 
 def test_explicit_base_dataset_load_does_not_merge_colloquial_supplement():
@@ -110,9 +198,7 @@ def test_explicit_base_dataset_load_does_not_merge_colloquial_supplement():
 
 def test_colloquial_guard_cases_follow_production_routing_contract():
     runner = EvaluationRunner()
-    regression_cases = select_cases(
-        load_evaluation_dataset(), suite="colloquial_regression_v2"
-    )
+    regression_cases = select_cases(load_evaluation_dataset(), suite="colloquial_regression_v2")
     assert {case.id for case in regression_cases} == {
         "COL-BLIND-001",
         "COL-BLIND-002",
@@ -182,10 +268,14 @@ def test_colloquial_guard_cases_follow_production_routing_contract():
     ],
 )
 def test_promoted_colloquial_analytical_regressions(case_id):
-    result = EvaluationRunner().run(
-        case_id=case_id,
-        mode=EvaluationMode.SQL_GENERATION,
-    ).results[0]
+    result = (
+        EvaluationRunner()
+        .run(
+            case_id=case_id,
+            mode=EvaluationMode.SQL_GENERATION,
+        )
+        .results[0]
+    )
 
     assert result.passed, (case_id, result.failures)
     assert result.sql_source == "deterministic"
@@ -279,8 +369,7 @@ def test_must_include_sql_and_must_not_include_sql_substring_assertions():
     built = DeterministicSQLBuilder().build(plan)
     ok = score_sql_semantics(case, built.sql, plan)
     assert not any(
-        failure.failure_code == FailureCode.SQL_SHAPE_MISMATCH
-        for failure in ok.failures
+        failure.failure_code == FailureCode.SQL_SHAPE_MISMATCH for failure in ok.failures
     ), ok.failures
 
 
@@ -315,18 +404,12 @@ def test_mock_period_labels_match_typed_result_contract():
     period_results = [result for result in run.results if result.case_id.startswith("E2E-RW-00")]
     assert period_results
     assert all(result.passed for result in period_results), [
-        failure.model_dump()
-        for result in period_results
-        for failure in result.failures
+        failure.model_dump() for result in period_results for failure in result.failures
     ]
 
 
 def test_result_contract_accepts_negative_percentage_change():
-    case = next(
-        case
-        for case in load_evaluation_dataset().cases
-        if case.id == "E2E-RW-008"
-    )
+    case = next(case for case in load_evaluation_dataset().cases if case.id == "E2E-RW-008")
     normalized = NormalizedResult(
         schema_name="PeriodComparisonResult",
         columns=[

@@ -449,7 +449,7 @@
       },
       "sql_requirements": {
         "must_use_columns": [
-          "Id"
+          "BaslangicTarihi"
         ],
         "must_include_features": [],
         "must_not_include_features": [
@@ -476,7 +476,7 @@
       },
       "sql_requirements": {
         "must_use_columns": [
-          "Id"
+          "BaslangicTarihi"
         ],
         "must_include_features": [],
         "must_not_include_features": [
@@ -629,17 +629,10 @@
       "difficulty": "medium",
       "blind": true,
       "expected": {
-        "analysis_type": "distribution",
-        "metrics": [
-          "appointment_count"
-        ],
-        "dimensions": [
-          "GenelRandevuKaynakAdi"
-        ],
-        "sql_source": "deterministic",
-        "result_contract": "DistributionResult",
+        "metrics": [],
+        "dimensions": [],
         "clarification_required": false,
-        "answerable": true
+        "answerable": false
       }
     },
     {
@@ -920,7 +913,7 @@
       "difficulty": "hard",
       "blind": true,
       "expected": {
-        "analysis_type": "period_comparison",
+        "analysis_type": "adaptive_time_comparison",
         "metrics": [
           "appointment_count"
         ],
@@ -928,7 +921,7 @@
           "SubeAdi"
         ],
         "sql_source": "deterministic",
-        "result_contract": "PeriodComparisonResult",
+        "result_contract": "DistributionResult",
         "clarification_required": false,
         "answerable": true
       }
@@ -1021,7 +1014,7 @@
           "GenelRandevuBolumAdi"
         ],
         "sql_source": "deterministic",
-        "result_contract": "PeriodComparisonResult",
+        "result_contract": "DistributionResult",
         "clarification_required": false,
         "answerable": true
       }
@@ -1278,9 +1271,12 @@
       "difficulty": "hard",
       "blind": true,
       "expected": {
-        "analysis_type": "adaptive_time_comparison",
+        "analysis_type": "multi_metric_performance",
         "metrics": [
-          "appointment_count"
+          "appointment_count",
+          "completed_appointment_rate",
+          "no_show_rate",
+          "unique_patient_count"
         ],
         "dimensions": [],
         "sql_source": "deterministic",
@@ -1355,7 +1351,7 @@
           "SubeAdi"
         ],
         "sql_source": "deterministic",
-        "result_contract": "PeriodComparisonResult",
+        "result_contract": "DistributionResult",
         "clarification_required": false,
         "answerable": true
       }

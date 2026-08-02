@@ -64,6 +64,16 @@ _RELATIONSHIP_CONDITION_DIMENSIONS: dict[str, set[str]] = {
     "cross_branch_repeat_patient_count": {"SubeAdi"},
     "same_day_multi_service_patient_count": {"HizmetAdi"},
     "same_day_multi_doctor_patient_count": {"DoktorId", "GenelRandevuKaynakAdi"},
+    # In "doktor bilgisi eksik kayıtların aylık trendi", the bare doctor
+    # concept describes the NULL condition; it is not a request to group by
+    # the doctor/source display column. An explicit "kaynak/kanal bazında"
+    # request still survives through the positional breakdown check below.
+    "missing_doctor_count": {"DoktorId", "GenelRandevuKaynakAdi"},
+    # "aynı tarihte kaydedilen" uses the creation verb to define the date
+    # relationship; it does not request a creator breakdown unless that
+    # dimension is explicitly followed by a grouping marker.
+    "same_day_booking_count": {"RandevuyuVeren"},
+    "same_day_booking_rate": {"RandevuyuVeren"},
 }
 
 _NEGATION_PATTERN = re.compile(r"\b(olmayan|bulunmayan|almayan)\w*\b|\bhic\b")
@@ -301,9 +311,7 @@ class QueryPlanner:
             # or drive a conditional metric (waiting_count/in_progress_count) —
             # the intent is the COMPLEMENT. Rendered as the same equality/IN
             # path as the single-word negation below.
-            excluded_status_values = view_mapping.resolve_excluded_status_values(
-                folded, view_name
-            )
+            excluded_status_values = view_mapping.resolve_excluded_status_values(folded, view_name)
             if excluded_status_values is not None:
                 status_column_name = view_mapping.status_column(view_name)
                 extra_filters = extra_filters + [
@@ -337,9 +345,7 @@ class QueryPlanner:
             # ``randv`` -> ``randevu``) affect metric selection. Broader
             # medical/domain rewrites remain entity-only because they can alter
             # an established physical dimension identity.
-            intelligence_folded = self._extractor.fold(
-                analysis.catalog_query or question
-            )
+            intelligence_folded = self._extractor.fold(analysis.catalog_query or question)
             intelligence = self._resolve_intelligence(
                 intelligence_folded,
                 analysis,
@@ -355,10 +361,10 @@ class QueryPlanner:
                 aggregate_threshold = aggregate_threshold.model_copy(
                     update={"metric": intelligence["metrics"][0]}
                 )
-                if (
-                    intelligence["analysis_type"] == "bottom_n"
-                    and aggregate_threshold.operator in {">", ">="}
-                ):
+                if intelligence["analysis_type"] == "bottom_n" and aggregate_threshold.operator in {
+                    ">",
+                    ">=",
+                }:
                     intelligence["analysis_type"] = "ranking"
                     ranking = "DESC"
                     order = "DESC"
@@ -369,8 +375,7 @@ class QueryPlanner:
                 if analysis.detected_limit == percentile:
                     analysis = analysis.model_copy(update={"detected_limit": None})
                 is_bottom = any(
-                    marker in folded
-                    for marker in ("en alttaki", "alttaki", "en dusuk", "en az")
+                    marker in folded for marker in ("en alttaki", "alttaki", "en dusuk", "en az")
                 )
                 direction = "ASC" if is_bottom else "DESC"
                 ranking = direction
@@ -470,6 +475,15 @@ class QueryPlanner:
                 strategy = reasoning.resolve_strategy(
                     folded, intelligence["metrics"], intelligence["dimensions"]
                 )
+            if (
+                strategy is not None
+                and strategy.analysis_type == "variance_analysis"
+                and intelligence["comparisons"]
+            ):
+                # "Bu ay geçen aya göre fark var mı?" contains the generic
+                # variance phrase "fark var mı", but two resolved periods make
+                # the requested operation unambiguously a period comparison.
+                strategy = None
             if strategy is not None:
                 intelligence["analysis_type"] = strategy.analysis_type
                 merged_metrics = list(strategy.metrics)
@@ -617,8 +631,7 @@ class QueryPlanner:
             # answer (live UI testing, 2026-07-31). Two windows stay a
             # comparison; a plan that already groups is left alone.
             distinct_year_windows = {
-                (date_filter.start_date, date_filter.end_date)
-                for date_filter in date_filters
+                (date_filter.start_date, date_filter.end_date) for date_filter in date_filters
             }
             if (
                 len(distinct_year_windows) >= 3
@@ -664,10 +677,7 @@ class QueryPlanner:
                 resolved_limit = None
             if (
                 resolved_limit is None
-                and (
-                    ranking
-                    or intelligence["analysis_type"] in {"ranking", "top_n", "bottom_n"}
-                )
+                and (ranking or intelligence["analysis_type"] in {"ranking", "top_n", "bottom_n"})
                 and self._singular_ranking_result_requested(folded)
             ):
                 resolved_limit = 1
@@ -734,9 +744,7 @@ class QueryPlanner:
             output_table=output_table,
             fact_table=fact_table,
             date_filters=date_filters,
-            periods=self._comparison_periods(
-                analysis, date_filters, signals.analysis_type, folded
-            ),
+            periods=self._comparison_periods(analysis, date_filters, signals.analysis_type, folded),
             department_filter=signals.department,
             scope=scope,
             branch_filters=[],
@@ -864,11 +872,18 @@ class QueryPlanner:
         )
         compositional_is_more_specific = bool(compositional_primary) and (
             not metrics
+            or (
+                catalog.detect_measure_request(folded) == "rate"
+                and any(
+                    metric.numerator == compositional_primary.id
+                    and metric.formula_type == "conditional_rate"
+                    for metric in metric_specs.values()
+                )
+            )
             or all(
                 metric_id == compositional_primary.id
                 or metric_id == "appointment_count"
-                or set(metric_specs[metric_id].required_columns)
-                < compositional_required
+                or set(metric_specs[metric_id].required_columns) < compositional_required
                 for metric_id in metrics
             )
         )
@@ -885,20 +900,35 @@ class QueryPlanner:
         if (
             compositional_metrics
             and not has_specialized_relationship
-            and not catalog.has_explicit_multi_metric_request(folded)
+            # A conjunction between dimensions ("şube VE hizmet bazında") is
+            # not a multi-metric request. When no metric synonym matched at
+            # all, the one complete compositional metric is the only grounded
+            # measure and may safely win. Real multi-metric questions already
+            # have directly matched metrics and remain protected.
+            and not (catalog.has_explicit_multi_metric_request(folded) and metrics)
             and compositional_is_more_specific
             and not compositional_conflicts_with_breakdown
             and not compositional_would_drop_sibling_metric
         ):
             used_compositional_metric = metrics != compositional_metrics
             metrics = compositional_metrics
+
+        # Compositional matching may identify the count sibling while the
+        # user's generic measure wording asks for its share ("aynı gün
+        # oluşturulanların payı"). Promote through the catalog's numerator
+        # link, exactly as direct synonym matching does in match_metrics.
+        if len(metrics) == 1 and catalog.detect_measure_request(folded) == "rate":
+            rate_by_numerator = {
+                metric.numerator: metric.id
+                for metric in metric_specs.values()
+                if metric.formula_type == "conditional_rate" and metric.numerator
+            }
+            metrics = [rate_by_numerator.get(metrics[0], metrics[0])]
         # Breakdown the user asked for that this plan shape cannot honour;
         # surfaced as a plan assumption so the answer states the limitation.
         dropped_breakdown: list[str] = []
         patient_span_requested = self._patient_appointment_span_requested(folded)
-        patient_period_overlap_requested = self._patient_period_overlap_requested(
-            folded, analysis
-        )
+        patient_period_overlap_requested = self._patient_period_overlap_requested(folded, analysis)
         if patient_span_requested:
             metrics = ["patient_appointment_span_days"]
             dimensions = [
@@ -1091,16 +1121,10 @@ class QueryPlanner:
         # not a request to bucket BY month. Ranking stays on the entity; a
         # spurious month grain would turn top-5-branches into top-5
         # (month, branch) rows dominated by the largest branch.
-        if (
-            granularity is None
-            and not dimensions
-            and _MONTH_BUCKET_RANKING_PATTERN.search(folded)
-        ):
+        if granularity is None and not dimensions and _MONTH_BUCKET_RANKING_PATTERN.search(folded):
             granularity = "month"
         comparisons = catalog.detect_period_comparison(folded, date_range_count)
-        two_month_change_request = self._can_split_two_month_span(
-            analysis.detected_dates
-        ) and (
+        two_month_change_request = self._can_split_two_month_span(analysis.detected_dates) and (
             bool(self._period_change_direction(folded))
             or any(marker in folded for marker in _PERIOD_COMPARISON_MARKERS)
         )
@@ -1133,9 +1157,16 @@ class QueryPlanner:
             "ranking",
             "top_n",
             "bottom_n",
+            "variance_analysis",
         ):
             pattern = "period_comparison"
-        elif granularity and pattern in generic_patterns:
+        elif granularity and pattern in generic_patterns + (
+            "data_quality",
+            "ratio",
+            "percentage",
+            "average",
+            "duration_analysis",
+        ):
             pattern = "time_trend"
         elif len(dimensions) >= 2 and pattern in generic_patterns:
             pattern = "cross_analysis"
@@ -1180,9 +1211,7 @@ class QueryPlanner:
                 # was not applied. Silently returning a two-period total for
                 # "bölüm bazında kıyasla" reads as a wrong answer rather than a
                 # limitation (Codex live UI finding, 2026-07-31).
-                dropped_breakdown = [
-                    get_dimension_label(dimension) for dimension in dimensions
-                ]
+                dropped_breakdown = [get_dimension_label(dimension) for dimension in dimensions]
                 dimensions = []
 
         # A trend question ("randevu eğilimini özetle") carries no explicit
@@ -1230,12 +1259,19 @@ class QueryPlanner:
         if primary is not None:
             if primary.numerator and primary.denominator:
                 numerator, denominator = primary.numerator, primary.denominator
-            if used_compositional_metric:
+            if used_compositional_metric and pattern in (
+                None,
+                "count",
+                "distinct_count",
+                "distribution",
+                "average",
+                "duration_analysis",
+                "data_quality",
+            ):
                 pattern = primary.analysis_type
             elif primary.analysis_type == "repeat_behavior" and (
                 primary.formula_type.startswith("having_")
-                or primary.formula_type
-                in {"patient_span_days", "period_overlap_distinct_count"}
+                or primary.formula_type in {"patient_span_days", "period_overlap_distinct_count"}
             ):
                 pattern = primary.analysis_type
             if primary.analysis_type == "data_quality" and pattern in (
@@ -1243,6 +1279,15 @@ class QueryPlanner:
                 "count",
                 "duration_analysis",
             ):
+                pattern = primary.analysis_type
+            elif primary.analysis_type == "duration_analysis" and pattern in {
+                "average",
+                "minimum",
+                "maximum",
+            }:
+                # The generic aggregation word describes how the specialized
+                # duration metric is summarized; it must not replace the
+                # metric family's analysis/result contract.
                 pattern = primary.analysis_type
             elif pattern is None:
                 pattern = primary.analysis_type
@@ -1255,8 +1300,18 @@ class QueryPlanner:
             # otherwise GROUP BY day, collapsing each group to one date and
             # turning the average into that day's raw count. The metric's own
             # declared granularity (None here) is authoritative for such metrics.
-            if primary.analysis_type == "average" and not primary.grouping_granularity:
-                granularity = None
+            if (
+                primary.analysis_type == "average"
+                and primary.formula_type == "ratio"
+                and not primary.grouping_granularity
+            ):
+                explicit_trend = any(
+                    marker in folded
+                    for marker in ("trend", "egilim", "seyir", "gidisat", "zaman icinde")
+                )
+                if not explicit_trend:
+                    granularity = None
+                    pattern = primary.analysis_type
             if primary.fixed_dimension and primary.fixed_dimension not in dimensions:
                 dimensions = dimensions + [primary.fixed_dimension]
 
@@ -1305,10 +1360,7 @@ class QueryPlanner:
         # mention, not a requested breakdown — drop it so the question answers
         # with a single scalar instead of hundreds of per-group rows.
         scalar_distinct_count = False
-        if (
-            primary is not None
-            and primary.formula_type == "count_distinct"
-        ):
+        if primary is not None and primary.formula_type == "count_distinct":
             self_columns = set(primary.required_columns) | _SELF_COUNT_DIMENSIONS.get(
                 primary.id, set()
             )
@@ -1491,7 +1543,7 @@ class QueryPlanner:
             and "randevu" in folded_question
         )
         span_wording = (
-            "gun fark" in folded_question
+            re.search(r"\bgun\s+fark(?:i|ini|lari|larini)?\b", folded_question) is not None
             or "kac gun gec" in folded_question
             or "arasinda kac gun" in folded_question
             or "en yuksek fark" in folded_question
@@ -1514,8 +1566,7 @@ class QueryPlanner:
             or "ortak hasta" in folded_question
             or (
                 "gelenlerden" in folded_question
-                and re.search(r"\bbu\s+yil\b.+\bgelen\w*\b", folded_question)
-                is not None
+                and re.search(r"\bbu\s+yil\b.+\bgelen\w*\b", folded_question) is not None
             )
         )
         has_presence_action = any(
@@ -1531,17 +1582,22 @@ class QueryPlanner:
             "HizmetAdi": ("hizmet", "servis"),
             "SubeAdi": ("sube", "merkez", "lokasyon"),
             "GenelRandevuBolumAdi": ("bolum", "brans"),
-            "GenelRandevuKaynakAdi": ("kaynak", "kanal"),
+            "GenelRandevuKaynakAdi": (
+                "kaynak",
+                "kaynag",
+                "kanal",
+                "doktor",
+                "hekim",
+            ),
             "DoktorId": ("doktor", "hekim"),
             "RandevuTipiAdi": ("randevu tipi", "tip", "randevu turu", "tur"),
             "RandevuDurumu": ("durum", "status"),
             "CinsiyetId": ("cinsiyet",),
+            "RandevuyuVeren": ("randevuyu veren", "kaydeden", "olusturan"),
         }
         terms = dimension_terms.get(dimension, (dimension.lower(),))
         for term in terms:
-            term_pattern = r"\s+".join(
-                rf"{re.escape(token)}\w*" for token in term.split()
-            )
+            term_pattern = r"\s+".join(rf"{re.escape(token)}\w*" for token in term.split())
             # Business labels commonly insert a harmless descriptor between
             # the dimension noun and grouping marker: "şube ADI bazında",
             # "bölüm ADI RAPORLAMA bazında". It is still an explicit GROUP BY.
@@ -1668,10 +1724,9 @@ class QueryPlanner:
             analysis_type == "repeat_behavior"
             and self._patient_period_overlap_requested(folded, analysis)
         )
-        if (
-            analysis_type not in _PERIOD_ANALYSIS_TYPES
-            and not patient_overlap
-        ) or len(analysis.detected_dates) < 2:
+        if (analysis_type not in _PERIOD_ANALYSIS_TYPES and not patient_overlap) or len(
+            analysis.detected_dates
+        ) < 2:
             return []
 
         periods: list[PeriodPlan] = []
@@ -1941,16 +1996,12 @@ class QueryPlanner:
         predicate string, or None when the question carries no age bound.
         """
         # "30-40 yaş arası" / "30 40 yaş arası" — an inclusive band.
-        band = re.search(
-            r"\b(\d{1,3})\s*[-\s]\s*(\d{1,3})\s+yas\w*\s+aras", folded_question
-        )
+        band = re.search(r"\b(\d{1,3})\s*[-\s]\s*(\d{1,3})\s+yas\w*\s+aras", folded_question)
         if band:
             low, high = sorted((int(band.group(1)), int(band.group(2))))
             return f"{self._AGE_EXPR} BETWEEN {low} AND {high}"
         # "N yaş ve üzeri/üstü" — inclusive lower bound (>=).
-        at_least = re.search(
-            r"\b(\d{1,3})\s+yas\w*\s+ve\s+(?:uzeri|ustu|yukari)", folded_question
-        )
+        at_least = re.search(r"\b(\d{1,3})\s+yas\w*\s+ve\s+(?:uzeri|ustu|yukari)", folded_question)
         if at_least:
             return f"{self._AGE_EXPR} >= {int(at_least.group(1))}"
         # "N yaş üstü/üzeri/üzerinde/büyük" — strict lower bound (>).
@@ -1960,9 +2011,7 @@ class QueryPlanner:
         if above:
             return f"{self._AGE_EXPR} > {int(above.group(1))}"
         # "N yaşından küçük / N yaş altı / N yaşından az" — strict upper bound (<).
-        below = re.search(
-            r"\b(\d{1,3})\s+yas\w*\s+(?:kucuk|alti|az|asagi)", folded_question
-        )
+        below = re.search(r"\b(\d{1,3})\s+yas\w*\s+(?:kucuk|alti|az|asagi)", folded_question)
         if below:
             return f"{self._AGE_EXPR} < {int(below.group(1))}"
         return None

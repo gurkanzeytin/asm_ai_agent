@@ -20,6 +20,8 @@ from app.services.deterministic_sql_builder import SUPPORTED_ANALYSIS_TYPES
 _DATASET_PATH = Path(__file__).resolve().parents[2] / "app" / "resources" / "evaluation_cases.json"
 _SUPPLEMENTAL_DATASET_PATHS = (
     Path(__file__).resolve().parent / "resources" / "colloquial_blind_v2.json",
+    Path(__file__).resolve().parent / "resources" / "mentor_surprise_v1.json",
+    Path(__file__).resolve().parent / "resources" / "compositional_query_algebra_v1.json",
 )
 
 RESULT_CONTRACTS = {
@@ -58,9 +60,7 @@ def load_evaluation_dataset(path: str | Path | None = None) -> EvaluationDataset
         supplemental_cases: list[EvaluationCase] = []
         for supplemental_path in _SUPPLEMENTAL_DATASET_PATHS:
             try:
-                supplemental_raw = json.loads(
-                    supplemental_path.read_text(encoding="utf-8")
-                )
+                supplemental_raw = json.loads(supplemental_path.read_text(encoding="utf-8"))
             except FileNotFoundError as error:
                 raise CatalogValidationError(
                     f"Supplemental evaluation dataset missing: {supplemental_path}"
@@ -77,9 +77,7 @@ def load_evaluation_dataset(path: str | Path | None = None) -> EvaluationDataset
                     f"{supplemental.view} != {dataset.view}"
                 )
             supplemental_cases.extend(supplemental.cases)
-        dataset = dataset.model_copy(
-            update={"cases": [*dataset.cases, *supplemental_cases]}
-        )
+        dataset = dataset.model_copy(update={"cases": [*dataset.cases, *supplemental_cases]})
     validate_evaluation_dataset(dataset)
     return dataset
 
@@ -141,11 +139,7 @@ def select_cases(
     elif suite == "acceptance":
         selected = [case for case in dataset.cases if case.id.startswith("E2E-RW-")]
     elif suite == "deterministic":
-        selected = [
-            case
-            for case in dataset.cases
-            if case.expected.sql_source == "deterministic"
-        ]
+        selected = [case for case in dataset.cases if case.expected.sql_source == "deterministic"]
     elif suite == "live":
         selected = [case for case in dataset.cases if case.requires_live_db]
     elif suite == "blind":

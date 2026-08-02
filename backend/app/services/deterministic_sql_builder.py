@@ -50,6 +50,7 @@ SUPPORTED_ANALYSIS_TYPES = {
     "adaptive_time_comparison",
     "percentage_change",
     "comparison",
+    "multi_metric_performance",
 }
 
 VIEW = "dbo.vw_RandevuRaporu"
@@ -138,9 +139,7 @@ class DeterministicSQLBuilder:
         # routing it here previously leaked the literal hint into the WHERE
         # clause and crashed the query (live 2026-07-28). Hand these plans to
         # the LLM path, which reads the hint and renders a NOT EXISTS/<> filter.
-        if any(
-            extra.strip().upper().startswith("NEGATION:") for extra in plan.extra_filters
-        ):
+        if any(extra.strip().upper().startswith("NEGATION:") for extra in plan.extra_filters):
             return UnsupportedPlan("unstructured negation hint requires LLM rendering")
         analysis_type = self._analysis_type(plan)
         if analysis_type not in SUPPORTED_ANALYSIS_TYPES:
@@ -152,6 +151,7 @@ class DeterministicSQLBuilder:
             "baseline_comparison",
             "adaptive_time_comparison",
             "percentage_change",
+            "multi_metric_performance",
         }:
             return self._period_comparison(plan, adaptive_retry=adaptive_retry)
         if analysis_type == "comparison":
@@ -197,9 +197,23 @@ class DeterministicSQLBuilder:
             return UnsupportedPlan("no verified metric mapping", skipped)
 
         dimensions = self._dimensions(plan)
+        if analysis_type == "data_quality" and metric_ids:
+            # "Bölüm bilgisi boş kayıtlar" names the field being checked, not
+            # a useful GROUP BY: every matching value is NULL. Keep genuine
+            # external breakdowns ("şube bazında eksik doktor") while dropping
+            # only dimensions owned by the measured quality rule itself.
+            primary_spec = self._metrics.get(metric_ids[0])
+            if primary_spec is not None:
+                dimensions = [
+                    dimension
+                    for dimension in dimensions
+                    if dimension not in primary_spec.required_columns
+                ]
         time_bucket_expr = None
         if plan.grouping_granularity:
-            date_column = (plan.date_filters[0].column if plan.date_filters else None) or DATE_COLUMN
+            date_column = (
+                plan.date_filters[0].column if plan.date_filters else None
+            ) or DATE_COLUMN
             time_bucket_expr = self._time_bucket_expression(plan.grouping_granularity, date_column)
         splits_department = DEPARTMENT_COLUMN in dimensions
         # GenelRandevuBolumAdi is comma-separated composite text ("Genel
@@ -224,12 +238,10 @@ class DeterministicSQLBuilder:
         # the raw birth date itself, with no age-group derivation attached -
         # bucketing it too would answer a different question than asked.
         buckets_age = (
-            _AGE_GROUP_COLUMN in dimensions
-            and AGE_GROUP_DERIVATION in plan.derived_calculations
+            _AGE_GROUP_COLUMN in dimensions and AGE_GROUP_DERIVATION in plan.derived_calculations
         )
         buckets_day_type = (
-            _DAY_TYPE_COLUMN in dimensions
-            and DAY_TYPE_DERIVATION in plan.derived_calculations
+            _DAY_TYPE_COLUMN in dimensions and DAY_TYPE_DERIVATION in plan.derived_calculations
         )
         output_alias_for = {DEPARTMENT_COLUMN: DEPARTMENT_COLUMN}
         group_expr_for = {DEPARTMENT_COLUMN: f"{_DEPARTMENT_SPLIT_ALIAS}.value"}
@@ -248,16 +260,20 @@ class DeterministicSQLBuilder:
         select_parts = [f"{time_bucket_expr} AS period_start"] if time_bucket_expr else []
         group_by_columns = [time_bucket_expr] if time_bucket_expr else []
         expected_aliases = ["period_start"] if time_bucket_expr else []
-        select_parts.extend([
-            f"{group_expr_for[dimension]} AS {output_alias_for[dimension]}"
-            if dimension in group_expr_for
-            else f"{dimension} AS {dimension}"
-            for dimension in dimensions
-        ])
+        select_parts.extend(
+            [
+                f"{group_expr_for[dimension]} AS {output_alias_for[dimension]}"
+                if dimension in group_expr_for
+                else f"{dimension} AS {dimension}"
+                for dimension in dimensions
+            ]
+        )
         group_by_columns.extend(
             group_expr_for.get(dimension, dimension) for dimension in dimensions
         )
-        expected_aliases.extend(output_alias_for.get(dimension, dimension) for dimension in dimensions)
+        expected_aliases.extend(
+            output_alias_for.get(dimension, dimension) for dimension in dimensions
+        )
         metric_aliases: dict[str, str] = {}
         primary_metric_alias = ""
         primary_metric_expression = metric_exprs[0][1]
@@ -295,10 +311,10 @@ class DeterministicSQLBuilder:
                 literals = ", ".join(
                     self._unicode_literal(value) for value in plan.excluded_departments
                 )
-                empty_guard = f"{empty_guard} AND {_DEPARTMENT_SPLIT_ALIAS}.value NOT IN ({literals})"
-            where = (
-                f"{where.rstrip()} AND {empty_guard}\n" if where else f"WHERE {empty_guard}\n"
-            )
+                empty_guard = (
+                    f"{empty_guard} AND {_DEPARTMENT_SPLIT_ALIAS}.value NOT IN ({literals})"
+                )
+            where = f"{where.rstrip()} AND {empty_guard}\n" if where else f"WHERE {empty_guard}\n"
         from_clause = f"FROM {VIEW}\n"
         if splits_department:
             from_clause += self._department_split_cross_apply()
@@ -333,9 +349,16 @@ class DeterministicSQLBuilder:
             f"{having}"
             f"{order_by};"
         )
+        result_schema = self._schema_name(analysis_type)
+        if analysis_type == "data_quality" and dimensions and result_schema == "CountResult":
+            # A scalar metric grouped by any dimension is a series of labelled
+            # values, regardless of the metric family (for example branch-level
+            # missing-doctor counts).  Returning CountResult here discards that
+            # shape and makes result normalisation reject otherwise valid SQL.
+            result_schema = "DistributionResult"
         return DeterministicSQL(
             sql=sql,
-            result_schema=self._schema_name(analysis_type),
+            result_schema=result_schema,
             expected_aliases=expected_aliases,
             skipped_metrics=skipped,
             metric_aliases=metric_aliases,
@@ -382,8 +405,28 @@ class DeterministicSQLBuilder:
         # negative lead times are excluded (BETWEEN 0 AND 24).
         upper_hour = 48 if adaptive_retry else 24
         cohort_filter = f"DATEDIFF(hour, CreatedDate, BaslangicTarihi) BETWEEN 0 AND {upper_hour}"
-        select_parts = ["COUNT(*) AS cohort_total_count"]
-        aliases = ["cohort_total_count"]
+        # RandevuDurumu is already expanded below into one count/rate pair for
+        # every verified status. Other requested dimensions (branch,
+        # department, source...) must remain in the query; otherwise a valid
+        # plan such as "geç alınan randevular bölümlerde nasıl sonuç vermiş"
+        # silently collapses to one global row.
+        dimensions = [
+            dimension for dimension in self._dimensions(plan) if dimension != "RandevuDurumu"
+        ]
+        splits_department = DEPARTMENT_COLUMN in dimensions
+        dimension_expr = {
+            dimension: (
+                f"{_DEPARTMENT_SPLIT_ALIAS}.value"
+                if dimension == DEPARTMENT_COLUMN
+                else dimension
+            )
+            for dimension in dimensions
+        }
+        select_parts = [
+            f"{dimension_expr[dimension]} AS {dimension}" for dimension in dimensions
+        ]
+        select_parts.append("COUNT(*) AS cohort_total_count")
+        aliases = [*dimensions, "cohort_total_count"]
         for prefix, value in VERIFIED_STATUS_VALUES.items():
             condition = f"RandevuDurumu = N'{value}'"
             select_parts.append(f"SUM(CASE WHEN {condition} THEN 1 ELSE 0 END) AS {prefix}_count")
@@ -402,11 +445,29 @@ class DeterministicSQLBuilder:
         # live multi-turn testing; the cohort path had never been exercised
         # end-to-end before).
         where = self._where(plan)
-        where = (
-            f"{where.rstrip()} AND {cohort_filter};" if where else f"WHERE {cohort_filter};"
+        where = f"{where.rstrip()} AND {cohort_filter}" if where else f"WHERE {cohort_filter}"
+        from_clause = f"FROM {VIEW}\n"
+        if splits_department:
+            from_clause += self._department_split_cross_apply()
+            where += f" AND {_DEPARTMENT_SPLIT_ALIAS}.value <> ''"
+        group_by = (
+            "\nGROUP BY " + ", ".join(dimension_expr[dimension] for dimension in dimensions)
+            if dimensions
+            else ""
         )
-        sql = f"SELECT {', '.join(select_parts)}\n" f"FROM {VIEW}\n" f"{where}"
-        return DeterministicSQL(sql=sql, result_schema="CohortResult", expected_aliases=aliases)
+        order_by = "\nORDER BY cohort_total_count DESC" if dimensions else ""
+        sql = (
+            f"SELECT {', '.join(select_parts)}\n"
+            f"{from_clause}"
+            f"{where}"
+            f"{group_by}"
+            f"{order_by};"
+        )
+        return DeterministicSQL(
+            sql=sql,
+            result_schema="CohortResult",
+            expected_aliases=aliases,
+        )
 
     def _period_comparison(
         self, plan: QueryPlan, *, adaptive_retry: bool
@@ -423,11 +484,7 @@ class DeterministicSQLBuilder:
         # the plain VOLUME case is grouped; a rate/ratio comparison keeps the
         # scalar two-period shape below (2026-07-29, live UI month-comparison
         # findings).
-        if (
-            plan.dimensions
-            and not (plan.numerator and plan.denominator)
-            and len(plan.metrics) <= 1
-        ):
+        if plan.dimensions and not (plan.numerator and plan.denominator) and len(plan.metrics) <= 1:
             grouped = self._period_comparison_grouped(plan, current, baseline)
             if grouped is not None:
                 return grouped
@@ -472,34 +529,37 @@ class DeterministicSQLBuilder:
             # Oluşturulamadı" (Codex live UI testing, 2026-07-31).
             requested = plan.metrics or ["appointment_count"]
             resolved, skipped = self._metric_expressions(requested, plan.metric_specs)
-            # A composite rate cannot be gated on a period without nesting
-            # aggregates; drop it here and report it via `skipped_metrics` so
-            # the answer can say which metric was left out, rather than emitting
-            # SQL the database would reject.
+            # Simple aggregates can be gated in the outer scan. Composite
+            # aggregates (rates/ratios) cannot be wrapped in another CASE
+            # without illegal nested aggregates, so they are evaluated in a
+            # read-only scalar subquery scoped to the same period and filters.
             conditionable = [
                 (metric_id, expression)
                 for metric_id, expression in resolved
                 if self._can_condition(expression)
             ]
-            skipped = skipped + [
-                metric_id
-                for metric_id, expression in resolved
-                if not self._can_condition(expression)
-            ]
             if not conditionable:
                 return UnsupportedPlan(
                     "period comparison metric mapping is not verified", plan.metrics
                 )
-            resolved = conditionable
+            filters = self._render_structured_filters(plan)
+            scalar_filter_sql = f" AND {' AND '.join(filters)}" if filters else ""
+
+            def period_metric(expression: str, condition: str) -> str:
+                if self._can_condition(expression):
+                    return self._conditional(expression, condition)
+                return f"(SELECT {expression} FROM {VIEW} WHERE ({condition}){scalar_filter_sql})"
+
             # A plain total makes the most sensible headline number when the
             # question mixed it with status breakdowns; otherwise keep the
             # planner's own ordering.
             primary_index = next(
-                (i for i, (mid, _) in enumerate(resolved) if mid == "appointment_count"), 0
+                (i for i, (mid, _) in enumerate(resolved) if mid == "appointment_count"),
+                next(i for i, item in enumerate(resolved) if item in conditionable),
             )
             primary_id, primary = resolved[primary_index]
-            current_expr = self._conditional(primary, current)
-            baseline_expr = self._conditional(primary, baseline)
+            current_expr = period_metric(primary, current)
+            baseline_expr = period_metric(primary, baseline)
             parts = [
                 f"N'{current_label}' AS current_period_label",
                 f"N'{baseline_label}' AS baseline_period_label",
@@ -519,8 +579,8 @@ class DeterministicSQLBuilder:
             for index, (metric_id, expression) in enumerate(resolved):
                 if index == primary_index or not self._is_safe_identifier(metric_id):
                     continue
-                cur_metric = self._conditional(expression, current)
-                base_metric = self._conditional(expression, baseline)
+                cur_metric = period_metric(expression, current)
+                base_metric = period_metric(expression, baseline)
                 parts.extend(
                     [
                         f"{cur_metric} AS current_{metric_id}",
@@ -546,31 +606,41 @@ class DeterministicSQLBuilder:
         )
 
     def _multi_period_breakdown(self, plan: QueryPlan) -> DeterministicSQL | UnsupportedPlan:
-        if len(plan.metrics) > 1:
-            return UnsupportedPlan(
-                "multi-metric period breakdown not supported: only a single metric can be compared across periods today",
-                plan.metrics,
-            )
-        metric = self._metric_expr((plan.metrics or ["appointment_count"])[0], plan.metric_specs)
-        if not metric:
-            return UnsupportedPlan(
-                "period breakdown metric mapping is not verified", plan.metrics
-            )
+        metric_ids = plan.metrics or ["appointment_count"]
+        resolved, skipped = self._metric_expressions(metric_ids, plan.metric_specs)
+        if not resolved:
+            return UnsupportedPlan("period breakdown metric mapping is not verified", plan.metrics)
         filters = self._render_structured_filters(plan)
         filter_sql = f" AND {' AND '.join(filters)}" if filters else ""
+        metric_select = ", ".join(
+            f"{expression} AS {self._alias_for_metric(metric_id, 'distribution')}"
+            for metric_id, expression in resolved
+            if self._is_safe_identifier(metric_id)
+        )
         selects = [
             (
-                f"SELECT N'{period.label}' AS period_label, {metric} AS appointment_count\n"
+                f"SELECT N'{period.label}' AS period_label, {metric_select}\n"
                 f"FROM {VIEW}\n"
                 f"WHERE {self._period_predicate(period)}{filter_sql}"
             )
             for period in plan.periods
         ]
         sql = "\nUNION ALL\n".join(selects) + "\nORDER BY period_label;"
+        aliases = [
+            self._alias_for_metric(metric_id, "distribution")
+            for metric_id, _ in resolved
+            if self._is_safe_identifier(metric_id)
+        ]
         return DeterministicSQL(
             sql=sql,
             result_schema="DistributionResult",
-            expected_aliases=["period_label", "appointment_count"],
+            expected_aliases=["period_label", *aliases],
+            skipped_metrics=skipped,
+            metric_aliases={
+                metric_id: self._alias_for_metric(metric_id, "distribution")
+                for metric_id, _expression in resolved
+                if self._is_safe_identifier(metric_id)
+            },
         )
 
     def _period_comparison_grouped(
@@ -659,9 +729,7 @@ class DeterministicSQLBuilder:
         comparison plan without one falls through to the LLM path."""
         grounded = self._grounded_entities(plan)
         if grounded is None:
-            return UnsupportedPlan(
-                "comparison plan without a grounded two-value entity pair"
-            )
+            return UnsupportedPlan("comparison plan without a grounded two-value entity pair")
         field_name, all_values = grounded
         if len(all_values) > 2:
             # Three or more sides cannot be expressed by this method's
@@ -694,9 +762,7 @@ class DeterministicSQLBuilder:
         pruned = self._without_pair_filters(plan, field_name)
         where = self._where(pruned)
         either = f"({current_condition} OR {baseline_condition})"
-        where = (
-            f"{where.rstrip()} AND {either}\n" if where else f"WHERE {either}\n"
-        )
+        where = f"{where.rstrip()} AND {either}\n" if where else f"WHERE {either}\n"
 
         select = (
             f"N'{current_label}' AS current_entity_label, "
@@ -750,20 +816,17 @@ class DeterministicSQLBuilder:
         Reported as a plain `DistributionResult` so the existing categorical
         analytics/insight/chart/table path handles it with no new contract.
         """
-        if len(plan.metrics) > 1:
-            return UnsupportedPlan(
-                "multi-metric entity breakdown not supported: only a single metric "
-                "can be compared across three or more entities today",
-                plan.metrics,
-            )
-        metric_id = (plan.metrics or ["appointment_count"])[0]
-        metric = self._metric_expr(metric_id, plan.metric_specs)
-        if not metric:
-            return UnsupportedPlan(
-                "entity breakdown metric mapping is not verified", plan.metrics
-            )
-
-        alias = self._alias_for_metric(metric_id, "distribution")
+        metric_ids = plan.metrics or ["appointment_count"]
+        resolved, skipped = self._metric_expressions(metric_ids, plan.metric_specs)
+        if not resolved:
+            return UnsupportedPlan("entity breakdown metric mapping is not verified", plan.metrics)
+        aliased_metrics = [
+            (metric_id, expression, self._alias_for_metric(metric_id, "distribution"))
+            for metric_id, expression in resolved
+            if self._is_safe_identifier(metric_id)
+        ]
+        if not aliased_metrics:
+            return UnsupportedPlan("entity metric aliases are not safe", metric_ids)
         # The per-entity conditions live in each branch's own WHERE, so the
         # entity filter itself must not also be rendered as a shared clause.
         pruned = self._without_pair_filters(plan, field_name)
@@ -772,20 +835,31 @@ class DeterministicSQLBuilder:
         for value in values:
             condition = self._entity_condition(field_name, value)
             where = (
-                f"{base_where.rstrip()} AND {condition}\n"
-                if base_where
-                else f"WHERE {condition}\n"
+                f"{base_where.rstrip()} AND {condition}\n" if base_where else f"WHERE {condition}\n"
             )
             branches.append(
                 f"SELECT {self._unicode_literal(value)} AS entity_label, "
-                f"{metric} AS {alias}\n"
+                + ", ".join(
+                    f"{expression} AS {alias}" for _metric_id, expression, alias in aliased_metrics
+                )
+                + "\n"
                 f"FROM {VIEW}\n{where}"
             )
-        sql = "UNION ALL\n".join(branches).rstrip() + f"\nORDER BY {alias} DESC;"
+        primary_alias = next(
+            (
+                alias
+                for metric_id, _expression, alias in aliased_metrics
+                if metric_id == "appointment_count"
+            ),
+            aliased_metrics[0][2],
+        )
+        sql = "UNION ALL\n".join(branches).rstrip() + f"\nORDER BY {primary_alias} DESC;"
         return DeterministicSQL(
             sql=sql,
             result_schema="DistributionResult",
-            expected_aliases=["entity_label", alias],
+            expected_aliases=["entity_label", *(item[2] for item in aliased_metrics)],
+            skipped_metrics=skipped,
+            metric_aliases={item[0]: item[2] for item in aliased_metrics},
         )
 
     def _entity_condition(self, field_name: str, value: str) -> str:
@@ -797,9 +871,7 @@ class DeterministicSQLBuilder:
         return f"{column} = {self._unicode_literal(value)}"
 
     def _without_pair_filters(self, plan: QueryPlan, field_name: str) -> QueryPlan:
-        resolved = {
-            key: value for key, value in plan.resolved_filters.items() if key != field_name
-        }
+        resolved = {key: value for key, value in plan.resolved_filters.items() if key != field_name}
         updates: dict = {"resolved_filters": resolved}
         if field_name == "department":
             updates["department_filter"] = None
@@ -966,7 +1038,9 @@ class DeterministicSQLBuilder:
             metric_aliases={alias: alias},
         )
 
-    def _cross_branch_repeat_patient_count(self, plan: QueryPlan) -> DeterministicSQL | UnsupportedPlan:
+    def _cross_branch_repeat_patient_count(
+        self, plan: QueryPlan
+    ) -> DeterministicSQL | UnsupportedPlan:
         dimensions = self._dimensions(plan)
         if not all(self._is_safe_identifier(dimension) for dimension in dimensions):
             return UnsupportedPlan("cross-branch repeat count requires safe grouping dimensions")
@@ -1013,7 +1087,9 @@ class DeterministicSQLBuilder:
             metric_aliases={alias: alias},
         )
 
-    def _same_day_multi_service_patient_count(self, plan: QueryPlan) -> DeterministicSQL | UnsupportedPlan:
+    def _same_day_multi_service_patient_count(
+        self, plan: QueryPlan
+    ) -> DeterministicSQL | UnsupportedPlan:
         return self._same_day_multi_distinct_patient_count(
             plan,
             distinct_column="HizmetAdi",
@@ -1021,7 +1097,9 @@ class DeterministicSQLBuilder:
             value_label="services",
         )
 
-    def _same_day_multi_doctor_patient_count(self, plan: QueryPlan) -> DeterministicSQL | UnsupportedPlan:
+    def _same_day_multi_doctor_patient_count(
+        self, plan: QueryPlan
+    ) -> DeterministicSQL | UnsupportedPlan:
         return self._same_day_multi_distinct_patient_count(
             plan,
             distinct_column="DoktorId",
@@ -1039,7 +1117,9 @@ class DeterministicSQLBuilder:
     ) -> DeterministicSQL | UnsupportedPlan:
         dimensions = self._dimensions(plan)
         if not all(self._is_safe_identifier(dimension) for dimension in dimensions):
-            return UnsupportedPlan("same-day multi-distinct count requires safe grouping dimensions")
+            return UnsupportedPlan(
+                "same-day multi-distinct count requires safe grouping dimensions"
+            )
         if not self._is_safe_identifier(distinct_column):
             return UnsupportedPlan("same-day multi-distinct count requires a safe value column")
         base_conditions = self._where_conditions(plan)
@@ -1093,8 +1173,7 @@ class DeterministicSQLBuilder:
                 [f"p.{dimension} AS {dimension}" for dimension in dimensions]
             )
             qualified_dimension_group = ", ".join(
-                [f"p.{dimension}" for dimension in dimensions]
-                + ["p.HastaId", "p.service_day"]
+                [f"p.{dimension}" for dimension in dimensions] + ["p.HastaId", "p.service_day"]
             )
             select_dimensions = [f"{dimension} AS {dimension}" for dimension in dimensions]
             sql_select_dimensions = ", ".join(select_dimensions)
@@ -1146,9 +1225,7 @@ class DeterministicSQLBuilder:
             metric_aliases={alias: alias, "appointment_count": "appointment_count"},
         )
 
-    def _patient_appointment_span_days(
-        self, plan: QueryPlan
-    ) -> DeterministicSQL | UnsupportedPlan:
+    def _patient_appointment_span_days(self, plan: QueryPlan) -> DeterministicSQL | UnsupportedPlan:
         dimensions = [dimension for dimension in self._dimensions(plan) if dimension != "HastaId"]
         if not all(self._is_safe_identifier(dimension) for dimension in dimensions):
             return UnsupportedPlan("patient appointment span requires safe grouping dimensions")
@@ -1376,31 +1453,38 @@ class DeterministicSQLBuilder:
         DataShape.TIME_SERIES.
         """
         metric_ids = self._metric_ids(plan, "time_trend")
-        if len(metric_ids) > 1:
-            return UnsupportedPlan(
-                "multi-metric trend not supported: only a single metric can be "
-                "time-bucketed today",
-                metric_ids,
-            )
-        metric_id = metric_ids[0]
-        metric_expr = self._metric_expr(metric_id, plan.metric_specs)
-        if not metric_expr:
+        resolved, skipped = self._metric_expressions(metric_ids, plan.metric_specs)
+        if not resolved:
             return UnsupportedPlan("no verified metric mapping for trend", metric_ids)
 
         grain = plan.grouping_granularity or "month"
         date_column = (plan.date_filters[0].column if plan.date_filters else None) or DATE_COLUMN
         bucket_expr = self._time_bucket_expression(grain, date_column)
-        alias = self._alias_for_metric(metric_id, "time_trend")
+        aliased_metrics = [
+            (metric_id, expression, self._alias_for_metric(metric_id, "time_trend"))
+            for metric_id, expression in resolved
+            if self._is_safe_identifier(metric_id)
+        ]
+        if not aliased_metrics:
+            return UnsupportedPlan("trend metric aliases are not safe", metric_ids)
         where = self._where(plan)
         sql = (
-            f"SELECT {bucket_expr} AS period_start, {metric_expr} AS {alias}\n"
+            f"SELECT {bucket_expr} AS period_start, "
+            + ", ".join(
+                f"{expression} AS {alias}" for _metric_id, expression, alias in aliased_metrics
+            )
+            + "\n"
             f"FROM {VIEW}\n"
             f"{where}"
             f"GROUP BY {bucket_expr}\n"
             f"ORDER BY period_start ASC;"
         )
         return DeterministicSQL(
-            sql=sql, result_schema="TrendResult", expected_aliases=["period_start", alias]
+            sql=sql,
+            result_schema="TrendResult",
+            expected_aliases=["period_start", *(item[2] for item in aliased_metrics)],
+            skipped_metrics=skipped,
+            metric_aliases={item[0]: item[2] for item in aliased_metrics},
         )
 
     def _time_bucket_expression(self, grain: str, column: str) -> str:
@@ -1461,10 +1545,33 @@ class DeterministicSQLBuilder:
         than silently dropped from an otherwise-complete answer."""
         if spec.shape != "rate":
             return None
-        predicate = self._predicate_sql(spec.predicate)
-        if predicate is None:
+        numerator_predicates = spec.numerator_predicates or (
+            [spec.predicate] if spec.predicate is not None else []
+        )
+        numerator = self._predicate_group_sql(numerator_predicates)
+        if numerator is None:
             return None
-        return f"100.0 * SUM(CASE WHEN {predicate} THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0)"
+        if spec.denominator_predicates:
+            denominator_conditions = self._predicate_group_sql(spec.denominator_predicates)
+            if denominator_conditions is None:
+                return None
+            denominator = f"SUM(CASE WHEN {denominator_conditions} THEN 1 ELSE 0 END)"
+        else:
+            denominator = "COUNT(*)"
+        return f"100.0 * SUM(CASE WHEN {numerator} THEN 1 ELSE 0 END) / NULLIF({denominator}, 0)"
+
+    def _predicate_group_sql(self, predicates: list[MetricPredicate]) -> str | None:
+        """Render an AND-conjunction only when every member is safe.
+
+        A partial conjunction would silently broaden the measured cohort, so
+        one invalid member rejects the whole metric instead of being skipped.
+        """
+        if not predicates:
+            return None
+        rendered = [self._predicate_sql(predicate) for predicate in predicates]
+        if any(predicate is None for predicate in rendered):
+            return None
+        return " AND ".join(predicate for predicate in rendered if predicate is not None)
 
     def _predicate_sql(self, predicate: MetricPredicate | None) -> str | None:
         """Renders a grounded predicate. Every part is re-validated here — the
@@ -1502,9 +1609,7 @@ class DeterministicSQLBuilder:
         return metric_id
 
     def _dimensions(self, plan: QueryPlan) -> list[str]:
-        return [
-            dimension for dimension in plan.dimensions if self._is_safe_identifier(dimension)
-        ]
+        return [dimension for dimension in plan.dimensions if self._is_safe_identifier(dimension)]
 
     def _where(self, plan: QueryPlan) -> str:
         clauses = self._where_conditions(plan)
@@ -1665,8 +1770,7 @@ class DeterministicSQLBuilder:
         'Kardiyoloji' never matches 'Çocuk Kardiyolojisi'."""
         normalized_column = f"',' + REPLACE({DEPARTMENT_COLUMN}, ', ', ',') + ','"
         predicates = [
-            f"{normalized_column} LIKE {self._unicode_literal(f'%,{value},%')}"
-            for value in values
+            f"{normalized_column} LIKE {self._unicode_literal(f'%,{value},%')}" for value in values
         ]
         if len(predicates) == 1:
             return predicates[0]
@@ -1778,8 +1882,7 @@ class DeterministicSQLBuilder:
 
     def _has_share_of_total(self, plan: QueryPlan) -> bool:
         return any(
-            calculation.startswith("share_of_total:")
-            for calculation in plan.derived_calculations
+            calculation.startswith("share_of_total:") for calculation in plan.derived_calculations
         )
 
     def _period_pair(self, plan: QueryPlan, adaptive_retry: bool) -> tuple[str, str]:
@@ -1864,7 +1967,7 @@ class DeterministicSQLBuilder:
 
     def _period_predicate(self, period) -> str:
         column = period.column or DATE_COLUMN
-        return f"{column} >= '{period.start_inclusive}' " f"AND {column} < '{period.end_exclusive}'"
+        return f"{column} >= '{period.start_inclusive}' AND {column} < '{period.end_exclusive}'"
 
     def _can_condition(self, expression: str) -> bool:
         """True when `_conditional` can safely gate this metric on a period.
@@ -1891,7 +1994,7 @@ class DeterministicSQLBuilder:
             r"COUNT\s*\(\s*DISTINCT\s+(.+?)\s*\)", normalized, re.IGNORECASE
         )
         if distinct_count:
-            return f"COUNT(DISTINCT CASE WHEN {condition} " f"THEN {distinct_count.group(1)} END)"
+            return f"COUNT(DISTINCT CASE WHEN {condition} THEN {distinct_count.group(1)} END)"
         count = re.fullmatch(r"COUNT\s*\(\s*(.+?)\s*\)", normalized, re.IGNORECASE)
         if count:
             return f"COUNT(CASE WHEN {condition} THEN {count.group(1)} END)"
@@ -1901,7 +2004,7 @@ class DeterministicSQLBuilder:
         if simple_aggregate and not upper.startswith("SUM(CASE"):
             function, value = simple_aggregate.groups()
             else_value = " ELSE 0" if function.upper() == "SUM" else ""
-            return f"{function.upper()}(CASE WHEN {condition} THEN {value}" f"{else_value} END)"
+            return f"{function.upper()}(CASE WHEN {condition} THEN {value}{else_value} END)"
         if upper.startswith("SUM(CASE"):
             inner = normalized[len("SUM(") : -1]
             return f"SUM(CASE WHEN {condition} THEN ({inner}) ELSE 0 END)"

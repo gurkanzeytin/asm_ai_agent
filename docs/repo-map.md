@@ -1,6 +1,6 @@
 # ASM AI Agent Repository Map
 
-Son inceleme: 2026-08-01
+Son inceleme: 2026-08-02
 
 ## 1. Yönetici özeti
 
@@ -11,7 +11,7 @@ Bu depo, doğal Türkçe randevu analizi sorularını güvenli, salt-okunur T-SQ
 - AI yaklaşımı: deterministik planlama ve SQL üretimi birincil yol; Ollama/Gemini/NVIDIA sağlayıcıları yedek veya anlatı üretim katmanı.
 - Güvenlik yaklaşımı: SQL AST doğrulaması, salt-okunur sorgu zorunluluğu, izin verilen nesne listesi, sonuç boyutu sınırları ve PII filtreleri.
 
-Kod tabanı kapsamlıdır: `backend/app` altında 173 Python kaynak dosyası ve yaklaşık 33.6 bin satır; `frontend/src` altında 109 TypeScript/TSX/CSS dosyası ve yaklaşık 14.1 bin satır vardır. Backend test paketi güçlüdür. Buna karşılık gerçek kimlik doğrulama, üretim deployment tanımı, çok süreçli konuşma belleği ve tekrarlanabilir bağımlılık yönetimi henüz belirgin boşluklardır.
+Kod tabanı kapsamlıdır: `backend/app` altında 180 Python kaynak dosyası; `frontend/src` altında 109 TypeScript/TSX/CSS dosyası vardır. Semantik yüzey 24 kolon, 48 katalog metriği ve 22 doğrulanmış/işaretli ilişki tanımı taşır. Backend test paketi güçlüdür. Buna karşılık gerçek kimlik doğrulama, üretim deployment tanımı, çok süreçli konuşma belleği, canlı değer doğrulaması ve tekrarlanabilir bağımlılık yönetimi hâlâ belirgin boşluklardır.
 
 ## 2. Üst seviye dizin haritası
 
@@ -31,7 +31,7 @@ Kod tabanı kapsamlıdır: `backend/app` altında 173 Python kaynak dosyası ve 
 | `outputs` | Sunum ve render edilmiş görsel çıktılar; uygulama runtime'ının parçası değil |
 | `.vscode`, `.claude` | Yerel geliştirme ve araç çalıştırma ayarları |
 
-Depo kökünde `.git` bulunmadığı için branch, commit geçmişi, izlenen/izlenmeyen dosyalar ve mevcut diff doğrulanamadı.
+Depo Git çalışma ağacıdır. İnceleme anında branch `main`, HEAD `b0bc419` (`Improve schema-aware analytical question coverage`) ve remote `origin/main` ile aynı tabandadır. Çalışma ağacında bu geliştirme turuna ait henüz commitlenmemiş değişiklikler vardır; ilgisiz kullanıcı değişiklikleri korunmuştur.
 
 ## 3. Çalıştırma giriş noktaları
 
@@ -85,6 +85,8 @@ Depo kökünde `.git` bulunmadığı için branch, commit geçmişi, izlenen/izl
 | `schemas` | FastAPI request/response sözleşmeleri |
 | `shared` | Ortak exception, metin normalizasyonu ve sonuç limitleri |
 | `resources` | JSON kataloglar, golden/evaluation datasetleri ve yardım metinleri |
+
+Soru kapsaması yalnız eşanlamlı listelerine dayanmaz. Planlayıcı metrik + boyut + dönem + kohort + filtre + oran bileşenlerini `QueryPlan` üzerinde birleştirir; `InlineMetric` ve `MetricPredicate` katalogda önceden bulunmayan güvenli oranları doğrulanmış kolon/predicate parçalarından kurar. Deterministik SQL üreticisi sayım, oran, çapraz kırılım, trend, dönem karşılaştırması, kohort, veri kalitesi ve çok metrikli performans planlarını SQL Server uyumlu salt-okunur sorgulara çevirir.
 
 Veritabanına API rotalarından doğrudan erişim görülmedi. Rotalar `ReportingService` ve `ContextManager` bağımlılıklarını alıyor; analitik SQL çalıştırma `ScopedAnalyticalRepository` üzerinden yapılıyor. LLM çağrıları da endpoint içinde değil, provider/service katmanında tutuluyor.
 
@@ -176,22 +178,25 @@ Kalıcı job queue, Celery worker, cron, scheduler veya ayrı background service
 
 ### Backend
 
-- 88 `backend/tests/test_*.py` modülü bulunur.
+- 96 `backend/tests/test_*.py` modülü bulunur.
 - Kapsam: API sözleşmeleri, SQL validator, planlama, semantik eşleme, konuşma hafızası, PII/sonuç güvenliği, provider'lar, insight/analytics, performans ve golden eval senaryoları.
 - Runtime SQL Server olmasına rağmen testler DB bağımlılığını SQLite in-memory test double ve mock'larla izole eder.
-- Belgelenen komutla (`cd backend && ../.venv/bin/python -m pytest tests -q`) sonuç: **2225 geçti, 1 atlandı**.
-- Repo kökünden backend ve root testlerini birlikte çalıştırınca iki test `Path("app/prompts/...")` kullandığı için CWD'ye bağlı olarak hata verir. Bu testlerin ürün davranışından bağımsız taşınabilirlik sorunudur.
+- Belgelenen komutla (`cd backend && ../.venv/bin/pytest -q`) sonuç: **2413 geçti, 1 atlandı**.
+- Genel SQL-generation değerlendirmesi: **233/233**; routing, plan, SQL generation ve SQL semantics katmanlarının her biri %100.
+- Katalogdan her çalıştırmada üretilen soru varyasyonu stresi: **887/887**; bunların 812'si doğrudan deterministik SQL yoluna girdi.
+- Repo kökü smoke-runner birim paketi `PYTHONPATH` açık verildiğinde **40/40** geçer. Kökten çıplak `pytest` komutu `scripts` paket çözümleme çakışması nedeniyle hâlâ taşınabilir değildir.
 
 ### Frontend
 
 - 16 Vitest dosyası bulunur.
 - Kapsam: API/stream parser, chat controller, tablo/grafik sunumu, scroll, formatlama, logo ve UI regresyonları.
-- Mevcut workspace'te `frontend/node_modules` yoktur; `npm test` bu nedenle `vitest: command not found` ile başlamadı.
+- Mevcut workspace'te `frontend/node_modules` dizini vardır ancak kurulum eksiktir; `npm test` için `vitest`, `npm run build` için `vite` bulunamadı. Frontend bağımlılık kurulumu ve UI doğrulaması pazartesi canlı turuna bırakılmıştır.
 
 ### Ek doğrulama
 
 - Root smoke runner birim paketi: **40 geçti**.
 - `pre-commit`: trailing whitespace, EOF, Black, isort ve Ruff.
+- Bu turda değişen Python dosyaları Ruff kontrolünden geçer. Tüm eski kod tabanında **655 mevcut Ruff bulgusu** vardır; henüz repo-geneli kalite kapısı değildir.
 - Backend için coverage eşiği, mypy/pyright veya CI workflow'u tespit edilmedi.
 - Frontend için ESLint/Prettier komutları vardır; otomatik CI kapısı tespit edilmedi.
 
@@ -232,32 +237,33 @@ Kalıcı job queue, Celery worker, cron, scheduler veya ayrı background service
 
 ## 13. Bilinen belirsizlikler
 
-- Git metadata olmadığı için kodun hangi branch/commit'ten geldiği ve dosyaların repository'de izlenip izlenmediği bilinmiyor.
 - Gerçek SQL Server şeması yalnızca config ve resource kataloglarından çıkarılabiliyor; canlı DB introspection bu incelemede yapılmadı.
+- `ProtokolIslemState` kodlarının iş anlamı ve bazı kategorik kolonların gerçek distinct değerleri doğrulanmadı; bu eşlemeler pazartesi canlı bağlantı olmadan tahmin edilmemelidir.
 - Gerçek production hosting topolojisi ve Lovable/Cloudflare yayın akışı depoda tanımlı değil.
 - API'nin ağ seviyesinde VPN, reverse proxy veya başka bir kimlik doğrulama katmanıyla korunup korunmadığı bilinmiyor.
 - Uzak LLM'e production'da hangi veri sınıflarının fiilen gönderildiği smoke testi yapılmadan yalnızca policy kodundan doğrulanabilir.
-- `frontend/node_modules` olmadığı için frontend testlerinin güncel makinedeki gerçek geçiş durumu doğrulanamadı.
-- `outputs`, `artifacts`, benchmark sonuçları ve cache dosyalarının Git'te izlenme durumu Git metadata olmadan bilinmiyor.
+- Frontend bağımlılık dizini eksik olduğu için frontend test/build geçiş durumu doğrulanamadı.
+- Planın yalnız bir kısmı deterministik olarak okunabildiğinde `partial_reading_reasons` kayda geçiyor fakat şu anda ayrı bir zenginleştirme/LLM tamamlama rotasına bağlanmıyor.
 
 ## 14. En yüksek kaldıraçlı 10 iyileştirme fırsatı
 
-1. **Gerçek kimlik doğrulama ve yetkilendirme ekleyin.** `/login` şu anda yalnızca dolu email/şifre sonrası `/` rotasına gider; backend rapor ve context endpoint'leri korumasızdır. Kurumsal SSO/OIDC, kullanıcı kimliği, rol/tenant sınırı ve audit kaydı ilk üretim güvenlik kapısı olmalı.
-2. **Üretim deployment ve CI/CD sözleşmesini kodlaştırın.** Backend/frontend build, test, lint, secret/env doğrulama, migration kararı, health/readiness, deploy, smoke test ve rollback adımlarını tek bir pipeline ve runbook'a bağlayın.
-3. **Konuşma belleğini paylaşımlı bir store'a taşıyın.** Redis benzeri TTL destekli bir uygulama, restart ve çok-worker tutarlılığını sağlar. Repository-style `SessionStore` arayüzü korunarak küçük bir adapter değişikliği yapılabilir.
-4. **Composition root'u lazy ve lifecycle-aware yapın.** `container = AppContainer()` import sırasında DB engine, LLM provider ve graph kuruyor; bu test/CLI importlarını ağırlaştırır ve provider client'larının kapanışı lifespan içinde görünmüyor. Startup'ta kurup shutdown'da engine/provider kapatmak daha güvenli olur.
-5. **Büyük hotspot modüllerini güvenli dilimlere ayırın.** `planning/planner.py` (2246), `deterministic_sql_builder.py` (1916), `query_analyzer.py` (1216) ve `SqlResultsTable.tsx` (1523 satır) değişiklik riskini yükseltiyor. Önce characterization testleriyle public davranışı sabitleyip strategy/helper bileşenlerine bölün.
-6. **Testleri CWD ve işletim sisteminden bağımsızlaştırın.** Prompt testleri dosya yollarını `__file__`/repo root üzerinden çözmeli; VS Code görevleri platforma göre ayrılmalı. Kökten tek komutla backend + frontend + smoke paketini çalıştıran task runner ekleyin.
-7. **Bağımlılıkları tekrarlanabilir hale getirin.** Backend requirement'ları geniş alt sınırlar kullanıyor ve lock dosyası yok; frontend'de hem `bun.lock` hem `package-lock.json` var. Tek package manager seçin, Python lock/constraints üretin ve dependency update bot/CI kontrolü ekleyin.
-8. **Config ve doküman drift'ini kapatın.** `.env.example` tüm settings alanlarını içermeli; README port/CORS/Python/platform komutları gerçek config'le eşleşmeli. Settings modelinden env referansı üretmek drift'i kalıcı olarak azaltır.
-9. **Prompt yerleşim politikasını netleştirin.** Kök `AGENTS.md` promptların yalnız `/prompts` altında olmasını isterken runtime `backend/app/prompts` kullanıyor. Politika mı kod mu kaynak gerçek olacak kararlaştırılmalı; loader ve testler tek kök üzerinde birleştirilmeli.
-10. **Readiness ve gözlemlenebilirliği production seviyesine çıkarın.** Mevcut health endpoint'leri statik cevap veriyor. DB, zorunlu local LLM, opsiyonel remote provider ve schema cache için ayrı liveness/readiness; request/workflow correlation ID; latency/error metricleri ve gerçekten JSON üreten yapılandırılmış log ekleyin.
+1. **Pazartesi canlı değer doğrulama turunu tamamlayın.** 24 kolonun tip/null oranı/distinct örnekleri, özellikle `ProtokolIslemState`, kaynak, kategori, hizmet ve durum değerleri alınmalı; yalnız doğrulanan eşlemeler kataloglara eklenmeli.
+2. **Kısmi okuma için tipli zenginleştirme rotası kurun.** `partial_reading_reasons` yalnız loglanmamalı; çözülmeyen ama şemada mümkün parçalar güvenli schema-reasoning/LLM plan tamamlamasına gitmeli ve ardından aynı plan uyum + SQL validator kapılarından geçmeli.
+3. **Değerlendirmeyi CI kapısı yapın.** 233 genel vaka, 887 varyasyon, mentor sürpriz ve compositional algebra paketleri her push'ta çalışmalı; controlled limitation ile gerçek cevap hatası ayrı raporlanmalı.
+4. **Canlı SQL + UI mentor turu ekleyin.** En az scalar, oran, iki boyut, üç bileşenli dönem/kohort ve takip sorusu senaryoları gerçek DB sonucu ve UI sunumuyla duman testine bağlanmalı.
+5. **Gerçek kimlik doğrulama ve yetkilendirme ekleyin.** `/login` görsel durumdadır; backend rapor/context endpoint'leri kullanıcı, rol ve audit sınırı olmadan üretime açılmamalı.
+6. **Üretim deployment ve readiness sözleşmesini kodlaştırın.** CI/CD, DB/LLM/schema readiness, secret doğrulama, deploy, smoke ve rollback adımları repoda bulunmalı.
+7. **Konuşma belleğini paylaşımlı store'a taşıyın.** Mevcut process-içi `SessionStore`, restart ve çok-worker senaryosunda konuşma bağlamını kaybeder.
+8. **Büyük planlayıcı/SQL modüllerini characterization testleriyle bölün.** Büyüyen `planner.py` ve `deterministic_sql_builder.py` genel bileşim kabiliyetinin en yüksek regresyon alanlarıdır.
+9. **Bağımlılık ve tek-komut geliştirici akışını düzeltin.** Eksik frontend kurulumu, Python lock eksikliği ve kök pytest import çakışması iki günlük geliştirmede gereksiz belirsizlik yaratıyor.
+10. **Gözlemlenebilirlik ve kalite borcunu kapatın.** Yanıt sonucu kategorisi, deterministic/LLM seçimi, partial reading, retry ve SAFE_ERROR nedenleri metrikleşmeli; mevcut 655 Ruff bulgusu kademeli baseline ile sıfırlanmalı.
 
 ## 15. Doğrulama adımları
 
 ```bash
 cd backend
-../.venv/bin/python -m pytest tests -q
+../.venv/bin/pytest -q
+../.venv/bin/python -m tools.evaluation.question_variations --show failing --limit 20
 ```
 
 ```bash
@@ -270,7 +276,7 @@ npm run build
 
 ```bash
 cd ..
-.venv/bin/python -m pytest tests/evaluation/test_smoke_test_runner.py -q
+env PYTHONPATH="$PWD" .venv/bin/pytest -q tests/evaluation
 ```
 
 Canlı bağımlılıklar hazırsa son aşamada backend, frontend ve Ollama başlatılıp `scripts/smoke_test_runner.py` ile HTTP sözleşmesi; `backend/scripts/verify_database.py` ile SQL Server bağlantısı doğrulanmalıdır.

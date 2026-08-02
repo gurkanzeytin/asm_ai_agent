@@ -67,7 +67,15 @@ def score_routing(
         )
     if case.expected.clarification_required and not clarification_required:
         failures.append(_failure(case, EvaluationStage.ROUTING, FailureCode.CLARIFICATION_MISSED, True, False))
-    if not case.expected.clarification_required and clarification_required:
+    if (
+        not case.expected.clarification_required
+        and clarification_required
+        and case.expected.answerable
+    ):
+        # A controlled limitation for a schema-unanswerable question is a
+        # useful terminal answer (reason + answerable alternative), not an
+        # unnecessary clarification. Only penalise this route when the case
+        # says the requested data really is available.
         failures.append(
             _failure(case, EvaluationStage.ROUTING, FailureCode.CLARIFICATION_UNNECESSARY, False, True)
         )

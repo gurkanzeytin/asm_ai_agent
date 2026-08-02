@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "view": "dbo.vw_RandevuRaporu",
+  "cases": [
+    {
+      "id": "COMPOSE-ALG-001",
+      "question": "Yabancı hastalar içinde kadın hasta oranı nedir?",
+      "category": "conditional_denominator_two_part",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "compositional_query_algebra_v1",
+      "expected": {"analysis_type": "ratio", "sql_source": "deterministic", "result_contract": "RatioResult"},
+      "sql_requirements": {"must_use_columns": ["Uyruk", "CinsiyetId"], "must_include_features": ["null_safe_division"], "must_include_sql": ["Uyruk <> N'Türkiye' AND CinsiyetId = N'K'", "NULLIF(SUM(CASE WHEN Uyruk <> N'Türkiye'"]}
+    },
+    {
+      "id": "COMPOSE-ALG-002",
+      "question": "Kadın hastalar arasında yabancıların oranı kaç?",
+      "category": "conditional_denominator_reverse",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "compositional_query_algebra_v1",
+      "expected": {"analysis_type": "ratio", "sql_source": "deterministic", "result_contract": "RatioResult"},
+      "sql_requirements": {"must_use_columns": ["Uyruk", "CinsiyetId"], "must_include_features": ["null_safe_division"], "must_include_sql": ["CinsiyetId = N'K' AND Uyruk <> N'Türkiye'", "NULLIF(SUM(CASE WHEN CinsiyetId = N'K'"]}
+    },
+    {
+      "id": "COMPOSE-ALG-003",
+      "question": "Yabancı hastalar içinde kadınların gelmeme oranını hesapla.",
+      "category": "conditional_denominator_three_part",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "compositional_query_algebra_v1",
+      "expected": {"analysis_type": "ratio", "sql_source": "deterministic", "result_contract": "RatioResult"},
+      "sql_requirements": {"must_use_columns": ["Uyruk", "CinsiyetId", "RandevuDurumu"], "must_include_features": ["null_safe_division"], "must_include_sql": ["Uyruk <> N'Türkiye'", "RandevuDurumu = N'Gelmedi'", "CinsiyetId = N'K'"]}
+    },
+    {
+      "id": "COMPOSE-ALG-004",
+      "question": "Bölüm ve şube bazında randevu sayısı, gelmeme oranı ve ortalama randevu süresini göster.",
+      "category": "three_metrics_two_dimensions",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "compositional_query_algebra_v1",
+      "expected": {"metrics": ["appointment_count", "no_show_rate", "appointment_duration_average"], "dimensions": ["GenelRandevuBolumAdi", "SubeAdi"], "sql_source": "deterministic", "result_contract": "RatioResult"},
+      "sql_requirements": {"must_use_columns": ["GenelRandevuBolumAdi", "SubeAdi", "RandevuDurumu", "RandevuSuresi"], "must_include_features": ["group_by", "null_safe_division"]}
+    },
+    {
+      "id": "COMPOSE-ALG-005",
+      "question": "Aylık randevu sayısı, gelmeme oranı ve ortalama randevu süresi eğilimini göster.",
+      "category": "three_metric_trend",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "compositional_query_algebra_v1",
+      "expected": {"analysis_type": "time_trend", "metrics": ["appointment_count", "no_show_rate", "appointment_duration_average"], "sql_source": "deterministic", "result_contract": "TrendResult"},
+      "sql_requirements": {"must_use_columns": ["BaslangicTarihi", "RandevuDurumu", "RandevuSuresi"], "must_include_features": ["group_by", "null_safe_division"]}
+    },
+    {
+      "id": "COMPOSE-ALG-006",
+      "question": "2024 ile 2025 için randevu sayısı, gelmeme oranı ve ortalama randevu süresini karşılaştır.",
+      "category": "three_metric_two_period_comparison",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "compositional_query_algebra_v1",
+      "expected": {"analysis_type": "period_comparison", "metrics": ["appointment_count", "no_show_rate", "appointment_duration_average"], "sql_source": "deterministic", "result_contract": "PeriodComparisonResult"},
+      "sql_requirements": {"must_use_columns": ["BaslangicTarihi", "RandevuDurumu", "RandevuSuresi"], "must_include_features": ["current_period", "baseline_period", "null_safe_division"], "must_include_sql": ["current_no_show_rate", "baseline_no_show_rate"]}
+    },
+    {
+      "id": "COMPOSE-ALG-007",
+      "question": "2023 2024 2025 yılları için randevu sayısı, gelmeme oranı ve ortalama randevu süresini yıl yıl ver.",
+      "category": "three_metric_three_period_breakdown",
+      "difficulty": "hard",
+      "blind": false,
+      "suite": "compositional_query_algebra_v1",
+      "expected": {"analysis_type": "time_trend", "metrics": ["appointment_count", "no_show_rate", "appointment_duration_average"], "sql_source": "deterministic", "result_contract": "TrendResult"},
+      "sql_requirements": {"must_use_columns": ["BaslangicTarihi", "RandevuDurumu", "RandevuSuresi"], "must_include_features": ["group_by"], "must_include_sql": ["AS period_start", "AS no_show_rate", "AS appointment_duration_average"]}
+    }
+  ]
+}

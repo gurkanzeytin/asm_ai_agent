@@ -141,7 +141,9 @@
         "durum dagilimi",
         "duruma gore",
         "durum bazinda",
-        "durumlara gore"
+        "durumlara gore",
+        "durum kirilimi",
+        "durum kiriliminda"
       ],
       "supported_operations": [
         "filter",
@@ -742,11 +744,11 @@
       "semantic_type": "categorical",
       "synonyms": [
         "sube",
-        "hastane",
         "lokasyon",
         "sube bazinda",
         "subelere gore",
         "lokasyonlara gore",
+        "hastane bazinda",
         "hastanelere gore"
       ],
       "supported_operations": [
@@ -862,9 +864,12 @@
         "ciro",
         "fiyat",
         "tahsilat",
-        "tahsil"
+        "tahsil",
+        "maas",
+        "doktor maasi",
+        "hekim maasi"
       ],
-      "reason": "Ödeme/tutar bilgisi view içinde bulunmuyor.",
+      "reason": "Ödeme, ücret, maaş veya tutar bilgisi view içinde bulunmuyor.",
       "alternative": "Randevu hacmi ve gerçekleşme oranı analiz edilebilir."
     },
     {

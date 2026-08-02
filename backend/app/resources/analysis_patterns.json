@@ -8,7 +8,9 @@
         "sayi",
         "adet",
         "toplam randevu",
-        "kac tane"
+        "kac tane",
+        "randevu var mi",
+        "randevu yogunlugu"
       ],
       "requires": [
         "metric"
@@ -644,7 +646,13 @@
         "son dakika alan",
         "son dakika randevu",
         "son anda alan",
-        "gunu gunune alan"
+        "gunu gunune alan",
+        "24 saat kala",
+        "24 saatten az kala",
+        "acele randevu",
+        "acele alan",
+        "gec alan",
+        "gec alinan"
       ],
       "requires": [
         "cohort_definition",

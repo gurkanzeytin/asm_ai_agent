@@ -50,6 +50,32 @@ _COMPARABLE_COLUMNS = frozenset({"RandevuSuresi"})
 # "100'ün üzerinde"), so the bare-digit form has to be recovered first.
 _NUMBER = re.compile(r"^(\d{1,6})(?:['’`]\w*)?$")
 
+# Common Turkish number words used for analytical thresholds. Keeping the map
+# bounded and explicit avoids turning arbitrary prose into invented numbers;
+# digits remain the general path for every other value.
+_NUMBER_WORDS: dict[str, int] = {
+    "sifir": 0,
+    "bir": 1,
+    "iki": 2,
+    "uc": 3,
+    "dort": 4,
+    "bes": 5,
+    "alti": 6,
+    "yedi": 7,
+    "sekiz": 8,
+    "dokuz": 9,
+    "on": 10,
+    "yirmi": 20,
+    "otuz": 30,
+    "kirk": 40,
+    "elli": 50,
+    "altmis": 60,
+    "yetmis": 70,
+    "seksen": 80,
+    "doksan": 90,
+    "yuz": 100,
+}
+
 
 def _comparator(token: str) -> str | None:
     if any(token.startswith(root) for root in _GREATER_ROOTS):
@@ -109,12 +135,30 @@ def extract_measure_threshold(question: str) -> MetricPredicate | None:
     tokens = fold(question).split()
     for index, token in enumerate(tokens):
         number = _NUMBER.match(token)
-        if not number:
+        number_value = (
+            float(number.group(1)) if number else _NUMBER_WORDS.get(token)
+        )
+        if number_value is None:
             continue
+        number_token_count = 1
+        # Compound forms such as "kırk beş" are a tens word followed by a
+        # unit word. Only this unambiguous two-token shape is combined.
+        if (
+            number is None
+            and 10 <= number_value <= 90
+            and number_value % 10 == 0
+            and index + 1 < len(tokens)
+            and 1 <= _NUMBER_WORDS.get(tokens[index + 1], 0) <= 9
+        ):
+            number_value += _NUMBER_WORDS[tokens[index + 1]]
+            number_token_count = 2
 
         # Trailing form: "30 dakikadan UZUN", "15'ten AZ".
         operator = None
-        for offset in range(index + 1, min(index + 4, len(tokens))):
+        for offset in range(
+            index + number_token_count,
+            min(index + number_token_count + 3, len(tokens)),
+        ):
             operator = _comparator(tokens[offset])
             if operator:
                 break
@@ -128,10 +172,10 @@ def extract_measure_threshold(question: str) -> MetricPredicate | None:
         if operator is None:
             continue
 
-        column = _column_for(tokens, index)
+        column = _column_for(tokens, index + number_token_count - 1)
         if column is None:
             continue
         return MetricPredicate(
-            column=column, operator=operator, values=[float(number.group(1))]
+            column=column, operator=operator, values=[float(number_value)]
         )
     return None
