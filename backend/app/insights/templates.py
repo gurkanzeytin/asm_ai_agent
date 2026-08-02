@@ -8,7 +8,7 @@ doğal Türkçedir; sayı biçimleri merkezi sunum katmanından gelir.
 
 from app.analytics.models import AnalyticsResult
 from app.insights.models import InsightNarrative, InsightRule
-from app.reporting.presentation import format_number, get_column_label
+from app.reporting.presentation import format_number, format_value, get_column_label
 
 INSUFFICIENT_EVIDENCE_SUMMARY = "Analiz için yeterli veri bulunamadı."
 
@@ -95,6 +95,19 @@ def build_deterministic_narrative(
     considerations: list[str] = []
 
     growth_rate = metrics.get("growth_rate")
+
+    # Aggregate/scalar SQL results already carry catalog-backed, display-safe
+    # KPI labels. Surface them in the deterministic narrative too; otherwise a
+    # correct single-value answer degrades to the context-free phrase
+    # "Sonuç kümesindeki toplam" while the actual business metric is visible
+    # only in a separate UI card.
+    for kpi in analytics.displayable_kpis:
+        if kpi.value is None:
+            continue
+        formatted = format_value(kpi.key, kpi.value)
+        if kpi.unit and kpi.format != "percentage":
+            formatted = f"{formatted} {kpi.unit}"
+        observations.append(f"{kpi.label}: {formatted}.")
 
     # Trend family: one coherent sentence built from the reconciled
     # endpoint-vs-slope verdict — never two independent claims that could

@@ -165,6 +165,23 @@ _NEVER_CANDIDATE_ROOTS: tuple[str, ...] = tuple(
     )
 )
 
+# A SHORT root cannot be prefix-matched: appointment_type's "tur" swallowed
+# every value beginning with it, so "Türkiye uyruklu hastaların randevu sayısı"
+# extracted no nationality at all and silently answered over EVERY nationality,
+# and "Turgut Özal Şubesi" was truncated to "Özal". Long roots keep prefix
+# matching because that is what absorbs inflection ("bölümündeki",
+# "durumlarının"); at three or four letters the false positives outnumber it.
+_MIN_PREFIX_ROOT_LENGTH = 5
+
+
+def _is_dimension_noun(folded_word: str) -> bool:
+    """Whether a token is a dimension noun rather than a value."""
+    return any(
+        folded_word == root
+        or (len(root) >= _MIN_PREFIX_ROOT_LENGTH and folded_word.startswith(root))
+        for root in _NEVER_CANDIDATE_ROOTS
+    )
+
 # Distribution/grouping wording (folded) — when this appears near a field's
 # own dimension noun, the phrase names a GROUPING, not a filter value
 # ("randevu durumlarının dağılımı", "şubelere göre"). See classify_value_intent().
@@ -547,9 +564,7 @@ def extract_candidate_phrases(question: str) -> dict[str, list[str]]:
                 and phrase_tokens
                 and fold(phrase_tokens[0]) in exception_words
             )
-            if not is_exception and any(
-                folded_word.startswith(root) for root in _NEVER_CANDIDATE_ROOTS
-            ):
+            if not is_exception and _is_dimension_noun(folded_word):
                 break
             phrase_tokens.insert(0, original)
             j -= 1
@@ -600,12 +615,144 @@ def extract_candidate_phrases(question: str) -> dict[str, list[str]]:
         if re.search(rf"\b{re.escape(alias)}\b", folded_question)
     ]
     matched_gender_codes = {_GENDER_ALIASES[alias] for alias in matched_gender_aliases}
-    if (
-        len(matched_gender_codes) == 1
-        and any(marker in folded_question for marker in _FILTER_INTENT_MARKERS)
+    if len(matched_gender_codes) == 1 and (
+        any(marker in folded_question for marker in _FILTER_INTENT_MARKERS)
+        or _gender_restricts_patient_cohort(folded_question)
     ):
         shortest_alias = min(matched_gender_aliases, key=len)
         results["gender"] = [shortest_alias]
+
+    return results
+
+
+# "kadın hasta ORANI" / "erkek hastaların PAYI" ask what SHARE of the population
+# a cohort forms — the cohort is the thing being measured, so restricting the
+# whole query to it answers a different question (the cohort's own volume, whose
+# share is trivially 100%). Adjacency is the discriminator: a share word right
+# after the cohort phrase measures the cohort, while an intervening metric
+# ("kadın hastaların GELMEME oranı") measures something else about it, which a
+# filter renders correctly.
+_COHORT_SHARE_WORDS = ("orani", "oran", "payi", "pay", "yuzdesi", "yuzde")
+
+
+def _gender_restricts_patient_cohort(folded_question: str) -> bool:
+    """True when a gender word modifies "hasta" as a genuine cohort filter.
+
+    Plain "Erkek hastaların en çok gittiği ilk 5 bölüm" carries no explicit
+    filter marker ("sadece"/"için"), so it used to yield no gender candidate at
+    all and the question silently answered over EVERY patient. Attachment to
+    the patient noun is filter intent on its own; the share reading above is
+    the one exception.
+    """
+    tokens = folded_question.split()
+    for index, token in enumerate(tokens):
+        if token not in _GENDER_ALIASES:
+            continue
+        following = tokens[index + 1 :][:2]
+        if not following or not following[0].startswith("hasta"):
+            continue
+        if len(following) > 1 and following[1].startswith(_COHORT_SHARE_WORDS):
+            return False
+        return True
+    return False
+
+
+# The field's own dimension noun may sit between the value and the share word
+# ("Bulgaristan UYRUKLU hastaların oranı", "Kardiyoloji BÖLÜMÜNÜN payı"). Like
+# "hasta"/"randevu" it names the axis, not a value, so the walk-back steps over
+# it. Derived from `_FIELD_CUE_ROOTS` so a new field cannot be forgotten here.
+# Key used when the cohort's field is not known from the wording — the caller
+# must find it by grounding the mention against each field's real values.
+UNRESOLVED_COHORT_FIELD = "*"
+
+_COHORT_CARRIER_ROOTS: tuple[str, ...] = (
+    "hasta",
+    "randevu",
+    *(root for roots in _FIELD_CUE_ROOTS.values() for root in roots),
+)
+
+
+def _is_cohort_carrier(folded_word: str) -> bool:
+    """Whether a token names the axis rather than the cohort being measured.
+
+    Uses the same short-root rule as `_is_dimension_noun`: prefix-matching
+    "tur" here stepped straight over "Türkiye", so the home country's own share
+    was the one nationality that could not be asked for.
+    """
+    return any(
+        folded_word == root
+        or (len(root) >= _MIN_PREFIX_ROOT_LENGTH and folded_word.startswith(root))
+        for root in _COHORT_CARRIER_ROOTS
+    )
+
+
+def extract_cohort_share_mentions(question: str) -> dict[str, str]:
+    """Finds a cohort whose SHARE is being asked for: {field: raw value text}.
+
+    The field key is `UNRESOLVED_COHORT_FIELD` for anything but gender: which column a
+    proper noun belongs to is decided by GROUNDING it, not by guessing. An
+    earlier version tried the first field in a fixed list, so every named value
+    was offered to `department` and "Bulgaristanlı hastaların oranı" silently
+    composed nothing.
+
+    The mirror image of `extract_candidate_phrases`. There, a named value
+    narrows the query ("kadın hastaların gelmeme oranı" -> WHERE CinsiyetId =
+    'K'). Here the value IS the measurement ("kadın hasta oranı" -> what
+    percentage of appointments belong to women), so it must become a metric
+    predicate instead — filtering to it would make the answer 100% by
+    construction.
+
+    Purely a text step, exactly like its sibling: the caller must ground every
+    returned mention against real database values before using it, so a
+    mis-read never invents a predicate. That grounding is also what absorbs a
+    sentence-initial capital ("Gelmeyenlerin payı" walks back into
+    "Gelmeyenlerin", which matches no real department and is dropped).
+    """
+    folded = fold(question)
+    tokens = folded.split()
+    original_tokens = question.split()
+    results: dict[str, str] = {}
+
+    # Two cohorts named together ("kadın VE erkek randevu oranı") describe a
+    # breakdown across the dimension, not one cohort's share of the whole.
+    multiple_cohorts = (
+        len({_GENDER_ALIASES[alias] for alias in _GENDER_ALIASES if alias in tokens}) > 1
+    )
+
+    for index, token in enumerate(tokens):
+        if not token.startswith(_COHORT_SHARE_WORDS):
+            continue
+        # Walk back over the cohort phrase. "hasta"/"randevu" are the domain
+        # nouns the cohort is expressed in ("kadın HASTA oranı") and carry no
+        # value themselves, so they are stepped over rather than stopped on.
+        cursor = index - 1
+        while cursor >= 0 and _is_cohort_carrier(tokens[cursor]):
+            cursor -= 1
+        if cursor < 0:
+            continue
+
+        if tokens[cursor] in _GENDER_ALIASES:
+            if not multiple_cohorts:
+                results.setdefault("gender", tokens[cursor])
+            continue
+
+        # Any other field: require a proper-noun run, the same evidence
+        # `extract_candidate_phrases` requires for a database text value.
+        phrase: list[str] = []
+        walk = cursor
+        while (
+            walk >= 0
+            and len(phrase) < _MAX_PHRASE_TOKENS
+            and walk < len(original_tokens)
+            and _is_entity_candidate(
+                original_tokens[walk].strip(_STRIP_CHARS), tokens[walk].strip(_STRIP_CHARS)
+            )
+        ):
+            phrase.insert(0, original_tokens[walk].strip(_STRIP_CHARS))
+            walk -= 1
+        if not phrase:
+            continue
+        results.setdefault(UNRESOLVED_COHORT_FIELD, " ".join(phrase))
 
     return results
 
@@ -693,7 +840,7 @@ def _is_entity_candidate(word: str, folded_word: str) -> bool:
         word
         and word[0].isupper()
         and folded_word not in _QUESTION_WORDS
-        and not any(folded_word.startswith(root) for root in _NEVER_CANDIDATE_ROOTS)
+        and not _is_dimension_noun(folded_word)
     )
 
 

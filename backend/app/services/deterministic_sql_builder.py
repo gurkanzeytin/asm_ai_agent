@@ -13,10 +13,11 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 from app.database_intelligence.value_catalog import FIELD_COLUMNS
-from app.planning.models import QueryPlan
+from app.planning.models import InlineMetric, MetricPredicate, QueryPlan
 from app.semantics.catalog import (
     AGE_GROUP_DERIVATION,
     DAY_TYPE_DERIVATION,
+    load_column_catalog,
     load_metric_catalog,
 )
 from app.semantics.view_mapping import fold
@@ -75,6 +76,10 @@ _LEADING_AGGREGATE = re.compile(r"\s*(?:COUNT|SUM|AVG|MIN|MAX)\s*\(", re.IGNOREC
 # Table alias for the CROSS APPLY STRING_SPLIT that explodes the composite
 # department column into one atomic value per row (see `_standard`).
 _DEPARTMENT_SPLIT_ALIAS = "dept_atomic"
+# Operators a plan-composed `MetricPredicate` may render. An allow-list, not a
+# sanitiser: anything outside it makes the metric unrenderable rather than
+# being escaped into SQL.
+_PREDICATE_OPERATORS = frozenset({"=", "<>", ">", ">=", "<", "<=", "IS NULL", "IS NOT NULL"})
 # "Yaş gruplarına göre ..." groups by decade, never the raw birth date - kept
 # identical to catalog.AGE_GROUP_DERIVATION's documented formula (see
 # `_standard`) so the two never drift apart.
@@ -187,7 +192,7 @@ class DeterministicSQLBuilder:
 
     def _standard(self, plan: QueryPlan, analysis_type: str) -> DeterministicSQL | UnsupportedPlan:
         metric_ids = self._metric_ids(plan, analysis_type)
-        metric_exprs, skipped = self._metric_expressions(metric_ids)
+        metric_exprs, skipped = self._metric_expressions(metric_ids, plan.metric_specs)
         if not metric_exprs:
             return UnsupportedPlan("no verified metric mapping", skipped)
 
@@ -429,8 +434,8 @@ class DeterministicSQLBuilder:
         skipped: list[str] = []
         metric_aliases: dict[str, str] = {}
         if plan.numerator and plan.denominator:
-            numerator = self._metric_expr(plan.numerator)
-            denominator = self._metric_expr(plan.denominator)
+            numerator = self._metric_expr(plan.numerator, plan.metric_specs)
+            denominator = self._metric_expr(plan.denominator, plan.metric_specs)
             if not numerator or not denominator:
                 return UnsupportedPlan(
                     "ratio numerator/denominator mapping is not verified",
@@ -466,7 +471,7 @@ class DeterministicSQLBuilder:
             # this the whole plan was rejected and surfaced as "Yanıt
             # Oluşturulamadı" (Codex live UI testing, 2026-07-31).
             requested = plan.metrics or ["appointment_count"]
-            resolved, skipped = self._metric_expressions(requested)
+            resolved, skipped = self._metric_expressions(requested, plan.metric_specs)
             # A composite rate cannot be gated on a period without nesting
             # aggregates; drop it here and report it via `skipped_metrics` so
             # the answer can say which metric was left out, rather than emitting
@@ -546,7 +551,7 @@ class DeterministicSQLBuilder:
                 "multi-metric period breakdown not supported: only a single metric can be compared across periods today",
                 plan.metrics,
             )
-        metric = self._metric_expr((plan.metrics or ["appointment_count"])[0])
+        metric = self._metric_expr((plan.metrics or ["appointment_count"])[0], plan.metric_specs)
         if not metric:
             return UnsupportedPlan(
                 "period breakdown metric mapping is not verified", plan.metrics
@@ -752,7 +757,7 @@ class DeterministicSQLBuilder:
                 plan.metrics,
             )
         metric_id = (plan.metrics or ["appointment_count"])[0]
-        metric = self._metric_expr(metric_id)
+        metric = self._metric_expr(metric_id, plan.metric_specs)
         if not metric:
             return UnsupportedPlan(
                 "entity breakdown metric mapping is not verified", plan.metrics
@@ -1378,7 +1383,7 @@ class DeterministicSQLBuilder:
                 metric_ids,
             )
         metric_id = metric_ids[0]
-        metric_expr = self._metric_expr(metric_id)
+        metric_expr = self._metric_expr(metric_id, plan.metric_specs)
         if not metric_expr:
             return UnsupportedPlan("no verified metric mapping for trend", metric_ids)
 
@@ -1421,21 +1426,75 @@ class DeterministicSQLBuilder:
             return ["unique_patient_count"]
         return ["appointment_count"]
 
-    def _metric_expressions(self, metric_ids: list[str]) -> tuple[list[tuple[str, str]], list[str]]:
+    def _metric_expressions(
+        self,
+        metric_ids: list[str],
+        specs: dict[str, InlineMetric] | None = None,
+    ) -> tuple[list[tuple[str, str]], list[str]]:
         expressions, skipped = [], []
         for metric_id in metric_ids:
-            expression = self._metric_expr(metric_id)
+            expression = self._metric_expr(metric_id, specs)
             if expression:
                 expressions.append((metric_id, expression))
             else:
                 skipped.append(metric_id)
         return expressions, skipped
 
-    def _metric_expr(self, metric_id: str | None) -> str | None:
+    def _metric_expr(
+        self, metric_id: str | None, specs: dict[str, InlineMetric] | None = None
+    ) -> str | None:
+        """Catalog id first, plan-composed spec second.
+
+        The catalog always wins: an inline metric only ever exists for
+        something the catalog cannot express, so a name collision means the
+        catalog's verified formula is the intended one.
+        """
         metric = self._metrics.get(metric_id or "")
-        if not metric or metric.status == "requires_verified_mapping" or not metric.formula:
+        if metric and metric.status != "requires_verified_mapping" and metric.formula:
+            return metric.formula
+        spec = (specs or {}).get(metric_id or "")
+        return self._inline_metric_expr(spec) if spec else None
+
+    def _inline_metric_expr(self, spec: InlineMetric) -> str | None:
+        """Renders a plan-composed metric, or None when it cannot be rendered
+        safely. Fails closed: the metric is then reported as skipped rather
+        than silently dropped from an otherwise-complete answer."""
+        if spec.shape != "rate":
             return None
-        return metric.formula
+        predicate = self._predicate_sql(spec.predicate)
+        if predicate is None:
+            return None
+        return f"100.0 * SUM(CASE WHEN {predicate} THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0)"
+
+    def _predicate_sql(self, predicate: MetricPredicate | None) -> str | None:
+        """Renders a grounded predicate. Every part is re-validated here — the
+        column against the real column catalog, the operator against
+        `_PREDICATE_OPERATORS` — so a malformed predicate can never reach SQL
+        even if a caller (or a future LLM plan-filler) constructs one."""
+        if predicate is None:
+            return None
+        if predicate.column not in load_column_catalog().column_names():
+            return None
+        operator = predicate.operator.upper().strip()
+        if operator not in _PREDICATE_OPERATORS:
+            return None
+
+        if operator in ("IS NULL", "IS NOT NULL"):
+            return f"{predicate.column} {operator}"
+        if len(predicate.values) != 1:
+            return None
+        value = predicate.values[0]
+        if predicate.column == DEPARTMENT_COLUMN and operator == "=" and isinstance(value, str):
+            # The department column stores comma-separated composites; equality
+            # on the raw value never matches a single department, so a share
+            # predicate written as `= 'Kardiyoloji'` would read 0% everywhere.
+            return self._department_containment([value])
+        literal = (
+            self._unicode_literal(value)
+            if isinstance(value, str)
+            else (int(value) if float(value).is_integer() else value)
+        )
+        return f"{predicate.column} {operator} {literal}"
 
     def _alias_for_metric(self, metric_id: str, analysis_type: str) -> str:
         if analysis_type in {"ratio", "percentage"} and metric_id.endswith("_rate"):
@@ -1684,7 +1743,7 @@ class DeterministicSQLBuilder:
                 None,
             )
             if expression is None:
-                expression = self._metric_expr(threshold.metric)
+                expression = self._metric_expr(threshold.metric, plan.metric_specs)
         if expression is None:
             expression = metric_exprs[0][1]
         value = threshold.value

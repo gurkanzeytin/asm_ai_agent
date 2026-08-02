@@ -18,6 +18,9 @@ from app.semantics.catalog import CatalogValidationError, load_column_catalog, l
 from app.services.deterministic_sql_builder import SUPPORTED_ANALYSIS_TYPES
 
 _DATASET_PATH = Path(__file__).resolve().parents[2] / "app" / "resources" / "evaluation_cases.json"
+_SUPPLEMENTAL_DATASET_PATHS = (
+    Path(__file__).resolve().parent / "resources" / "colloquial_blind_v2.json",
+)
 
 RESULT_CONTRACTS = {
     cls.__name__
@@ -51,6 +54,32 @@ def load_evaluation_dataset(path: str | Path | None = None) -> EvaluationDataset
         raise CatalogValidationError(f"Evaluation dataset is not valid JSON: {error}") from error
 
     dataset = EvaluationDataset(**raw)
+    if path is None:
+        supplemental_cases: list[EvaluationCase] = []
+        for supplemental_path in _SUPPLEMENTAL_DATASET_PATHS:
+            try:
+                supplemental_raw = json.loads(
+                    supplemental_path.read_text(encoding="utf-8")
+                )
+            except FileNotFoundError as error:
+                raise CatalogValidationError(
+                    f"Supplemental evaluation dataset missing: {supplemental_path}"
+                ) from error
+            except json.JSONDecodeError as error:
+                raise CatalogValidationError(
+                    "Supplemental evaluation dataset is not valid JSON: "
+                    f"{supplemental_path}: {error}"
+                ) from error
+            supplemental = EvaluationDataset(**supplemental_raw)
+            if supplemental.view != dataset.view:
+                raise CatalogValidationError(
+                    "Supplemental evaluation view does not match the base dataset: "
+                    f"{supplemental.view} != {dataset.view}"
+                )
+            supplemental_cases.extend(supplemental.cases)
+        dataset = dataset.model_copy(
+            update={"cases": [*dataset.cases, *supplemental_cases]}
+        )
     validate_evaluation_dataset(dataset)
     return dataset
 
@@ -126,4 +155,3 @@ def select_cases(
         # (e.g. "expert" white-box regression cases).
         selected = [case for case in dataset.cases if case.suite == suite]
     return selected[:limit] if limit else selected
-

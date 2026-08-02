@@ -423,3 +423,125 @@ class TestLiveScenarios:
         assert plan.date_filters[0].start_date == plan.date_filters[0].end_date == "2026-07-22"
         candidates = extract_candidate_phrases(question)
         assert "branch" not in candidates
+
+
+class TestGenderCohortFilterExtraction:
+    """A gender word attached to "hasta" is a cohort filter on its own.
+
+    Extraction used to require an explicit marker ("sadece", "için"), so plain
+    "Erkek hastaların en çok gittiği ilk 5 bölüm" produced NO gender candidate
+    and the question silently answered over every patient — the plan never
+    carried the constraint, so PlanComplianceValidator had nothing to miss.
+    """
+
+    @pytest.mark.parametrize(
+        "question,expected",
+        [
+            ("Erkek hastaların en çok gittiği ilk 5 bölüm", "erkek"),
+            ("Kadın hastaların gelmeme oranı nedir?", "kadin"),
+            ("Kadın hastaların ortalama randevu süresi", "kadin"),
+            ("Erkek hastalarda ortalama randevu süresi", "erkek"),
+            # Explicit markers keep working.
+            ("Sadece kadın hastaları göster", "kadin"),
+            ("Erkek hastalar için bölüm dağılımı", "erkek"),
+        ],
+    )
+    def test_gender_attached_to_patient_noun_is_a_filter(self, question, expected):
+        assert extract_candidate_phrases(question).get("gender") == [expected]
+
+    @pytest.mark.parametrize(
+        "question",
+        [
+            # The cohort's own SHARE — filtering to it would make the answer
+            # trivially 100% instead of the requested proportion.
+            "Hangi bölümde kadın hasta oranı en yüksek?",
+            "Kadın hastaların payı nedir?",
+            "Erkek hasta yüzdesi kaç?",
+            # Two cohorts named together describe a breakdown, not a filter.
+            "Kadın ve erkek randevu oranını karşılaştır",
+            "Kadın erkek dağılımını göster",
+            # No gender mention at all.
+            "Bölüm bazında randevu sayısı",
+            "Kardiyoloji bölümünde kaç randevu var?",
+        ],
+    )
+    def test_share_and_breakdown_wording_is_not_a_filter(self, question):
+        assert "gender" not in extract_candidate_phrases(question)
+
+
+class TestGenderCohortFilterReachesSQL:
+    """The extraction fix is only worth anything if the filter survives all the
+    way into the generated SQL — that is where the silent scope-widening was
+    visible to the user.
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "question,expected_literal",
+        [
+            ("Erkek hastaların en çok gittiği ilk 5 bölüm", "CinsiyetId = N'E'"),
+            ("Kadın hastaların gelmeme oranı nedir?", "CinsiyetId = N'K'"),
+        ],
+    )
+    async def test_gender_cohort_lands_in_generated_sql(self, question, expected_literal):
+        from app.agent.nodes.resolve_filter_values import ResolveFilterValuesNode
+        from app.agent.state import AgentState
+        from app.services.deterministic_sql_builder import DeterministicSQLBuilder
+
+        plan = QueryPlanner().build_plan(
+            question,
+            QueryAnalyzer().analyze(question),
+            tables=[],
+            views=[ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])],
+        )
+        node = ResolveFilterValuesNode(
+            resolver=ValueResolver(catalog=_FakeCatalog(distinct={"gender": ["E", "K", "D"]}))
+        )
+
+        state = await node.execute(
+            AgentState(question=question, raw_question=question, query_plan=plan)
+        )
+
+        assert state.query_plan.resolved_filters["gender"].grounded is True
+        assert expected_literal in DeterministicSQLBuilder().build(state.query_plan).sql
+
+    @pytest.mark.asyncio
+    async def test_cohort_share_becomes_a_predicate_never_a_filter(self):
+        """"kadın hasta oranı" asks what SHARE of appointments are women's.
+
+        The cohort must reach SQL as the numerator's CASE predicate and nowhere
+        else. As a WHERE filter the denominator shrinks to the cohort itself and
+        the share reads 100% by construction — the same defect that made
+        "Gelmeyenlerin payı" always 100%.
+        """
+        from app.agent.nodes.resolve_filter_values import ResolveFilterValuesNode
+        from app.agent.state import AgentState
+        from app.services.deterministic_sql_builder import DeterministicSQLBuilder
+
+        question = "Hangi bölümde kadın hasta oranı en yüksek?"
+        plan = QueryPlanner().build_plan(
+            question,
+            QueryAnalyzer().analyze(question),
+            tables=[],
+            views=[ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])],
+        )
+        node = ResolveFilterValuesNode(
+            resolver=ValueResolver(catalog=_FakeCatalog(distinct={"gender": ["E", "K", "D"]}))
+        )
+
+        state = await node.execute(
+            AgentState(question=question, raw_question=question, query_plan=plan)
+        )
+        resolved_plan = state.query_plan
+        sql = DeterministicSQLBuilder().build(resolved_plan).sql
+
+        assert "gender" not in resolved_plan.resolved_filters
+        assert "CinsiyetId" not in resolved_plan.dimensions
+        assert "SUM(CASE WHEN CinsiyetId = N'K' THEN 1 ELSE 0 END)" in sql
+        assert "NULLIF(COUNT(*), 0)" in sql
+        # The cohort never narrows the denominator.
+        where_clause = sql.split("WHERE", 1)[1] if "WHERE" in sql else ""
+        assert "CinsiyetId" not in where_clause.split("GROUP BY")[0]
+        # The department breakdown and the sanity-check volume both survive.
+        assert resolved_plan.dimensions == ["GenelRandevuBolumAdi"]
+        assert "appointment_count" in resolved_plan.metrics

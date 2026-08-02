@@ -374,6 +374,11 @@ class SQLService(ISQLService):
         """
         if query_plan is None:
             return None, None, []
+        if query_plan.planning_source == "llm_schema_reasoning":
+            logger.info(
+                "Typed schema-reasoning plan will use LLM SQL generation with plan compliance."
+            )
+            return None, None, []
         adaptive_retry = "ADAPTIVE_EMPTY_RESULT" in prompt
         built = self.deterministic_builder.build(query_plan, adaptive_retry=adaptive_retry)
         if isinstance(built, UnsupportedPlan):

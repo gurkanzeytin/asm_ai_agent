@@ -146,6 +146,18 @@ _PERIOD_ANALYSIS_TYPES = {
     "percentage_change",
 }
 _PERIOD_COMPARISON_MARKERS = ("degisim", "degis", "fark", "kiyas", "kiyasla", "karsilastir")
+
+# Analyses whose "yüzde"/"oran" already means the CHANGE between two periods, so
+# a share-of-total column would answer a different question under the same word
+# ("bu farkı yüzde olarak özetle" is not each group's share of the whole).
+_PERIOD_CHANGE_PATTERNS = (
+    "period_comparison",
+    "percentage_change",
+    "baseline_comparison",
+    "adaptive_time_comparison",
+    "variance_analysis",
+    "anomaly_comparison",
+)
 _MONTH_LABELS = (
     "",
     "Ocak",
@@ -320,8 +332,16 @@ class QueryPlanner:
                             f"{negated_column} = '{value}'" for value in negated_status_values
                         ]
 
+            # Catalog resolution consumes only the analyzer's narrow
+            # orthographic surface so curated spelling rewrites (for example
+            # ``randv`` -> ``randevu``) affect metric selection. Broader
+            # medical/domain rewrites remain entity-only because they can alter
+            # an established physical dimension identity.
+            intelligence_folded = self._extractor.fold(
+                analysis.catalog_query or question
+            )
             intelligence = self._resolve_intelligence(
-                folded,
+                intelligence_folded,
                 analysis,
                 projection,
                 aggregation,
@@ -402,7 +422,7 @@ class QueryPlanner:
                 intelligence["required_columns"] = list(
                     dict.fromkeys(intelligence["required_columns"] + ["DogumTarihi"])
                 )
-            if raw_list_request:
+            if raw_list_request and intelligence["analysis_type"] != "time_trend":
                 list_projection = self._view_list_projection(view_name)
                 intelligence.update(
                     {
@@ -825,7 +845,53 @@ class QueryPlanner:
         """
         answerable, reason, alternative = catalog.check_answerability(folded)
         metrics = catalog.match_metrics(folded)
+        compositional_metrics = catalog.match_compositional_metrics(folded)
         dimensions = catalog.match_dimensions(folded)
+        used_compositional_metric = False
+        metric_specs = catalog.load_metric_catalog().by_id()
+        has_specialized_relationship = any(
+            metric_specs[metric_id].analysis_type == "repeat_behavior"
+            and metric_specs[metric_id].formula_type.startswith("having_")
+            for metric_id in metrics
+        )
+        compositional_primary = (
+            metric_specs[compositional_metrics[0]] if compositional_metrics else None
+        )
+        compositional_required = (
+            set(compositional_primary.required_columns)
+            if compositional_primary is not None
+            else set()
+        )
+        compositional_is_more_specific = bool(compositional_primary) and (
+            not metrics
+            or all(
+                metric_id == compositional_primary.id
+                or metric_id == "appointment_count"
+                or set(metric_specs[metric_id].required_columns)
+                < compositional_required
+                for metric_id in metrics
+            )
+        )
+        compositional_conflicts_with_breakdown = bool(
+            dimensions
+            and compositional_primary is not None
+            and compositional_primary.analysis_type == "time_trend"
+        )
+        compositional_would_drop_sibling_metric = bool(
+            compositional_primary is not None
+            and compositional_primary.id in metrics
+            and any(metric_id != compositional_primary.id for metric_id in metrics)
+        )
+        if (
+            compositional_metrics
+            and not has_specialized_relationship
+            and not catalog.has_explicit_multi_metric_request(folded)
+            and compositional_is_more_specific
+            and not compositional_conflicts_with_breakdown
+            and not compositional_would_drop_sibling_metric
+        ):
+            used_compositional_metric = metrics != compositional_metrics
+            metrics = compositional_metrics
         # Breakdown the user asked for that this plan shape cannot honour;
         # surfaced as a plan assumption so the answer states the limitation.
         dropped_breakdown: list[str] = []
@@ -985,15 +1051,36 @@ class QueryPlanner:
         # precondition never fire. A true share-of-total computation for an
         # arbitrary named value (the channel-share case) is a separate,
         # larger feature - not yet implemented.
+        # "Uyruklara göre randevu ORANI" asks what proportion of all
+        # appointments each nationality accounts for — a share of the total,
+        # per group. Requiring the literal words "pay" AND "toplam" meant only
+        # one phrasing of that question ever reached the builder's
+        # `pay_yuzdesi` window function; every other way of asking for the same
+        # proportion returned bare counts with no share column at all. The
+        # generic rate-request vocabulary (catalog.detect_measure_request)
+        # recognizes them all, and the `appointment_count`-only guard below
+        # still keeps a real rate metric (gelmeme oranı -> no_show_rate) on its
+        # own numerator/denominator path.
         share_of_total_requested = (
-            any(marker in folded for marker in ("pay", "payi"))
-            and "toplam" in folded
-            and bool(dimensions)
-            and (not metrics or metrics == ["appointment_count"])
+            bool(dimensions)
+            and self._only_plain_volume_metrics(metrics)
+            # A percentage asked for INSIDE a period comparison is the change
+            # between the two periods ("bu farkı yüzde olarak özetle"), not each
+            # group's share of the whole. Both are "yüzde"; only the analysis
+            # already in play tells them apart.
+            and pattern not in _PERIOD_CHANGE_PATTERNS
+            and (
+                (any(marker in folded for marker in ("pay", "payi")) and "toplam" in folded)
+                or catalog.detect_measure_request(folded) == "rate"
+            )
         )
         if share_of_total_requested and not metrics:
             metrics = ["appointment_count"]
-        if pattern == "ratio" and (not metrics or metrics == ["appointment_count"]):
+        if pattern == "ratio" and self._only_plain_volume_metrics(metrics):
+            # Same shape test as the share above, so "bölümlere göre randevu
+            # oranı" and "uyruklara göre randevu oranı" cannot end up with
+            # different analysis types just because one matched the canonical
+            # count id and the other a fixed-dimension variant of it.
             pattern = "distribution" if dimensions else "count"
 
         granularity = catalog.match_granularity(folded)
@@ -1143,7 +1230,9 @@ class QueryPlanner:
         if primary is not None:
             if primary.numerator and primary.denominator:
                 numerator, denominator = primary.numerator, primary.denominator
-            if primary.analysis_type == "repeat_behavior" and (
+            if used_compositional_metric:
+                pattern = primary.analysis_type
+            elif primary.analysis_type == "repeat_behavior" and (
                 primary.formula_type.startswith("having_")
                 or primary.formula_type
                 in {"patient_span_days", "period_overlap_distinct_count"}
@@ -1279,6 +1368,30 @@ class QueryPlanner:
             "dropped_breakdown": dropped_breakdown,
         }
 
+    def _only_plain_volume_metrics(self, metric_ids: list[str]) -> bool:
+        """True when the plan measures nothing but raw appointment volume.
+
+        A share of the total is only meaningful over a plain count. Asked by
+        catalog shape rather than by id, because the same COUNT(*) measure
+        appears under several ids: `appointment_count` plus the fixed-dimension
+        variants (`appointments_per_department`, `appointments_per_branch`, ...)
+        that exist only to imply a grouping. Testing for the canonical id alone
+        silently denied the share to "bölümlere göre randevu oranı" while
+        granting it to "uyruklara göre randevu oranı" — the same question.
+        """
+        if not metric_ids:
+            return True
+        by_id = catalog.load_metric_catalog().by_id()
+        return all(
+            (metric := by_id.get(metric_id)) is not None
+            # `appointment_count` is count_rows; the fixed-dimension variants are
+            # count_rows_grouped. Both render the identical COUNT(*), which the
+            # formula check below is what actually establishes.
+            and metric.formula_type in ("count_rows", "count_rows_grouped")
+            and metric.formula == "COUNT(*)"
+            for metric_id in metric_ids
+        )
+
     def _view_output_entity(self, analysis: QueryAnalysis, output_entity: str | None) -> str | None:
         """Adjusts the output entity for view-column resolution.
 
@@ -1371,7 +1484,7 @@ class QueryPlanner:
 
     def _patient_appointment_span_requested(self, folded_question: str) -> bool:
         """Detect patient first-to-last appointment span requests."""
-        has_patient = re.search(r"\bhasta\w*\b", folded_question) is not None
+        has_patient = re.search(r"\b(?:hasta|kisi)\w*\b", folded_question) is not None
         first_last = (
             re.search(r"\bilk\w*\b", folded_question) is not None
             and re.search(r"\bson\w*\b", folded_question) is not None
@@ -1392,13 +1505,18 @@ class QueryPlanner:
         """Detect patients present in both explicit periods."""
         if len(analysis.detected_dates) < 2:
             return False
-        has_patient = re.search(r"\bhasta\w*\b", folded_question) is not None
+        has_patient = re.search(r"\b(?:hasta|kisi)\w*\b", folded_question) is not None
         has_overlap_marker = (
             re.search(r"\bhem\b.+\bhem\b", folded_question) is not None
             or "her iki" in folded_question
             or "iki donemde" in folded_question
             or "iki yilda" in folded_question
             or "ortak hasta" in folded_question
+            or (
+                "gelenlerden" in folded_question
+                and re.search(r"\bbu\s+yil\b.+\bgelen\w*\b", folded_question)
+                is not None
+            )
         )
         has_presence_action = any(
             marker in folded_question
@@ -1415,18 +1533,27 @@ class QueryPlanner:
             "GenelRandevuBolumAdi": ("bolum", "brans"),
             "GenelRandevuKaynakAdi": ("kaynak", "kanal"),
             "DoktorId": ("doktor", "hekim"),
+            "RandevuTipiAdi": ("randevu tipi", "tip", "randevu turu", "tur"),
             "RandevuDurumu": ("durum", "status"),
             "CinsiyetId": ("cinsiyet",),
         }
         terms = dimension_terms.get(dimension, (dimension.lower(),))
         for term in terms:
+            term_pattern = r"\s+".join(
+                rf"{re.escape(token)}\w*" for token in term.split()
+            )
+            # Business labels commonly insert a harmless descriptor between
+            # the dimension noun and grouping marker: "şube ADI bazında",
+            # "bölüm ADI RAPORLAMA bazında". It is still an explicit GROUP BY.
+            label_qualifiers = r"(?:\s+(?:adi|raporlama)\w*){0,2}"
             if re.search(
-                rf"\b{term}\w*\s+(?:baz\w*|gore|dagilim\w*|kirilim\w*|kir\w*|sirala\w*)\b",
+                rf"\b{term_pattern}{label_qualifiers}\s+"
+                rf"(?:baz\w*|gore|dagilim\w*|kirilim\w*|kir\w*|sirala\w*)\b",
                 folded_question,
             ):
                 return True
             if re.search(
-                rf"\b(?:dagilim\w*|kirilim\w*|kir\w*)\s+{term}\w*\b",
+                rf"\b(?:dagilim\w*|kirilim\w*|kir\w*)\s+{term_pattern}\b",
                 folded_question,
             ):
                 return True
@@ -1537,7 +1664,14 @@ class QueryPlanner:
             )
             if split_span_periods:
                 return split_span_periods
-        if analysis_type not in _PERIOD_ANALYSIS_TYPES or len(analysis.detected_dates) < 2:
+        patient_overlap = (
+            analysis_type == "repeat_behavior"
+            and self._patient_period_overlap_requested(folded, analysis)
+        )
+        if (
+            analysis_type not in _PERIOD_ANALYSIS_TYPES
+            and not patient_overlap
+        ) or len(analysis.detected_dates) < 2:
             return []
 
         periods: list[PeriodPlan] = []

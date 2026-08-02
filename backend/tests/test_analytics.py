@@ -784,3 +784,83 @@ def test_comparison_sufficiency_is_none_for_non_categorical_shapes():
     assert result.data_shape == DataShape.TIME_SERIES
     assert result.comparison_category_count is None
     assert result.comparison_sufficient is None
+
+
+# ---------------------------------------------------------------------------
+# Date-shaped metric aliases must stay metrics
+# ---------------------------------------------------------------------------
+
+# Every catalog metric whose id reads like a date column to
+# `_TEMPORAL_NAME_PATTERN` ("day"/"time"/"date"/"period" as a substring). Each
+# was profiled as the temporal axis instead of the metric, leaving
+# `metric_column` None so the answer lost its own number — the "Yanıt
+# Oluşturulamadı" shape reported for lead-time and start/end-date questions.
+_DATE_SHAPED_METRIC_ALIASES = [
+    "appointment_lead_time_average",
+    "actual_duration_from_dates",
+    "same_day_booking_count",
+    "same_day_booking_rate",
+    "patient_appointment_span_days",
+    "multi_period_patient_overlap_count",
+    "invalid_date_range_count",
+]
+
+
+@pytest.mark.parametrize("alias", _DATE_SHAPED_METRIC_ALIASES)
+def test_date_shaped_metric_alias_is_profiled_as_metric_not_time(alias):
+    result = _query_result([alias], [{alias: 7.2}])
+
+    metric_column, _label, temporal_column = AnalyticsEngine()._profile_columns(
+        result, "", {alias: alias}
+    )
+
+    assert metric_column == alias
+    assert temporal_column is None
+
+
+@pytest.mark.parametrize("alias", _DATE_SHAPED_METRIC_ALIASES)
+def test_date_shaped_metric_alias_is_a_metric_without_an_alias_map(alias):
+    """LLM-generated SQL reaches analytics with no alias map; the catalog's own
+    metric ids must still be enough to keep these columns out of the time axis."""
+    result = _query_result([alias], [{alias: 7.2}])
+
+    metric_column, _label, temporal_column = AnalyticsEngine()._profile_columns(result, "")
+
+    assert metric_column == alias
+    assert temporal_column is None
+
+
+def test_lead_time_scalar_answer_keeps_its_metric_and_shape():
+    result = _query_result(
+        ["appointment_lead_time_average"], [{"appointment_lead_time_average": 7.2}]
+    )
+    plan = QueryPlan(
+        question="Randevular ortalama kac gun onceden aliniyor?",
+        analysis_type="lead_time_analysis",
+        metrics=["appointment_lead_time_average"],
+    )
+
+    analytics = AnalyticsEngine().analyze(
+        plan.question,
+        result,
+        plan,
+        {"appointment_lead_time_average": "appointment_lead_time_average"},
+    )
+
+    assert analytics.metric_column == "appointment_lead_time_average"
+    assert analytics.data_shape == DataShape.SINGLE_VALUE
+
+
+def test_real_date_columns_are_still_temporal():
+    """The fix must not disarm temporal detection for actual date columns."""
+    result = _query_result(
+        ["BaslangicTarihi", "appointment_count"],
+        [{"BaslangicTarihi": "2025-01", "appointment_count": 120}],
+    )
+
+    metric_column, _label, temporal_column = AnalyticsEngine()._profile_columns(
+        result, "", {"appointment_count": "appointment_count"}
+    )
+
+    assert temporal_column == "BaslangicTarihi"
+    assert metric_column == "appointment_count"

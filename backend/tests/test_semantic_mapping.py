@@ -183,6 +183,52 @@ def test_grounding_mapping_lines_cover_key_concepts():
     assert "COUNT(DISTINCT HastaId)" in rendered
 
 
+# Analysable, non-PII columns that MUST carry a user-language concept. The
+# deterministic planner reads column_intelligence.json (all 24 columns), but the
+# LLM fallback's "kavram -> sutun" grounding block is built solely from
+# view_semantics.json (prompt_service._render_schema_context). While the two
+# drifted apart, a question the deterministic path could not build fell back to
+# an LLM that had never been told which column "uyruk"/"cinsiyet"/"hizmet"
+# meant. Excluded here: identifiers (grouping on them yields bare numbers),
+# PII name columns (never selectable), and the date columns already covered by
+# `date_semantics`.
+_CONCEPT_REQUIRED_COLUMNS = {
+    "CinsiyetId",
+    "DogumTarihi",
+    "GenelRandevuBolumAdi",
+    "GenelRandevuKaynakAdi",
+    "HizmetAdi",
+    "KategoriAdi",
+    "ProtokolIslemState",
+    "RandevuDurumu",
+    "RandevuSuresi",
+    "RandevuTipiAdi",
+    "RandevuyuVeren",
+    "SubeAdi",
+    "Uyruk",
+}
+
+
+def test_view_semantics_concepts_cover_every_analysable_column():
+    """view_semantics.json must not fall behind column_intelligence.json."""
+    mapped = {
+        spec["column"]
+        for spec in view_mapping.get_view_entry(VIEW_NAME)["concepts"].values()
+        if spec.get("column")
+    }
+
+    missing = sorted(_CONCEPT_REQUIRED_COLUMNS - mapped)
+
+    assert not missing, f"view_semantics.json'da kavramı olmayan sütunlar: {missing}"
+
+
+def test_view_semantics_concept_columns_are_real_view_columns():
+    documented = set(view_mapping.get_view_entry(VIEW_NAME)["columns"])
+
+    for name, spec in view_mapping.get_view_entry(VIEW_NAME)["concepts"].items():
+        assert spec["column"] in documented, f"{name} -> {spec['column']} görünümde yok"
+
+
 # ---------------------------------------------------------------------------
 # Plan compliance under T-SQL
 # ---------------------------------------------------------------------------

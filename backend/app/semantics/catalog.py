@@ -41,6 +41,18 @@ class ColumnSpec(BaseModel):
     supported_operations: list[str] = Field(default_factory=list)
     related_columns: list[str] = Field(default_factory=list)
     common_mistakes: list[str] = Field(default_factory=list)
+    known_values: list[str] = Field(
+        default_factory=list,
+        description="Curated category values safe to expose as schema metadata, never row data.",
+    )
+    values_verified: bool = Field(
+        default=False,
+        description="Whether known_values were verified against the source deployment.",
+    )
+    value_notes: str = Field(
+        default="",
+        description="Grounding caveats; empty when values are not applicable or not yet sampled.",
+    )
     pii: bool = False
     selectable: bool = True
     filterable: bool = True
@@ -80,6 +92,14 @@ class MetricSpec(BaseModel):
     numerator: str | None = None
     denominator: str | None = None
     synonyms: list[str] = Field(default_factory=list)
+    compositional_signals: list[list[str]] = Field(
+        default_factory=list,
+        description=(
+            "AND-ed signal groups for paraphrase-safe matching. At least one "
+            "term from every inner group must occur; complete questions do not "
+            "belong here."
+        ),
+    )
     compatible_dimensions_group: str | None = None
     compatible_dimensions: list[str] = Field(default_factory=list)
     default_time_column: str = "BaslangicTarihi"
@@ -449,6 +469,16 @@ def _phrase_span(
     return start, start + len(term_tokens)
 
 
+def phrase_span(folded_question: str, term: str) -> tuple[int, int] | None:
+    """Public token span of `term` in the question, or None.
+
+    Exposed for callers that must reason about WHICH WORDS a resolution
+    consumed, not just which columns it produced (app.planning.coverage), so
+    the stemming/prefix rules stay defined here alone.
+    """
+    return _phrase_span(folded_question, term)
+
+
 def _spans_overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
     return a[0] < b[1] and b[0] < a[1]
 
@@ -459,7 +489,12 @@ def _spans_overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
 # comparison vocabulary already established elsewhere in this codebase
 # (app.context.merge_policy._METRIC_ADD_CONJUNCTION, ontology.GOAL_MARKERS
 # COMPARE) for "the user explicitly wants more than one metric together".
-_MULTI_METRIC_MARKERS = (" ve ", "karsilastir", "kiyasla")
+_MULTI_METRIC_MARKERS = (" ve ", "birlikte", "karsilastir", "kiyasla")
+
+
+def has_explicit_multi_metric_request(folded_question: str) -> bool:
+    """Whether wording explicitly asks to keep multiple measures together."""
+    return any(marker in folded_question for marker in _MULTI_METRIC_MARKERS)
 
 
 def match_metrics(folded_question: str) -> list[str]:
@@ -481,13 +516,22 @@ def match_metrics(folded_question: str) -> list[str]:
     for metric in catalog.metrics:
         best = 0
         best_span: tuple[int, int] | None = None
-        for synonym in metric.synonyms:
-            span = _phrase_span(folded_question, synonym)
+        for term in metric.synonyms:
+            span = _phrase_span(folded_question, term)
             if span is not None:
-                length = len(stem_text(synonym))
+                length = len(stem_text(term))
                 if length > best:
                     best = length
                     best_span = span
+        # The display name is part of the public metric contract. Use it as a
+        # fallback only: when a synonym already matched, its established score
+        # and therefore existing multi-metric ordering must stay unchanged.
+        # Unverified metrics are routed by ``match_unverified_metric`` instead.
+        if not best and metric.status != "requires_verified_mapping":
+            span = _phrase_span(folded_question, metric.name)
+            if span is not None:
+                best = len(stem_text(metric.name))
+                best_span = span
         if best:
             scored.append((best, metric.id))
             spans[metric.id] = best_span
@@ -503,16 +547,16 @@ def match_metrics(folded_question: str) -> list[str]:
     if (
         "appointment_count" in matched
         and conditional_ids
-        and not any(marker in folded_question for marker in _MULTI_METRIC_MARKERS)
+        and not has_explicit_multi_metric_request(folded_question)
     ):
         matched.remove("appointment_count")
     if (
         "appointment_count" in matched
         and "appointments_per_patient" in matched
-        and not any(marker in folded_question for marker in _MULTI_METRIC_MARKERS)
+        and not has_explicit_multi_metric_request(folded_question)
     ):
         matched.remove("appointment_count")
-    if conditional_ids and not any(marker in folded_question for marker in _MULTI_METRIC_MARKERS):
+    if conditional_ids and not has_explicit_multi_metric_request(folded_question):
         matched = [
             mid
             for mid in matched
@@ -522,7 +566,7 @@ def match_metrics(folded_question: str) -> list[str]:
             )
         ]
     data_quality_ids = [mid for mid in matched if by_id[mid].analysis_type == "data_quality"]
-    if data_quality_ids and not any(marker in folded_question for marker in _MULTI_METRIC_MARKERS):
+    if data_quality_ids and not has_explicit_multi_metric_request(folded_question):
         matched = data_quality_ids
     relationship_ids = [
         mid
@@ -530,8 +574,45 @@ def match_metrics(folded_question: str) -> list[str]:
         if by_id[mid].analysis_type == "repeat_behavior"
         and by_id[mid].formula_type.startswith("having_")
     ]
-    if relationship_ids and not any(marker in folded_question for marker in _MULTI_METRIC_MARKERS):
+    if relationship_ids and not has_explicit_multi_metric_request(folded_question):
         matched = relationship_ids
+        # A specialized relationship metric already includes repeat behavior
+        # in its definition (for example: patients repeating across different
+        # branches). The generic repeat-patient metric is not a second measure
+        # unless the user explicitly asks for both; keeping it makes an
+        # otherwise deterministic relationship CTE look multi-metric.
+        specialized_relationship_ids = [
+            metric_id
+            for metric_id in relationship_ids
+            if metric_id != "repeat_patient_count"
+        ]
+        if specialized_relationship_ids:
+            matched = specialized_relationship_ids
+    # Reverse of the rate->count suppression below: the utterance asks for a
+    # SHARE ("oranı", "payı") but only the COUNT sibling's synonym phrase
+    # matched, because the rate metric's synonyms enumerate "... oranı" wordings
+    # and not every share phrasing ("Ayni gun alinan randevularin PAYI" hits
+    # same_day_booking_count's "ayni gun alinan" and nothing else). Answering
+    # with the raw count reports a different quantity than the one asked for,
+    # with nothing in the answer marking the substitution.
+    #
+    # The sibling link is the catalog's own `numerator`, so a new conditional
+    # rate metric is promoted automatically.
+    #
+    # Deliberately restricted to a SINGLE matched metric. When several matched,
+    # the utterance mixed vocabularies ("aylık toplam randevuların ... gelmedi
+    # olanların oranları" hits monthly_appointment_count AND no_show_count) and
+    # the planner's own status-aware fallback replaces the whole list with the
+    # one correct rate — promoting here first would satisfy that fallback's
+    # `has_status_metric_of_kind` guard and leave the spurious count in place.
+    if len(matched) == 1 and detect_measure_request(folded_question) == "rate":
+        rate_by_numerator = {
+            metric.numerator: metric.id
+            for metric in catalog.metrics
+            if metric.formula_type == "conditional_rate" and metric.numerator
+        }
+        matched = [rate_by_numerator.get(mid, mid) for mid in matched]
+
     # A matched rate implies its count sibling only when they share the same mention.
     rate_bases: set[str] = set()
     for mid in matched:
@@ -574,6 +655,54 @@ def match_metrics(folded_question: str) -> list[str]:
             )
         ]
     return matched
+
+
+def match_compositional_metrics(folded_question: str) -> list[str]:
+    """Matches metrics from independent concept/operator signal groups.
+
+    This is deliberately stricter than synonym matching: every configured
+    group must contribute a whole-token/stem match. It lets phrases such as
+    ``klinik + null`` and ``başlama + bitiş + erken`` compose without storing
+    each possible sentence as a synonym.
+    """
+    matches: list[tuple[int, str]] = []
+    for metric in load_metric_catalog().metrics:
+        groups = metric.compositional_signals
+        if not groups:
+            continue
+        if not all(
+            any(_term_in(folded_question, term) for term in group)
+            for group in groups
+        ):
+            continue
+        specificity = sum(max(len(stem_text(term)) for term in group) for group in groups)
+        matches.append((specificity, metric.id))
+    matches.sort(key=lambda item: (-item[0], item[1]))
+    metric_ids = [metric_id for _, metric_id in matches]
+    if len(metric_ids) > 1 and not has_explicit_multi_metric_request(folded_question):
+        return metric_ids[:1]
+    return metric_ids
+
+
+def match_unverified_metric(folded_question: str) -> MetricSpec | None:
+    """Return the most-specific metric whose business mapping is not verified.
+
+    These concepts are recognized so the agent can fail closed with a precise
+    clarification instead of silently falling back to a generic count or
+    asking the LLM to invent an unknown status-code mapping.
+    """
+    candidates: list[tuple[int, MetricSpec]] = []
+    for metric in load_metric_catalog().metrics:
+        if metric.status != "requires_verified_mapping":
+            continue
+        for term in [metric.name, *metric.synonyms]:
+            if _phrase_span(folded_question, term) is not None:
+                candidates.append((len(stem_text(term)), metric))
+                break
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (-item[0], item[1].id))
+    return candidates[0][1]
 
 
 def metric_status_value(metric_id: str) -> str | None:
@@ -641,7 +770,25 @@ _COUNT_REQUEST_MARKERS = (
     "kac tane",
     "kac ",
 )
-_RATE_REQUEST_MARKERS = ("orani", "oranini", "oranlari", "oranlarini", "yuzdesi", "yuzde")
+# "pay"/"payı" is share wording — the same measure request as "oran"/"yüzde".
+# Without it "Gelmeyenlerin PAYI ne durumda?" selected the *_count sibling
+# instead of the *_rate metric, and the builder then counted no-shows inside an
+# already no-show-filtered set — a share that is silently always 100%
+# (BLIND-RATE-002 / BLIND-RATE-007 in evaluation_cases.json). Only inflected
+# forms are listed: these markers are matched as SUBSTRINGS, and a bare "pay"
+# would fire inside unrelated words ("paylaşım", "kampanya payı" aside).
+_RATE_REQUEST_MARKERS = (
+    "orani",
+    "oranini",
+    "oranlari",
+    "oranlarini",
+    "yuzdesi",
+    "yuzde",
+    "payi",
+    "payini",
+    "paylari",
+    "paylarini",
+)
 
 
 def detect_measure_request(folded_question: str) -> str | None:
@@ -663,10 +810,16 @@ def detect_measure_request(folded_question: str) -> str | None:
     return None
 
 
-def match_dimensions(folded_question: str) -> list[str]:
-    """Returns groupable, non-PII, non-time columns whose synonyms appear in the question."""
+def match_dimension_spans(folded_question: str) -> list[tuple[str, tuple[int, int]]]:
+    """`match_dimensions` plus the token span each column was matched on.
+
+    The span is what lets a caller tell a real mention from a word already
+    spoken for by another resolution — "bugün KAYDEDİLEN randevular" resolves
+    the date column via CreatedDate on the very token that also stem-matches
+    RandevuyuVeren's "kaydeden" synonym (see app.planning.coverage).
+    """
     catalog = load_column_catalog()
-    scored: list[tuple[int, int, str]] = []
+    scored: list[tuple[int, int, int, str]] = []
     for spec in catalog.columns:
         if not spec.groupable or spec.pii or spec.data_role == "time_dimension":
             continue
@@ -684,15 +837,20 @@ def match_dimensions(folded_question: str) -> list[str]:
 
     # Overlapping matches at the same token span keep only the most specific column
     # ('doktor bazında' -> DoktorId beats the shorter 'doktor' -> Kaynak).
-    selected: list[str] = []
+    selected: list[tuple[str, tuple[int, int]]] = []
     taken_positions: list[tuple[int, int]] = []
     for _, position, token_count, column in scored:
         span = (position, position + token_count)
         if any(span[0] < end and start < span[1] for start, end in taken_positions):
             continue
         taken_positions.append(span)
-        selected.append(column)
+        selected.append((column, span))
     return selected
+
+
+def match_dimensions(folded_question: str) -> list[str]:
+    """Returns groupable, non-PII, non-time columns whose synonyms appear in the question."""
+    return [column for column, _span in match_dimension_spans(folded_question)]
 
 
 def match_any_column_mention(folded_question: str) -> bool:

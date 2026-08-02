@@ -141,6 +141,37 @@
     }
   },
   "rewrite_groups": {
+    "orthography": [
+      {
+        "pattern": "randvu",
+        "replacement": "randevu",
+        "match_suffix": true,
+        "matched_synonym": "randvu yazım varyasyonu -> randevu"
+      },
+      {
+        "pattern": "randv",
+        "replacement": "randevu",
+        "match_suffix": true,
+        "matched_synonym": "randv kısaltması -> randevu"
+      },
+      {
+        "pattern": "randavu",
+        "replacement": "randevu",
+        "match_suffix": true,
+        "matched_synonym": "randavu yazım varyasyonu -> randevu"
+      },
+      {
+        "pattern": "girsi",
+        "replacement": "giris",
+        "match_suffix": true,
+        "matched_synonym": "girsi yazım varyasyonu -> giriş"
+      },
+      {
+        "pattern": "bekliyo",
+        "replacement": "bekliyor",
+        "matched_synonym": "bekliyo konuşma biçimi -> bekliyor"
+      }
+    ],
     "conversational": [
       {
         "pattern": "rica etsem",
@@ -410,6 +441,17 @@
     ]
   },
   "ambiguous": [
+    {
+      "pattern": "en duzgun",
+      "question": "\"En düzgün çalışan\" için hangi ölçütü kullanmamı istersiniz?",
+      "options": [
+        "Toplam randevu hacmi",
+        "Gerçekleşme oranı",
+        "Düşük gelmeme oranı",
+        "Protokole dönüşüm oranı",
+        "Başka bir kriter"
+      ]
+    },
     {
       "pattern": "en basarili",
       "question": "Başarı kriteri olarak neyi kullanmamı istersiniz?",

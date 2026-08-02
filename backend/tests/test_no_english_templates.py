@@ -4,8 +4,11 @@ fallback strings in report titles, rule wordings, or observation templates.
 
 import re
 
+from app.analytics.models import AnalyticsIntent
 from app.insights import templates as insight_templates
 from app.intelligence import templates as intelligence_templates
+from app.reporting import presentation
+from app.semantics import catalog
 
 # Curated common English function/report words. Deliberately excludes ambiguous
 # tokens (e.g. "trend" as a Turkish loanword-adjacent term) that could produce
@@ -50,3 +53,29 @@ def test_forbidden_wording_patterns_are_turkish():
 
 def test_single_category_limitation_is_turkish():
     assert not _ENGLISH_WORD_PATTERN.search(insight_templates.SINGLE_CATEGORY_LIMITATION)
+
+
+def test_every_planner_analysis_type_has_a_turkish_label():
+    """`get_analysis_type_label` falls back to English Title Case for any
+    analysis type missing from the map ('duration_analysis' -> 'Duration
+    Analysis'). Both vocabularies that reach it must therefore be complete:
+    QueryPlan.analysis_type (pattern ids + metric analysis types) and
+    AnalyticsIntent.
+    """
+    planner_types = {pattern.id for pattern in catalog.load_pattern_catalog().patterns} | {
+        metric.analysis_type for metric in catalog.load_metric_catalog().metrics
+    }
+    intent_types = {intent.value for intent in AnalyticsIntent}
+
+    missing = sorted(
+        value
+        for value in planner_types | intent_types
+        if value not in presentation.ANALYSIS_TYPE_LABELS_TR
+    )
+
+    assert not missing, f"Türkçe etiketi olmayan analiz tipleri: {missing}"
+
+
+def test_analysis_type_labels_are_turkish():
+    for label in presentation.ANALYSIS_TYPE_LABELS_TR.values():
+        assert not _ENGLISH_WORD_PATTERN.search(label), label

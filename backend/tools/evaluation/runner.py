@@ -33,6 +33,7 @@ from app.core.config import settings
 from app.database_intelligence.models import ViewMetadata
 from app.planning.models import QueryPlan
 from app.planning.planner import QueryPlanner
+from app.services.answerability import AnswerabilityGuard
 from app.services.deterministic_sql_builder import (
     DeterministicSQL,
     DeterministicSQLBuilder,
@@ -47,6 +48,7 @@ VIEW = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
 class EvaluationRunner:
     def __init__(self) -> None:
         self.analyzer = QueryAnalyzer()
+        self.answerability = AnswerabilityGuard(query_analyzer=self.analyzer)
         self.planner = QueryPlanner()
         self.builder = DeterministicSQLBuilder()
         self.validator = SQLValidator()
@@ -98,8 +100,34 @@ class EvaluationRunner:
                 skip_reason="live database is not configured",
             )
 
+        answerability = self.answerability.assess(case.question)
+        # The production guard has one fail-closed verdict: destructive write
+        # intent. Its broader ``no_domain_signal`` result depends on intent and
+        # resolved conversation context that this offline runner does not
+        # model, so treating that verdict as final here would create false
+        # failures for established high-level acceptance questions.
+        if (
+            not answerability.answerable
+            and answerability.reason == "unsafe_write_intent"
+        ):
+            stages.append(
+                score_routing(
+                    case,
+                    clarification_required=False,
+                    in_scope=False,
+                )
+            )
+            stages.append(score_query_plan(case, None))
+            return self._finish(case, mode, stages, start)
+
         ambiguity = self.analyzer.detect_ambiguity(case.question)
-        stages.append(score_routing(case, clarification_required=ambiguity is not None))
+        stages.append(
+            score_routing(
+                case,
+                clarification_required=ambiguity is not None,
+                in_scope=True,
+            )
+        )
 
         if ambiguity is None:
             analysis = self.analyzer.analyze(case.question)

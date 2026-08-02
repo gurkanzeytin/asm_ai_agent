@@ -1,16 +1,19 @@
 from typing import Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
-from app.application_models.generated_report import GeneratedReport
-from app.application_models.generated_sql import GeneratedSQL
 from app.analytics.models import AnalyticsResult
 from app.analytics.result_validation import ResultShapeVerdict
+from app.application_models.generated_report import GeneratedReport
+from app.application_models.generated_sql import GeneratedSQL
 from app.application_models.intent import IntentResult
-from app.insights.models import InsightResult
-from app.intelligence.models import ObservationResult
 from app.application_models.query_analysis import AmbiguityResult
+from app.application_models.schema_capability import SchemaCapabilityAnswer
+from app.application_models.schema_reasoning import SchemaReasoningDecision
 from app.application_models.workflow_models import QueryResult
 from app.database_intelligence.models import DatabaseContext
+from app.insights.models import InsightResult
+from app.intelligence.models import ObservationResult
 from app.planning.models import QueryPlan
 from app.semantics.models import SemanticFrame
 from app.services.answerability import AnswerabilityInput
@@ -122,6 +125,15 @@ class AgentState(BaseModel):
         default_factory=list,
         description="Deterministic domain/date/metric signals used by the answerability guard.",
     )
+    schema_reasoning_decision: SchemaReasoningDecision | None = Field(
+        default=None,
+        description="Validated LLM schema interpretation used only after deterministic no-domain.",
+    )
+    schema_capability_answer: SchemaCapabilityAnswer | None = Field(
+        default=None,
+        description="Deterministic answer for a meta-question about one catalog column; "
+        "short-circuits SQL, database, and LLM stages.",
+    )
     response_mode: str | None = Field(
         default=None,
         description="Explicit user-facing output mode requested for this turn.",
@@ -156,4 +168,3 @@ class AgentState(BaseModel):
         "-> {field: [value]}). ResolveFilterValuesNode applies these directly and "
         "never re-extracts/re-resolves them from question text.",
     )
-

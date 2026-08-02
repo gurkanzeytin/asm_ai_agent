@@ -7474,7 +7474,7 @@
       "date_context": null,
       "expected_plan": {
         "answerable": true,
-        "clarification_required": false
+        "clarification_required": true
       },
       "expected_sql_features": {
         "must_include_concepts": [
@@ -7503,7 +7503,7 @@
       "date_context": null,
       "expected_plan": {
         "answerable": true,
-        "clarification_required": false
+        "clarification_required": true
       },
       "expected_sql_features": {
         "must_include_concepts": [

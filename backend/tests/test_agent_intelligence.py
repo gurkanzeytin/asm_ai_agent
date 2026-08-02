@@ -368,6 +368,37 @@ def test_suffix_tolerant_matching():
     assert "SubeAdi" in catalog.match_dimensions(fold("şubelerin randevuları"))
 
 
+def test_verified_metric_display_names_are_directly_matchable():
+    """The public catalog name is itself valid user vocabulary."""
+    for metric in catalog.load_metric_catalog().metrics:
+        if metric.status == "requires_verified_mapping":
+            continue
+        matched = catalog.match_metrics(fold(metric.name))
+        if (
+            metric.formula_type == "count_rows_grouped"
+            and metric.formula == "COUNT(*)"
+            and metric.fixed_dimension
+        ):
+            assert metric.id in matched or "appointment_count" in matched
+        else:
+            assert metric.id in matched, metric.id
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Protokol durumuna göre tamamlanma nedir?",
+        "Hasta kimliği uyuşmayan kayıt sayısı kaç?",
+        "Protokol durum tutarsızlığını göster.",
+    ],
+)
+def test_unverified_metric_mapping_requests_clarification(question):
+    ambiguity = QueryAnalyzer().detect_ambiguity(question)
+
+    assert ambiguity is not None
+    assert ambiguity.matched_phrase == "unverified_metric_mapping"
+
+
 @pytest.mark.parametrize(
     "question",
     [
@@ -402,6 +433,14 @@ def test_genuine_repeat_patient_phrasing_still_matches():
         "Birden çok randevusu olan hastaları listele",
     ):
         assert "repeat_patient_count" in catalog.match_metrics(fold(question))
+
+
+def test_specialized_cross_branch_repeat_suppresses_generic_repeat_metric():
+    matched = catalog.match_metrics(
+        fold("Şube adı bazında farklı şubelerde tekrar eden hasta sayısını göster")
+    )
+
+    assert matched == ["cross_branch_repeat_patient_count"]
 
 
 # ═══════════════ Multi-metric preservation (match_metrics span-overlap) ══════

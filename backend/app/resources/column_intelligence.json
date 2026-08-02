@@ -155,6 +155,15 @@
       "common_mistakes": [
         "ProtokolIslemState sayısal koddur ve değer eşlemesi doğrulanmamıştır; ikisi aynı alan değildir."
       ],
+      "known_values": [
+        "Beklemede",
+        "Gelmedi",
+        "Gerçekleşti",
+        "Giriş Yapılmış",
+        "İşlem Sürmekte"
+      ],
+      "values_verified": true,
+      "value_notes": "İptal değeri kaynak görünümde doğrulanmamıştır ve filtre olarak üretilmez.",
       "pii": false,
       "selectable": true,
       "filterable": true,
@@ -216,6 +225,14 @@
         "GenelRandevuBolumAdi"
       ],
       "common_mistakes": [],
+      "known_values": [
+        "Poliklinik",
+        "Ameliyat",
+        "Radyoloji",
+        "Kemoterapi"
+      ],
+      "values_verified": false,
+      "value_notes": "Kısmi örnek kümedir; başka değerler canlı DB value grounding ile doğrulanmalıdır.",
       "pii": false,
       "selectable": true,
       "filterable": true,
@@ -365,6 +382,13 @@
       "common_mistakes": [
         "Değerler kod olarak saklanır (E/K/D); okunabilir etiket kolonu yoktur."
       ],
+      "known_values": [
+        "E",
+        "K",
+        "D"
+      ],
+      "values_verified": true,
+      "value_notes": "E=erkek, K=kadın, D=diğer/bilinmiyor.",
       "pii": false,
       "selectable": true,
       "filterable": true,
@@ -420,6 +444,11 @@
         "CinsiyetId"
       ],
       "common_mistakes": [],
+      "known_values": [
+        "Türkiye"
+      ],
+      "values_verified": true,
+      "value_notes": "Yabancı cohort ana ülke değeri olarak Türkiye kullanır; diğer uyruklar canlı DB'den grounding gerektirir.",
       "pii": false,
       "selectable": true,
       "filterable": true,
@@ -591,6 +620,10 @@
         "hekim",
         "uzman",
         "kaynak",
+        "kanal",
+        "kanal kanal",
+        "kanala gore",
+        "kanallara gore",
         "kaynaga gore",
         "doktor adi",
         "randevu kaynagi",
@@ -812,6 +845,15 @@
     },
     {
       "terms": [
+        "memnun",
+        "memnuniyet",
+        "hasta memnuniyeti"
+      ],
+      "reason": "Hasta memnuniyeti veya memnuniyet puanı bu veri görünümünde bulunmuyor.",
+      "alternative": "DoktorId bazında randevu hacmi, gerçekleşme oranı veya gelmeme oranı analiz edilebilir."
+    },
+    {
+      "terms": [
         "odeme",
         "ucret",
         "tutar",
@@ -819,7 +861,8 @@
         "gelir",
         "ciro",
         "fiyat",
-        "tahsilat"
+        "tahsilat",
+        "tahsil"
       ],
       "reason": "Ödeme/tutar bilgisi view içinde bulunmuyor.",
       "alternative": "Randevu hacmi ve gerçekleşme oranı analiz edilebilir."
@@ -831,6 +874,13 @@
       ],
       "reason": "Reçete/ilaç bilgisi view içinde bulunmuyor.",
       "alternative": "Hizmet (HizmetAdi) bazında analiz yapılabilir."
+    },
+    {
+      "terms": [
+        "hastalarin ad soyadlarini"
+      ],
+      "reason": "Hasta adı ve soyadı kişisel veridir; ham kişi listesi olarak sunulamaz.",
+      "alternative": "HastaId değerlerini göstermeden tekil hasta sayısı veya toplulaştırılmış hasta davranışı analizi yapılabilir."
     },
     {
       "terms": [

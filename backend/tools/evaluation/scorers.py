@@ -37,9 +37,34 @@ GENERIC_ERROR_MARKERS = (
 )
 
 
-def score_routing(case: EvaluationCase, *, clarification_required: bool) -> StageResult:
+def score_routing(
+    case: EvaluationCase,
+    *,
+    clarification_required: bool,
+    in_scope: bool = True,
+) -> StageResult:
     start = time.perf_counter()
     failures: list[FailureRecord] = []
+    if case.expected.in_scope and not in_scope:
+        failures.append(
+            _failure(
+                case,
+                EvaluationStage.ROUTING,
+                FailureCode.ROUTING_IN_SCOPE_FALSE_POSITIVE,
+                True,
+                False,
+            )
+        )
+    if not case.expected.in_scope and in_scope:
+        failures.append(
+            _failure(
+                case,
+                EvaluationStage.ROUTING,
+                FailureCode.ROUTING_OUT_OF_SCOPE_FALSE_POSITIVE,
+                False,
+                True,
+            )
+        )
     if case.expected.clarification_required and not clarification_required:
         failures.append(_failure(case, EvaluationStage.ROUTING, FailureCode.CLARIFICATION_MISSED, True, False))
     if not case.expected.clarification_required and clarification_required:
@@ -53,7 +78,7 @@ def score_query_plan(case: EvaluationCase, plan: QueryPlan | None) -> StageResul
     start = time.perf_counter()
     failures: list[FailureRecord] = []
     if plan is None:
-        if case.expected.clarification_required:
+        if case.expected.clarification_required or not case.expected.answerable:
             return _stage(EvaluationStage.QUERY_PLAN, failures, start)
         failures.append(_failure(case, EvaluationStage.QUERY_PLAN, FailureCode.PLAN_NOT_ANSWERABLE, "plan", None))
         return _stage(EvaluationStage.QUERY_PLAN, failures, start)

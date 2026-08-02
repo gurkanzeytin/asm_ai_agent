@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "COMMENTARY-001",
+      "analytics": {
+        "analytics_type": "summary",
+        "data_shape": "single_value",
+        "metrics": {"count": 1, "total": 1240},
+        "row_count": 1,
+        "aggregate_result": true,
+        "displayable_kpis": [
+          {"key": "appointment_count", "label": "Toplam randevu", "value": 1240, "format": "integer"}
+        ]
+      },
+      "must_include": ["Toplam randevu: 1.240"],
+      "must_not_include": ["yeterli veri bulunamadı"]
+    },
+    {
+      "id": "COMMENTARY-002",
+      "analytics": {
+        "analytics_type": "summary",
+        "data_shape": "single_value",
+        "metrics": {"count": 1, "total": 18.4},
+        "row_count": 1,
+        "aggregate_result": true,
+        "displayable_kpis": [
+          {"key": "no_show_rate", "label": "Gelmeme oranı", "value": 18.4, "format": "percentage"}
+        ]
+      },
+      "must_include": ["Gelmeme oranı: %18,4"],
+      "must_not_include": ["18,4 kayıt"]
+    },
+    {
+      "id": "COMMENTARY-003",
+      "analytics": {
+        "analytics_type": "distribution",
+        "data_shape": "categorical",
+        "metrics": {
+          "count": 2,
+          "total": 100,
+          "average": 50,
+          "maximum": 60,
+          "top_category": "Merkez",
+          "distribution": {"Merkez": 60, "Kadıköy": 40},
+          "ranking": [
+            {"label": "Merkez", "value": 60},
+            {"label": "Kadıköy", "value": 40}
+          ]
+        },
+        "label_column": "SubeAdi",
+        "row_count": 2,
+        "comparison_category_count": 2,
+        "comparison_sufficient": true
+      },
+      "must_include": ["Toplam 100 kayıttan 60", "%60,0", "Merkez"],
+      "must_not_include": ["karşılaştırma yapılamadı"]
+    },
+    {
+      "id": "COMMENTARY-004",
+      "analytics": {
+        "analytics_type": "comparison",
+        "data_shape": "single_row",
+        "metrics": {"count": 1, "difference": 25, "percentage_change": 20},
+        "row_count": 1
+      },
+      "must_include": ["önceki döneme göre arttı", "%20,0"],
+      "must_not_include": ["azaldı"]
+    },
+    {
+      "id": "COMMENTARY-005",
+      "analytics": {
+        "analytics_type": "trend",
+        "data_shape": "time_series",
+        "metrics": {
+          "count": 3,
+          "total": 360,
+          "average": 120,
+          "growth_rate": 20,
+          "trend_direction": "upward"
+        },
+        "row_count": 3,
+        "trend_metrics": {
+          "endpoint_change": 40,
+          "endpoint_percentage_change": 40,
+          "endpoint_direction": "upward",
+          "slope": 20,
+          "slope_direction": "upward",
+          "trend_consistency": "consistent_upward",
+          "volatility": 10,
+          "first_comparable_period": "2025-01",
+          "last_comparable_period": "2025-03",
+          "comparable_period_count": 3
+        }
+      },
+      "must_include": ["tutarlı bir yükseliş", "Ortalama değer: 120"],
+      "must_not_include": ["düşüş"]
+    },
+    {
+      "id": "COMMENTARY-006",
+      "analytics": {
+        "analytics_type": "none",
+        "data_shape": "empty",
+        "metrics": {"count": 0},
+        "row_count": 0
+      },
+      "must_include": ["yeterli veri bulunamadı", "yorum üretmek için yeterli veri içermiyor"],
+      "must_not_include": ["en yüksek", "arttı", "azaldı"]
+    },
+    {
+      "id": "COMMENTARY-007",
+      "analytics": {
+        "analytics_type": "summary",
+        "data_shape": "single_value",
+        "metrics": {"count": 1, "total": 12},
+        "row_count": 1,
+        "aggregate_result": true,
+        "displayable_kpis": [
+          {"key": "missing_doctor_count", "label": "Doktoru eksik kayıt", "value": 12, "format": "integer"}
+        ]
+      },
+      "must_include": ["Doktoru eksik kayıt: 12"],
+      "must_not_include": ["hasta", "doktor adı"]
+    }
+  ]
+}

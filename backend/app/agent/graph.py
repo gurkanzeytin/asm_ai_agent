@@ -8,12 +8,13 @@ from app.agent.nodes.analyze_results import AnalyzeResultsNode
 from app.agent.nodes.execute_sql import ExecuteSQLNode
 from app.agent.nodes.generate_chat_response import GenerateChatResponseNode
 from app.agent.nodes.generate_clarification import GenerateClarificationNode
+from app.agent.nodes.generate_conversation_memory import GenerateConversationMemoryNode
 from app.agent.nodes.generate_help import GenerateHelpNode
 from app.agent.nodes.generate_insights import GenerateInsightsNode
 from app.agent.nodes.generate_observations import GenerateObservationsNode
-from app.agent.nodes.generate_conversation_memory import GenerateConversationMemoryNode
 from app.agent.nodes.generate_out_of_scope import GenerateOutOfScopeNode
 from app.agent.nodes.generate_report import GenerateReportNode
+from app.agent.nodes.generate_schema_capability import GenerateSchemaCapabilityNode
 from app.agent.nodes.generate_sql import GenerateSQLNode
 from app.agent.nodes.resolve_filter_values import ResolveFilterValuesNode
 from app.agent.nodes.retrieve_context import RetrieveContextNode
@@ -27,6 +28,7 @@ from app.services.interfaces import (
     IPromptService,
     IWorkflowService,
 )
+from app.services.schema_answerability import SchemaAnswerabilityService
 from app.services.workflow_progress import with_progress
 
 logger = logging.getLogger(__name__)
@@ -43,6 +45,8 @@ def route_by_intent(state: AgentState) -> str:
     # SQL, no intent classification. ReportingService precomputes the answer.
     if state.conversation_memory_answer:
         return "conversation_memory"
+    if state.schema_capability_answer:
+        return "schema_capability"
 
     intent_res = state.intent
     if not intent_res:
@@ -198,12 +202,16 @@ class AgentGraphBuilder:
         logger.info("Starting agent graph construction via AgentGraphBuilder.")
 
         # 1. Instantiate workflow nodes
-        analyze_intent_node = AnalyzeIntentNode(self.intent_classifier)
+        analyze_intent_node = AnalyzeIntentNode(
+            self.intent_classifier,
+            schema_answerability_service=SchemaAnswerabilityService(self.llm_provider),
+        )
         chat_node = GenerateChatResponseNode(self.prompt_service, self.llm_provider)
         help_node = GenerateHelpNode(self.help_service)
         clarification_node = GenerateClarificationNode()
         out_of_scope_node = GenerateOutOfScopeNode()
         conversation_memory_node = GenerateConversationMemoryNode()
+        schema_capability_node = GenerateSchemaCapabilityNode()
 
         retrieve_node = RetrieveContextNode(self.prompt_service)
         resolve_values_node = ResolveFilterValuesNode()
@@ -284,6 +292,10 @@ class AgentGraphBuilder:
             "generate_conversation_memory",
             with_progress("reporting", conversation_memory_node.execute),
         )
+        workflow.add_node(
+            "generate_schema_capability",
+            with_progress("reporting", schema_capability_node.execute),
+        )
 
         workflow.add_node("retrieve_context", with_progress("preparing_sql", retrieve_node.execute))
         workflow.add_node(
@@ -316,6 +328,7 @@ class AgentGraphBuilder:
                 "unknown": "generate_clarification",
                 "out_of_scope": "generate_out_of_scope",
                 "conversation_memory": "generate_conversation_memory",
+                "schema_capability": "generate_schema_capability",
             },
         )
 
@@ -324,6 +337,7 @@ class AgentGraphBuilder:
         workflow.add_edge("generate_help", END)
         workflow.add_edge("generate_clarification", END)
         workflow.add_edge("generate_conversation_memory", END)
+        workflow.add_edge("generate_schema_capability", END)
         workflow.add_edge("generate_out_of_scope", END)
 
         # Standard SQL execution pipeline

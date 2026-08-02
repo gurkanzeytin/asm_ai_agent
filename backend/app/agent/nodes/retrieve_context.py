@@ -1,10 +1,13 @@
 import logging
 import time
+from calendar import monthrange
+from datetime import date, timedelta
 
 from app.agent.nodes.node_interface import IAgentNode
 from app.agent.state import AgentState
+from app.application_models.schema_reasoning import SchemaReasoningDecision
 from app.context.analytical_signals import dedupe_date_filters, merge_query_plans
-from app.planning.models import QueryPlan
+from app.planning.models import DateFilterPlan, PlannedDimension, PlannedMetric, QueryPlan
 from app.planning.planner import QueryPlanner
 from app.semantics import catalog
 from app.semantics.view_mapping import fold
@@ -14,6 +17,7 @@ from app.services.query_analyzer import QueryAnalyzer
 logger = logging.getLogger(__name__)
 
 _OUTPUT_ACTION_MARKERS = ("sql", "sorgu")
+_SCHEMA_REASONING_SIGNAL = "schema_reasoning:answerable"
 
 
 class RetrieveContextNode(IAgentNode):
@@ -43,6 +47,129 @@ class RetrieveContextNode(IAgentNode):
         except Exception as error:
             logger.error(f"Query planning failed; continuing without a plan: {error}")
             return None
+
+    @staticmethod
+    def _date_filter_from_scope(
+        scope: str | None,
+        column: str,
+        *,
+        today: date | None = None,
+    ) -> DateFilterPlan | None:
+        if not scope or scope == "all_time":
+            return None
+        current = today or date.today()
+        if scope == "current_day":
+            start = end = current
+        elif scope == "previous_day":
+            start = end = current - timedelta(days=1)
+        elif scope == "current_week":
+            start = current - timedelta(days=current.weekday())
+            end = start + timedelta(days=6)
+        elif scope == "previous_week":
+            start = current - timedelta(days=current.weekday() + 7)
+            end = start + timedelta(days=6)
+        elif scope == "current_month":
+            start = current.replace(day=1)
+            end = current.replace(day=monthrange(current.year, current.month)[1])
+        elif scope == "previous_month":
+            end = current.replace(day=1) - timedelta(days=1)
+            start = end.replace(day=1)
+        elif scope == "current_year":
+            start, end = date(current.year, 1, 1), date(current.year, 12, 31)
+        elif scope == "previous_year":
+            start, end = date(current.year - 1, 1, 1), date(current.year - 1, 12, 31)
+        elif scope == "last_7_days":
+            start, end = current - timedelta(days=6), current
+        elif scope == "last_30_days":
+            start, end = current - timedelta(days=29), current
+        else:
+            return None
+        return DateFilterPlan(
+            expression=f"schema_reasoning:{scope}",
+            start_date=start.isoformat(),
+            end_date=end.isoformat(),
+            column=column,
+        )
+
+    @staticmethod
+    def _typed_schema_plan(
+        question: str,
+        decision: SchemaReasoningDecision,
+        db_context,
+        base_plan: QueryPlan | None,
+    ) -> QueryPlan | None:
+        if not decision.typed_plan_ready:
+            return None
+        metric_by_id = catalog.load_metric_catalog().by_id()
+        metrics = list(decision.supporting_metrics)
+        dimensions = list(decision.dimension_columns)
+        required_columns = catalog.required_columns_for(metrics, dimensions)
+        if decision.time_column and decision.time_column not in required_columns:
+            required_columns.append(decision.time_column)
+
+        planned_metrics = [
+            PlannedMetric(
+                metric_id=metric.id,
+                aggregation_type=metric.formula_type,
+                format_type=metric.result_type,
+                source_columns=list(metric.required_columns),
+            )
+            for metric_id in metrics
+            if (metric := metric_by_id.get(metric_id)) is not None
+        ]
+        from app.context.analytical_signals import column_to_dimension
+
+        planned_dimensions = [
+            PlannedDimension(
+                column=column,
+                canonical_name=column_to_dimension(column),
+            )
+            for column in dimensions
+        ]
+        primary = metric_by_id.get(metrics[0]) if len(metrics) == 1 else None
+        view_name = db_context.views[0].name if db_context.views else None
+        date_filters = list(base_plan.date_filters) if base_plan else []
+        periods = list(base_plan.periods) if base_plan else []
+        if decision.time_scope == "all_time":
+            date_filters, periods = [], []
+        elif decision.time_scope:
+            time_column = decision.time_column or "BaslangicTarihi"
+            resolved = RetrieveContextNode._date_filter_from_scope(
+                decision.time_scope, time_column
+            )
+            date_filters = [resolved] if resolved else []
+            periods = []
+
+        assumptions = [
+            *decision.assumptions,
+            "Soru, katalog dışı söyleyiş nedeniyle doğrulanmış LLM şema planıyla çözüldü.",
+        ]
+        return QueryPlan(
+            question=question,
+            planning_source="llm_schema_reasoning",
+            output_entity="Appointment",
+            fact_entity="Appointment",
+            output_table=view_name,
+            fact_table=view_name,
+            date_filters=date_filters,
+            periods=periods,
+            aggregation=primary.formula if primary else None,
+            ranking=decision.order,
+            order=decision.order,
+            limit=decision.limit,
+            analysis_type=decision.analysis_type,
+            projection=dimensions[:2],
+            metrics=metrics,
+            dimensions=dimensions,
+            planned_metrics=planned_metrics,
+            planned_dimensions=planned_dimensions,
+            grouping_granularity=decision.grouping_granularity,
+            required_columns=required_columns,
+            answerable=True,
+            confidence=decision.confidence,
+            assumptions=assumptions,
+            planner_ms=base_plan.planner_ms if base_plan else 0.0,
+        )
 
     async def execute(self, state: AgentState) -> AgentState:
         logger.info("RetrieveContextNode execution started.")
@@ -159,6 +286,27 @@ class RetrieveContextNode(IAgentNode):
                             }
                         )
 
+            # The deterministic planner already failed to recognize this turn's
+            # wording. Prefer the validated typed schema plan; if the LLM could
+            # establish only answerability (no metric/analysis contract), release
+            # the weak deterministic plan and use the existing schema-only path.
+            if _SCHEMA_REASONING_SIGNAL in state.answerability_signals:
+                query_plan = self._typed_schema_plan(
+                    state.question,
+                    state.schema_reasoning_decision,
+                    db_context,
+                    query_plan,
+                ) if state.schema_reasoning_decision is not None else None
+                logger.info(
+                    "RetrieveContextNode selected schema reasoning SQL fallback.",
+                    extra={
+                        "typed_plan": query_plan is not None,
+                        "planning_source": (
+                            query_plan.planning_source if query_plan else "schema_only"
+                        ),
+                    },
+                )
+
             logger.info("RetrieveContextNode completed successfully.")
 
             duration = (time.perf_counter() - start_time) * 1000
@@ -187,4 +335,3 @@ class RetrieveContextNode(IAgentNode):
                     "node_timings": {**state.node_timings, "retrieve_context": duration},
                 }
             )
-

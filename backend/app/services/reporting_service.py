@@ -18,6 +18,7 @@ from app.reporting.output_policy import (
     determine_output_policy,
     determine_requested_response_mode,
 )
+from app.reporting.presentation import get_dimension_label, get_metric_label
 from app.services.answerability import AnswerabilityInput
 from app.services.workflow_progress import (
     ProgressCallback,
@@ -53,9 +54,9 @@ _UNSET = object()
 # AG-022 SAFE_ERROR: friendly, non-technical guidance shown when the pipeline
 # could not produce any report. Guarantees the user never sees an empty or
 # generic failure response.
-_SAFE_ERROR_MARKDOWN = """# Yanıt Oluşturulamadı
+_SAFE_ERROR_MARKDOWN = """# İsteğinizi Aldım, Ancak Veri Çıkaramadım
 
-Sorunuzu işlerken beklenmedik bir sorunla karşılaştım. Bu sizin hatanız değil.
+Yanlış veya doğrulanmamış bir sayı üretmemek için bu istekte sonuç vermedim. Bu sizin hatanız değil.
 
 ## Ne yapabilirsiniz?
 
@@ -65,6 +66,49 @@ Sorunuzu işlerken beklenmedik bir sorunla karşılaştım. Bu sizin hatanız de
 
 Sorun devam ederse sistem yöneticinize başvurabilirsiniz.
 """
+
+
+def _safe_error_markdown_for_plan(query_plan: QueryPlan | None) -> str:
+    """Return actionable, non-technical guidance for an unfinished analysis."""
+    if query_plan is None:
+        return _SAFE_ERROR_MARKDOWN
+
+    understood: list[str] = []
+    metric_labels = [get_metric_label(metric) for metric in query_plan.metrics]
+    if metric_labels:
+        understood.append(f"Ölçüm: {', '.join(metric_labels)}")
+    dimension_labels = [get_dimension_label(item) for item in query_plan.dimensions]
+    if dimension_labels:
+        understood.append(f"Kırılım: {', '.join(dimension_labels)}")
+    if query_plan.date_filters:
+        understood.append(
+            "Dönem: "
+            + ", ".join(date_filter.expression for date_filter in query_plan.date_filters)
+        )
+
+    lines = [
+        "# İsteğinizi Aldım, Ancak Veri Çıkaramadım",
+        "",
+        "Yanlış veya doğrulanmamış bir sayı üretmemek için bu istekte sonuç vermedim.",
+    ]
+    if understood:
+        lines.extend(["", "## Anladığım analiz", "", *[f"- {item}" for item in understood]])
+    if query_plan.answerability_reason:
+        lines.extend(["", "## Neden", "", query_plan.answerability_reason])
+
+    lines.extend(["", "## Devam etmek için", ""])
+    if not query_plan.metrics:
+        lines.append(
+            '- Ölçümü açıkça belirtin: “randevu sayısı”, “ortalama süre” veya “gelmeme oranı”.'
+        )
+    if not query_plan.date_filters:
+        lines.append('- Dönemi belirtin: “2025 yılında”, “bu ay” veya açık bir tarih aralığı.')
+    if query_plan.metrics:
+        lines.append(
+            f'- Şu kalıbı deneyin: “2025 yılında {metric_labels[0].casefold()} nedir?”'
+        )
+    lines.append("- İsterseniz aynı soruyu tek ölçüm ve tek kırılımla yeniden yazın.")
+    return "\n".join(lines)
 
 
 def _sql_only_markdown(sql: str) -> str:
@@ -272,6 +316,7 @@ class ReportingService:
         requested_response_mode = final_state.get("response_mode") or requested_response_mode
         query_plan_dto = final_state.get("query_plan")
         semantic_frame_dto = final_state.get("semantic_frame")
+        ambiguity_dto = final_state.get("ambiguity")
 
         # AG-022 SAFE_ERROR: the workflow must never end without a user-facing
         # response. If no node produced a report, synthesize friendly guidance.
@@ -308,8 +353,8 @@ class ReportingService:
                     errors or "none",
                 )
                 generated_report_dto = GeneratedReport(
-                    title="Yanıt Oluşturulamadı",
-                    markdown=_SAFE_ERROR_MARKDOWN,
+                    title="İstek Tamamlanamadı",
+                    markdown=_safe_error_markdown_for_plan(query_plan_dto),
                     provider="static",
                     model="safe_error_fallback",
                     latency_ms=0.0,
@@ -419,6 +464,18 @@ class ReportingService:
                             if query_plan_dto
                             else {}
                         ),
+                    )
+                elif (
+                    ambiguity_dto is not None
+                    and ambiguity_dto.matched_phrase
+                    in {"history_period", "duration_basis"}
+                ):
+                    self._context_manager.set_pending_clarification(
+                        session_id,
+                        field=ambiguity_dto.matched_phrase,
+                        reason=ambiguity_dto.question,
+                        choices=ambiguity_dto.options,
+                        original_question=pipeline_question,
                     )
                 elif semantic_frame_dto is not None:
                     # An ambiguous ranking phrase ("en iyi", "en verimli", ...)

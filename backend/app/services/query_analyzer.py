@@ -15,6 +15,7 @@ from app.application_models.query_analysis import (
     QueryAnalysis,
 )
 from app.core.config import settings
+from app.shared.history_period import has_unbounded_history_marker
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,7 @@ class QueryAnalyzer:
         detected_limit, detected_order = self._detect_limit_and_order(normalized_input)
         ambiguity = self._match_ambiguity(normalized_input, rules)
 
+        catalog_query = self._apply_orthography_rules(normalized_input, rules)
         rewritten_query, expanded_query, matched_synonyms = self._rewrite_stages(
             normalized_input, rules
         )
@@ -149,6 +151,7 @@ class QueryAnalyzer:
 
         analysis = QueryAnalysis(
             original_query=original_query,
+            catalog_query=catalog_query,
             normalized_query=expanded_query,
             rewritten_query=rewritten_query,
             expanded_query=expanded_query,
@@ -181,6 +184,45 @@ class QueryAnalyzer:
         from app.semantics import catalog
 
         folded = self._fold(self._normalize_query_text(query))
+        if self._needs_duration_basis_clarification(folded):
+            return AmbiguityResult(
+                matched_phrase="duration_basis",
+                question=(
+                    "Hangi süreyi hesaplamamı istersiniz? Planlanan süre kayıtlı "
+                    "RandevuSuresi alanıdır; fiili süre başlangıç ve bitiş "
+                    "zamanlarından hesaplanır."
+                ),
+                options=[
+                    "Planlanan randevu süresi",
+                    "Fiili süre (başlangıç-bitiş farkı)",
+                ],
+            )
+        if self._needs_history_period_clarification(folded):
+            return AmbiguityResult(
+                matched_phrase="history_period",
+                question=(
+                    '“Daha önce” için hangi dönemi kullanmamı istersiniz? '
+                    "Yanlış hasta kesişimi hesaplamamak için başlangıç dönemini belirtin."
+                ),
+                options=[
+                    "Bir önceki takvim yılı",
+                    "Başlangıç yılını kendim yazacağım (ör. 2024)",
+                ],
+            )
+        unverified_metric = catalog.match_unverified_metric(folded)
+        if unverified_metric is not None:
+            return AmbiguityResult(
+                matched_phrase="unverified_metric_mapping",
+                question=(
+                    f"{unverified_metric.name} metriğinin kaynak sistemdeki kod/değer "
+                    "eşlemesi henüz doğrulanmadı. Yanlış sonuç üretmemek için önce bu "
+                    "eşlemeyi doğrulamamız gerekiyor."
+                ),
+                options=[
+                    "Doğrulanmış başka bir metrik soracağım",
+                    "Eşleme doğrulandıktan sonra tekrar deneyeceğim",
+                ],
+            )
         if self._is_format_only_database_request(folded):
             return AmbiguityResult(
                 matched_phrase="format_only_database_request",
@@ -199,6 +241,51 @@ class QueryAnalyzer:
                 options=[alternative or "Farklı bir analiz", "Sorumu değiştireceğim"],
             )
         return None
+
+    @staticmethod
+    def _needs_duration_basis_clarification(folded_query: str) -> bool:
+        """Detect duration wording that names neither stored nor actual basis."""
+        asks_average_duration = bool(
+            re.search(r"\b(?:ortalama|ort)\w*\b", folded_query)
+            and re.search(r"\b(?:sure|surmus|suruyor|surdu)\w*\b", folded_query)
+            and re.search(r"\brandevu\w*\b", folded_query)
+        )
+        if not asks_average_duration:
+            return False
+        has_explicit_basis = bool(
+            re.search(r"\brandevu\s+sure\w*\b", folded_query)
+        ) or any(
+            marker in folded_query
+            for marker in (
+                "planlanan",
+                "takvim",
+                "kayitli sure",
+                "fiili",
+                "fiilen",
+                "gercek sure",
+                "gercekte",
+                "baslangic",
+                "bitis",
+                "alma oncesi",
+                "onceden",
+                "lead time",
+            )
+        )
+        return not has_explicit_basis
+
+    @staticmethod
+    def _needs_history_period_clarification(folded_query: str) -> bool:
+        """Detect an unbounded previous-period cohort paired with a current year."""
+        return bool(
+            has_unbounded_history_marker(folded_query)
+            and re.search(r"\bbu\s+(?:yil|sene)\b", folded_query)
+            and re.search(r"\b(?:hasta|kisi)\w*\b", folded_query)
+            and re.search(r"\b(?:gelen|gelmis|islem|randevu)\w*\b", folded_query)
+            and (
+                re.search(r"\b(?:tekrar|yeniden|yine)\w*\b", folded_query)
+                or re.search(r"\bbu\s+(?:yil|sene)\s+da\b", folded_query)
+            )
+        )
 
     @staticmethod
     def _is_format_only_database_request(folded_query: str) -> bool:
@@ -258,6 +345,20 @@ class QueryAnalyzer:
             matched.extend(group_matched)
 
         return rewritten, expanded, matched
+
+    def _apply_orthography_rules(self, query: str, rules: dict[str, Any]) -> str:
+        """Returns the narrow spelling-normalized surface used by catalogs.
+
+        Medical/domain/ranking rewrites intentionally stay out: they are useful
+        for entity discovery but can change an already established physical
+        dimension identity (for example ``hekim`` source-name vs ``DoktorId``).
+        """
+        normalized = query
+        for name, group_rules in self._rewrite_rule_groups(rules):
+            if name != "orthography":
+                continue
+            normalized, _ = self._apply_rewrite_rules(normalized, group_rules)
+        return normalized
 
     def _rewrite_rule_groups(self, rules: dict[str, Any]) -> list[tuple[str, list[dict]]]:
         """Collects rewrite rules from the flat legacy list and the grouped config."""
@@ -809,7 +910,9 @@ class QueryAnalyzer:
         # period-comparison path.
         year_span_spans: list[tuple[int, int]] = []
         if not re.search(
-            r"aras\w*\s*(?:ki\s+)?(?:fark|degisim|kiyas|karsilastir)", query_ascii, re.IGNORECASE
+            r"aras\w*(?:\s+\w+){0,5}\s+(?:fark|degisim|kiyas|karsilastir)\w*",
+            query_ascii,
+            re.IGNORECASE,
         ):
             for match in re.finditer(
                 r"\b(20\d{2}|19\d{2})\s*(?:-|–|—|\s+ile\s+|\s+ila\s+)\s*(20\d{2}|19\d{2})"
@@ -881,11 +984,11 @@ class QueryAnalyzer:
             month = today.month - 1 if today.month > 1 else 12
             ranges.append(self._month_range("gecen ay", year, month))
 
-        if "bu yil" in query_ascii:
+        if "bu yil" in query_ascii or "bu sene" in query_ascii:
             ranges.append(self._date_range("bu yil", date(today.year, 1, 1), today, "year"))
 
-        if "gecen yil" in query_ascii or re.search(
-            r"\b(?:bir\s+)?onceki\s+yil\w*\b", query_ascii
+        if "gecen yil" in query_ascii or "gecen sene" in query_ascii or re.search(
+            r"\b(?:bir\s+)?onceki\s+(?:yil|sene)\w*\b", query_ascii
         ):
             year = today.year - 1
             ranges.append(
@@ -1029,9 +1132,12 @@ class QueryAnalyzer:
 
         # Full calendar years, including Turkish case/possessive forms used by
         # short follow-ups (``2024 yılının``, ``2024 yılı``, ``2024 için``,
-        # ``2024'te``).  Query normalization has already removed apostrophes.
+        # ``2024'te``) and the common apostrophe-free chat forms (``2024te``,
+        # ``2025ten``). Query normalization has already removed apostrophes,
+        # but cannot introduce the missing space when the user omitted one.
         for match in re.finditer(
-            rf"\b(20\d{{2}}|19\d{{2}})(?:\s+(?:yil\w*|icin|olan\w*|[dty][ae]))?\b"
+            rf"\b(20\d{{2}}|19\d{{2}})(?:(?:\s+(?:yil\w*|icin|olan\w*))|"
+            rf"(?:\s*[dt][ae]n?))?\b"
             rf"(?!\s+(?:{month_alternatives})\b)",
             query_ascii,
         ):

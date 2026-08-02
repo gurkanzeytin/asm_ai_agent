@@ -25,6 +25,7 @@ from app.application_models.generated_sql import GeneratedSQL
 from app.application_models.intent import IntentResult, IntentType
 from app.application_models.outcome import AgentOutcome
 from app.application_models.workflow_models import QueryResult
+from app.planning.models import QueryPlan
 from app.reporting.report_classifier import ReportType
 from app.reporting.template_renderer import TemplateReportRenderer
 from app.services.answerability import AnswerabilityGuard
@@ -504,10 +505,32 @@ class TestSafeErrorFallback:
 
         assert result.outcome == AgentOutcome.SAFE_ERROR.value
         assert result.generated_report is not None
-        assert "Yanıt Oluşturulamadı" in result.generated_report.markdown
+        assert "İsteğinizi Aldım" in result.generated_report.markdown
+        assert "Yanlış veya doğrulanmamış bir sayı" in result.generated_report.markdown
         # never leak technical details to the user
         assert "timeout" not in result.generated_report.markdown.lower()
         assert result.errors  # diagnostics preserved for observability
+
+    @pytest.mark.asyncio
+    async def test_safe_error_explains_the_understood_analysis(self):
+        plan = QueryPlan(
+            question="2025 randevu suresi",
+            analysis_type="duration_analysis",
+            metrics=["appointment_duration_average"],
+        )
+        graph = FakeGraph(
+            {
+                "errors": ["internal validation detail"],
+                "query_plan": plan,
+            }
+        )
+        service = ReportingService(agent_graph=graph)
+
+        result = await service.run_workflow("2025 randevu suresi", session_id=None)
+
+        assert result.outcome == AgentOutcome.SAFE_ERROR.value
+        assert "ortalama randevu süresi" in result.generated_report.markdown.casefold()
+        assert "internal validation detail" not in result.generated_report.markdown
 
     @pytest.mark.asyncio
     async def test_existing_report_is_untouched(self):

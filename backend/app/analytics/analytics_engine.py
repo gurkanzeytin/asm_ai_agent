@@ -11,6 +11,7 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import date
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from app.analytics import calculators
@@ -55,6 +56,12 @@ class _ComputedMetrics:
 # "month"/"week" substring, get misclassified as a second temporal column, and
 # collapse a valid multi-row trend result to DataShape.TABULAR instead of
 # TIME_SERIES.
+#
+# The remaining fragments ("day", "time", "date", "period") CANNOT take the same
+# word-boundary treatment: real view columns spell them without one
+# ("CreatedDate", "BaslangicTarihi"). They are instead disambiguated by
+# `_known_metric_names` below — a column that IS a metric is never a date axis,
+# whatever its name reads like.
 _TEMPORAL_NAME_PATTERN = re.compile(
     r"tarih|date|zaman|time|saat|hour|gun|day|hafta|week\b|ay\b|month\b|yil|year|donem|period",
     re.IGNORECASE,
@@ -64,6 +71,29 @@ _TEMPORAL_VALUE_PATTERN = re.compile(
     r"^\d{4}[-/.]\d{1,2}([-/.]\d{1,2})?([ T].*)?$|^\d{1,2}[-/.]\d{1,2}[-/.]\d{4}$"
 )
 _ID_NAME_PATTERN = re.compile(r"(^|_)id$|^id($|_)", re.IGNORECASE)
+
+
+@lru_cache(maxsize=1)
+def _catalog_metric_names() -> frozenset[str]:
+    """Every metric id the metric catalog defines, folded for comparison.
+
+    Nine of them read like dates to `_TEMPORAL_NAME_PATTERN`
+    ("appointment_lead_time_average", "actual_duration_from_dates",
+    "same_day_booking_rate", ...). Classifying those aliases as the temporal
+    axis leaves `metric_column` None, so the answer loses its own number.
+    """
+    from app.semantics.catalog import load_metric_catalog
+
+    return frozenset(metric.id.lower() for metric in load_metric_catalog().metrics)
+
+
+def _known_metric_names(metric_aliases: dict[str, str] | None) -> frozenset[str]:
+    """Column names that are metrics, never date axes: the aliases this query
+    actually planned, plus every catalog metric id (which also covers
+    LLM-generated SQL, where no alias map reaches the analytics layer)."""
+    planned = {alias.lower() for alias in (metric_aliases or {}).values()}
+    return _catalog_metric_names() | frozenset(planned)
+
 
 _TOP_N_SIZE = 5
 _MAX_DISTRIBUTION_CATEGORIES = 12
@@ -98,7 +128,9 @@ class AnalyticsEngine:
         start_time = time.perf_counter()
 
         intents = self.intent_detector.detect(question)
-        metric_column, label_column, temporal_column = self._profile_columns(query_result, question)
+        metric_column, label_column, temporal_column = self._profile_columns(
+            query_result, question, metric_aliases
+        )
         data_shape = self._classify_shape(query_result, metric_column, temporal_column, plan)
         result_shape = self._classify_result_shape(query_result, data_shape, plan)
 
@@ -283,18 +315,22 @@ class AnalyticsEngine:
     # ── Result profiling ───────────────────────────────────────────────────────
 
     def _profile_columns(
-        self, query_result: QueryResult, question: str = ""
+        self,
+        query_result: QueryResult,
+        question: str = "",
+        metric_aliases: dict[str, str] | None = None,
     ) -> tuple[str | None, str | None, str | None]:
         """Identifies the metric (numeric), label (categorical), and temporal columns."""
         numeric_columns: list[str] = []
         temporal_columns: list[str] = []
         label_columns: list[str] = []
+        metric_names = _known_metric_names(metric_aliases)
 
         for column in query_result.columns:
             column_values = [
                 row.get(column) for row in query_result.rows if row.get(column) is not None
             ]
-            if self._is_temporal(column, column_values):
+            if column.lower() not in metric_names and self._is_temporal(column, column_values):
                 temporal_columns.append(column)
             elif column_values and all(
                 isinstance(value, (int, float)) and not isinstance(value, bool)

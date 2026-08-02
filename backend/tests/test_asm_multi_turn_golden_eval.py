@@ -1,5 +1,6 @@
 import json
-from datetime import date, datetime
+import re
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -33,11 +34,47 @@ class _PromptService:
         return self.context
 
 
+def _month_bounds(anchor: date) -> tuple[date, date]:
+    """First and last day of the month `anchor` falls in."""
+    first = anchor.replace(day=1)
+    last = date(
+        first.year + (first.month == 12),
+        first.month % 12 + 1,
+        1,
+    ) - timedelta(days=1)
+    return first, last
+
+
+def _relative_date_placeholders(today: date) -> dict[str, str]:
+    """Placeholder -> ISO date, resolved against the run date.
+
+    Relative wording ("bugün", "bu ay", "geçen ay") resolves against the real
+    system clock inside the planner, so the golden dataset must not freeze the
+    answer: MT-003 hard-coded July 2026 for "Bu ay" and failed in every other
+    month. Absolute wording in the dataset ("Ocak 2026", "2025 Mayıs") stays a
+    literal — it is not relative and must not drift.
+    """
+    current_start, current_end = _month_bounds(today)
+    previous_start, previous_end = _month_bounds(current_start - timedelta(days=1))
+    return {
+        "{today}": today.isoformat(),
+        "{current_month_start}": current_start.isoformat(),
+        "{current_month_end}": current_end.isoformat(),
+        "{previous_month_start}": previous_start.isoformat(),
+        "{previous_month_end}": previous_end.isoformat(),
+    }
+
+
 def _load_scenarios() -> list[dict]:
-    # "bugün" resolves against the real system clock in the planner; the golden
-    # dataset carries a {today} placeholder instead of a frozen date.
     text = DATASET_PATH.read_text(encoding="utf-8")
-    raw = json.loads(text.replace("{today}", date.today().isoformat()))
+    for placeholder, value in _relative_date_placeholders(date.today()).items():
+        text = text.replace(placeholder, value)
+    # A typo'd placeholder would otherwise reach the assertions as a literal
+    # string and fail with a confusing date mismatch instead of naming itself.
+    unresolved = sorted(set(re.findall(r'"(\{[a-z_]+\})"', text)))
+    assert not unresolved, f"çözülmemiş yer tutucu: {unresolved}"
+
+    raw = json.loads(text)
     assert raw["view"] == VIEW_NAME
     return raw["scenarios"]
 
@@ -156,3 +193,78 @@ async def test_asm_multi_turn_golden_eval_matches_context_planner_sql_and_output
             sql_compliance = compliance.check(built.sql, plan)
             assert sql_compliance.compliant, sql_compliance.missing
             _assert_output_policy(turn["question"], expected, built.sql)
+
+
+@pytest.mark.parametrize(
+    "today,expected",
+    [
+        # Yıl sınırı: ocakta "geçen ay" bir önceki yılın aralığıdır.
+        (
+            date(2026, 1, 15),
+            ("2026-01-01", "2026-01-31", "2025-12-01", "2025-12-31"),
+        ),
+        # Artık yıl: şubat 29 çeker.
+        (
+            date(2028, 3, 10),
+            ("2028-03-01", "2028-03-31", "2028-02-01", "2028-02-29"),
+        ),
+        # Artık olmayan yıl.
+        (
+            date(2026, 3, 10),
+            ("2026-03-01", "2026-03-31", "2026-02-01", "2026-02-28"),
+        ),
+        # Ayın ilk günü: "bu ay" yine o ayın tamamıdır.
+        (
+            date(2026, 8, 1),
+            ("2026-08-01", "2026-08-31", "2026-07-01", "2026-07-31"),
+        ),
+        # 31 günlük aydan 30 günlük aya.
+        (
+            date(2026, 7, 31),
+            ("2026-07-01", "2026-07-31", "2026-06-01", "2026-06-30"),
+        ),
+        # Aralık: "bu ay" yıl sonuna dayanır.
+        (
+            date(2026, 12, 5),
+            ("2026-12-01", "2026-12-31", "2026-11-01", "2026-11-30"),
+        ),
+    ],
+)
+def test_relative_date_placeholders_resolve_against_the_run_date(today, expected):
+    resolved = _relative_date_placeholders(today)
+
+    assert resolved["{today}"] == today.isoformat()
+    assert (
+        resolved["{current_month_start}"],
+        resolved["{current_month_end}"],
+        resolved["{previous_month_start}"],
+        resolved["{previous_month_end}"],
+    ) == expected
+
+
+def test_golden_dataset_has_no_frozen_relative_dates():
+    """Relative wording must carry a placeholder, never a literal date — the
+    MT-003 failure mode. Absolute wording ("Ocak 2026") is exempt: it names its
+    own month and is supposed to stay frozen.
+    """
+    # Yer tutucuyu, JSON'ın kendi süslü parantezlerine dokunmadan işaretle.
+    marked = re.sub(r'"\{[a-z_]+\}"', '"__PLACEHOLDER__"', DATASET_PATH.read_text(encoding="utf-8"))
+    relative_markers = ("bu ay", "gecen ay", "bu yil", "gecen yil", "bugun", "son 30 gun")
+
+    offenders = []
+    for scenario in json.loads(marked)["scenarios"]:
+        # Göreli bir kapsam bir kez kurulunca sonraki takip turlarında da taşınır
+        # ("Bu ay ...", sonra "Bunu grafik ciz") — o turlar da donmuş olamaz.
+        relative_scope = False
+        for turn in scenario["turns"]:
+            if any(marker in turn["question"].lower() for marker in relative_markers):
+                relative_scope = True
+            if not relative_scope:
+                continue
+            expected = turn["expected"]
+            for key in ("date_start", "date_end"):
+                value = expected.get(key)
+                if value and value != "__PLACEHOLDER__":
+                    offenders.append(f"{scenario['id']} {key}={value} ({turn['question']})")
+
+    assert not offenders, "göreli soruda donmuş tarih: " + "; ".join(offenders)

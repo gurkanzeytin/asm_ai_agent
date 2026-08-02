@@ -3,7 +3,11 @@ from pathlib import Path
 
 import pytest
 from tools.evaluation.__main__ import main
-from tools.evaluation.dataset import load_evaluation_dataset, validate_evaluation_dataset
+from tools.evaluation.dataset import (
+    load_evaluation_dataset,
+    select_cases,
+    validate_evaluation_dataset,
+)
 from tools.evaluation.models import EvaluationDataset, EvaluationMode, FailureCode
 from tools.evaluation.report import compare_with_previous, write_run_reports
 from tools.evaluation.runner import EvaluationRunner
@@ -56,6 +60,138 @@ def test_blind_cases_excluded_from_retrieval():
     assert not any(example.id.startswith("RW-") for example in retrieved)
 
 
+def test_colloquial_blind_v2_is_separate_curated_evaluation_data():
+    dataset = load_evaluation_dataset()
+    cases = select_cases(dataset, suite="colloquial_blind_v2")
+
+    assert len(cases) == 35
+    expected_ids = {
+        "COL-BLIND-009",
+        "COL-BLIND-013",
+        *(f"COL-BLIND-{index:03d}" for index in range(19, 25)),
+        "COL-BLIND-026",
+        "COL-BLIND-028",
+        "COL-BLIND-032",
+        "COL-BLIND-033",
+        "COL-BLIND-035",
+        "COL-BLIND-041",
+        "COL-BLIND-042",
+        "COL-BLIND-051",
+        *(f"COL-BLIND-{index:03d}" for index in range(52, 59)),
+        "COL-BLIND-060",
+        "COL-BLIND-063",
+        "COL-BLIND-065",
+        "COL-BLIND-067",
+        "COL-BLIND-069",
+        *(f"COL-BLIND-{index:03d}" for index in range(71, 76)),
+        "COL-BLIND-077",
+        "COL-BLIND-079",
+    }
+    assert {case.id for case in cases} == expected_ids
+    assert all(case.blind and case.suite == "colloquial_blind_v2" for case in cases)
+    assert len({case.question.casefold() for case in cases}) == len(cases)
+    assert len({case.category for case in cases}) >= 12
+
+    production_questions = {
+        example.question.casefold()
+        for example in examples.load_golden_dataset().questions
+    }
+    assert not production_questions.intersection(
+        case.question.casefold() for case in cases
+    )
+
+
+def test_explicit_base_dataset_load_does_not_merge_colloquial_supplement():
+    base_path = Path(__file__).parents[1] / "app" / "resources" / "evaluation_cases.json"
+    base = load_evaluation_dataset(base_path)
+
+    assert not any(case.id.startswith("COL-BLIND-") for case in base.cases)
+
+
+def test_colloquial_guard_cases_follow_production_routing_contract():
+    runner = EvaluationRunner()
+    regression_cases = select_cases(
+        load_evaluation_dataset(), suite="colloquial_regression_v2"
+    )
+    assert {case.id for case in regression_cases} == {
+        "COL-BLIND-001",
+        "COL-BLIND-002",
+        *(f"COL-BLIND-{index:03d}" for index in range(3, 9)),
+        *(f"COL-BLIND-{index:03d}" for index in range(10, 13)),
+        *(f"COL-BLIND-{index:03d}" for index in range(14, 18)),
+        "COL-BLIND-018",
+        "COL-BLIND-025",
+        "COL-BLIND-027",
+        "COL-BLIND-029",
+        "COL-BLIND-030",
+        "COL-BLIND-031",
+        "COL-BLIND-034",
+        *(f"COL-BLIND-{index:03d}" for index in range(36, 41)),
+        *(f"COL-BLIND-{index:03d}" for index in range(43, 51)),
+        "COL-BLIND-059",
+        "COL-BLIND-061",
+        "COL-BLIND-062",
+        "COL-BLIND-064",
+        "COL-BLIND-066",
+        "COL-BLIND-068",
+        "COL-BLIND-070",
+        "COL-BLIND-076",
+        "COL-BLIND-078",
+    }
+    assert all(not case.blind for case in regression_cases)
+    for case_id in (
+        "COL-BLIND-036",
+        "COL-BLIND-037",
+        "COL-BLIND-038",
+        "COL-BLIND-039",
+        "COL-BLIND-040",
+        "COL-BLIND-030",
+    ):
+        result = runner.run(
+            case_id=case_id,
+            mode=EvaluationMode.SQL_GENERATION,
+        ).results[0]
+        assert result.passed, (case_id, result.failures)
+        assert result.generated_sql is None
+
+
+@pytest.mark.parametrize(
+    "case_id",
+    [
+        "COL-BLIND-001",
+        "COL-BLIND-002",
+        *(f"COL-BLIND-{index:03d}" for index in range(3, 9)),
+        *(f"COL-BLIND-{index:03d}" for index in range(10, 13)),
+        *(f"COL-BLIND-{index:03d}" for index in range(14, 18)),
+        "COL-BLIND-018",
+        "COL-BLIND-025",
+        "COL-BLIND-027",
+        "COL-BLIND-029",
+        "COL-BLIND-031",
+        "COL-BLIND-034",
+        *(f"COL-BLIND-{index:03d}" for index in range(43, 51)),
+        "COL-BLIND-059",
+        "COL-BLIND-061",
+        "COL-BLIND-062",
+        "COL-BLIND-064",
+        "COL-BLIND-066",
+        "COL-BLIND-068",
+        "COL-BLIND-070",
+        "COL-BLIND-076",
+        "COL-BLIND-078",
+    ],
+)
+def test_promoted_colloquial_analytical_regressions(case_id):
+    result = EvaluationRunner().run(
+        case_id=case_id,
+        mode=EvaluationMode.SQL_GENERATION,
+    ).results[0]
+
+    assert result.passed, (case_id, result.failures)
+    assert result.sql_source == "deterministic"
+    assert result.generated_sql
+
+
 def test_routing_and_query_plan_scorer_acceptance_case():
     run = EvaluationRunner().run(
         suite="acceptance",
@@ -64,6 +200,18 @@ def test_routing_and_query_plan_scorer_acceptance_case():
     )
     assert run.results[0].passed
     assert run.results[0].plan_summary["analysis_type"] == "cohort_analysis"
+
+
+@pytest.mark.parametrize("case_id", ["BLIND-CAS-006", "BLIND-CAS-008"])
+def test_conversational_business_phrasing_regressions(case_id):
+    """Common user wording must resolve to the catalog-backed deterministic path."""
+    run = EvaluationRunner().run(
+        case_id=case_id,
+        mode=EvaluationMode.SQL_GENERATION,
+    )
+
+    assert run.results[0].passed, run.results[0].failures
+    assert run.results[0].sql_source == "deterministic"
 
 
 def test_sql_ast_ratio_period_cohort_and_raw_detail_scorers():
@@ -122,10 +270,18 @@ def test_must_include_sql_and_must_not_include_sql_substring_assertions():
     from app.services.query_analyzer import QueryAnalyzer
 
     view = ViewMetadata(name="dbo.vw_RandevuRaporu", columns=[])
-    plan = QueryPlanner().build_plan(case.question, QueryAnalyzer().analyze(case.question), tables=[], views=[view])
+    plan = QueryPlanner().build_plan(
+        case.question,
+        QueryAnalyzer().analyze(case.question),
+        tables=[],
+        views=[view],
+    )
     built = DeterministicSQLBuilder().build(plan)
     ok = score_sql_semantics(case, built.sql, plan)
-    assert not any(f.failure_code == FailureCode.SQL_SHAPE_MISMATCH for f in ok.failures), ok.failures
+    assert not any(
+        failure.failure_code == FailureCode.SQL_SHAPE_MISMATCH
+        for failure in ok.failures
+    ), ok.failures
 
 
 def test_expert_suite_selects_only_expert_cases():

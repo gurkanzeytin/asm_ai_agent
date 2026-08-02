@@ -80,11 +80,15 @@ _DATE_PATTERNS = [
     (r"\bgecen\s+hafta\b", "gecen hafta"),
     (r"\bgecen\s+ay\b", "gecen ay"),
     (r"\bbir\s+onceki\s+yil\w*\b", "bir onceki yil"),
+    (r"\bbir\s+onceki\s+sene\w*\b", "bir onceki yil"),
     (r"\bonceki\s+yil\w*\b", "onceki yil"),
+    (r"\bonceki\s+sene\w*\b", "onceki yil"),
     (r"\bgecen\s+yil\w*\b", "gecen yil"),
+    (r"\bgecen\s+sene\w*\b", "gecen yil"),
     (r"\bbu\s+hafta\b", "bu hafta"),
     (r"\bbu\s+ay\w*\b", "bu ay"),
     (r"\bbu\s+yil\b", "bu yil"),
+    (r"\bbu\s+sene\b", "bu yil"),
     (r"\bbugun\w*\b", "bugun"),
     (r"\bdun\b", "dun"),
     (r"\byarin\b", "yarin"),
@@ -97,9 +101,11 @@ _DATE_PATTERNS = [
     (rf"\b(?:{_MONTH_NAMES})\s+ay\w*\b", None),
     # Calendar-year expressions used both in complete questions and short
     # elliptical follow-ups.  Punctuation/apostrophes have already been
-    # replaced with spaces by ``_fold``.
+    # replaced with spaces by ``_fold``. Apostrophe-free chat forms such as
+    # ``2024te`` and ``2025ten`` are accepted as the same year scope.
     (
-        r"\b(?:19|20)\d{2}(?:\s+(?:yil\w*|icin|olan\w*|[dty][ae]))?\b",
+        r"\b(?:19|20)\d{2}(?:(?:\s+(?:yil\w*|icin|olan\w*))|"
+        r"(?:\s*[dt][ae]n?))?\b",
         None,
     ),
 ]

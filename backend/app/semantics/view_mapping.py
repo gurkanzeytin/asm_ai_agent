@@ -212,6 +212,26 @@ def resolve_excluded_status_values(
     return complement or None
 
 
+def named_cohort(folded_question: str, view_name: str | None = None) -> dict | None:
+    """Resolves cohort wording that names a SET of values rather than one.
+
+    "Yabancı hasta oranı" means every nationality except the home country —
+    a real question over a real column, but not a value the resolver can ground,
+    because "Yabancı" is not stored in `Uyruk`. Curated here rather than in code
+    so the home-country assumption stays visible and configurable (`value` in
+    resources/view_semantics.json).
+    """
+    for term, spec in get_view_entry(view_name).get("named_cohorts", {}).items():
+        candidates = [term, *spec.get("aliases", [])]
+        matched = next(
+            (candidate for candidate in candidates if fold(candidate) in folded_question),
+            None,
+        )
+        if matched:
+            return {**spec, "term": matched}
+    return None
+
+
 def concept_mapping_lines(view_name: str | None = None) -> list[str]:
     """Compact user-language → column lines for the LLM schema grounding block."""
     entry = get_view_entry(view_name)

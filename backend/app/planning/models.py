@@ -71,6 +71,50 @@ class PlannedDimension(BaseModel):
     )
 
 
+class MetricPredicate(BaseModel):
+    """A grounded row-level condition a metric is computed over.
+
+    The point of this type is that the condition is DATA, not code. The metric
+    catalog freezes its conditions into formulas — seven `conditional_rate`
+    metrics are one SQL shape with seven hard-coded predicates — so a share the
+    catalog never anticipated ("kadın hasta oranı", "randevu süresi 30
+    dakikadan uzun olanların oranı") had no way to be expressed and silently
+    degraded to a plain count. Parameterising the predicate answers the whole
+    family without a new metric per question.
+
+    Only ever built from already-grounded input: a value bound by
+    `ValueResolver` against real database values, or a numeric literal parsed
+    from the question. The SQL builder re-validates the column against the
+    column catalog and the operator against its own allow-list before
+    rendering, so an invalid predicate fails closed (metric skipped) rather
+    than reaching SQL.
+    """
+
+    column: str = Field(..., description="Real view column the condition applies to.")
+    operator: str = Field(
+        ..., description="One of =, <>, >, >=, <, <=, IS NULL, IS NOT NULL."
+    )
+    values: list[str | float] = Field(
+        default_factory=list,
+        description="Right-hand operand(s); empty for IS NULL / IS NOT NULL.",
+    )
+
+
+class InlineMetric(BaseModel):
+    """A metric composed at plan time instead of looked up by catalog id.
+
+    Coexists with the catalog: `QueryPlan.metrics` still carries catalog ids,
+    and a catalog id always wins. An inline metric is only built when no
+    catalog metric expresses what was asked.
+    """
+
+    shape: str = Field(..., description="Aggregate shape; 'rate' is the only one built today.")
+    predicate: MetricPredicate | None = Field(
+        default=None, description="Condition the shape aggregates over."
+    )
+    label: str = Field(..., description="Turkish label shown to the user for this metric.")
+
+
 class AggregateThreshold(BaseModel):
     """A HAVING-style threshold on the aggregated metric value.
 
@@ -122,6 +166,12 @@ class QueryPlan(BaseModel):
     """
 
     question: str = Field(..., description="Question the plan was built from.")
+    planning_source: str = Field(
+        default="deterministic",
+        description=(
+            "deterministic | llm_schema_reasoning; controls bounded SQL generation strategy."
+        ),
+    )
     output_entity: str | None = Field(
         default=None, description="Entity type the user wants returned (e.g. Doctor)."
     )
@@ -281,6 +331,21 @@ class QueryPlan(BaseModel):
     assumptions: list[str] = Field(
         default_factory=list,
         description="Human-readable defaults the agent picked; must be stated in the answer.",
+    )
+    metric_specs: dict[str, InlineMetric] = Field(
+        default_factory=dict,
+        description=(
+            "Metrics composed at plan time, keyed by the SQL alias they are selected as. "
+            "An alias appearing in `metrics` is resolved from the catalog first and from "
+            "here only when the catalog has no such id."
+        ),
+    )
+    partial_reading_reasons: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Why this plan is a PARTIAL reading of its question (app.planning.coverage). "
+            "Diagnostic only today — nothing routes on it yet."
+        ),
     )
     planner_ms: float = Field(default=0.0, description="Planning duration in milliseconds.")
 

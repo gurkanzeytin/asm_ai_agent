@@ -103,6 +103,82 @@
           "tur"
         ],
         "column": "RandevuTipiAdi"
+      },
+      "Service": {
+        "terms": [
+          "hizmet",
+          "hizmet adi",
+          "hizmete gore",
+          "islem adi",
+          "hizmetlere gore",
+          "hizmet bazinda"
+        ],
+        "column": "HizmetAdi",
+        "note": "Verilen hizmetin adı; bölüm (GenelRandevuBolumAdi) veya kategori (KategoriAdi) değildir."
+      },
+      "Category": {
+        "terms": [
+          "kategori",
+          "kategoriye gore",
+          "kategorilere gore",
+          "kategori bazinda"
+        ],
+        "column": "KategoriAdi",
+        "note": "Randevu kategorisi; bölüm değildir."
+      },
+      "Nationality": {
+        "terms": [
+          "uyruk",
+          "ulke",
+          "yabanci hasta",
+          "uyruguna gore",
+          "uyruklara gore",
+          "uyruk bazinda"
+        ],
+        "column": "Uyruk",
+        "note": "Hastanın uyruğu / ülke adı."
+      },
+      "Gender": {
+        "terms": [
+          "cinsiyet",
+          "kadin erkek",
+          "kadin ve erkek",
+          "cinsiyete gore",
+          "cinsiyet bazinda"
+        ],
+        "column": "CinsiyetId",
+        "note": "Cinsiyet kodu: 'E', 'K', 'D'. Okunabilir etiket kolonu yoktur; değerler kod olarak filtrelenir."
+      },
+      "AgeGroup": {
+        "terms": [
+          "yas",
+          "yas grubu",
+          "yas gruplari",
+          "yas dagilimi",
+          "dogum tarihi"
+        ],
+        "column": "DogumTarihi",
+        "note": "Yaş DogumTarihi'nden türetilir: (DATEDIFF(year, DogumTarihi, GETDATE()) / 10) * 10 ile 10'luk gruplar. Ham doğum tarihiyle gruplanmaz."
+      },
+      "ProtocolState": {
+        "terms": [
+          "protokol durumu",
+          "protokol islem durumu",
+          "islem durumu",
+          "muayene durumu"
+        ],
+        "column": "ProtokolIslemState",
+        "note": "Sayısal kod; kod-anlam eşlemesi DOĞRULANMAMIŞTIR. Kırılım verilebilir ama koddan gerçekleşme/iptal çıkarımı yapılmaz."
+      },
+      "AppointmentDuration": {
+        "terms": [
+          "randevu suresi",
+          "sure",
+          "kac dakika",
+          "muayene suresi"
+        ],
+        "column": "RandevuSuresi",
+        "note": "Planlanan süre (dakika). BitisTarihi-BaslangicTarihi farkıyla aynı olmayabilir; fiili süre ayrı bir ölçüdür."
       }
     },
     "date_semantics": {
@@ -154,6 +230,25 @@
         ],
         "expression": "COUNT(*)",
         "note": "Randevu adedi; hasta sayısı ile karıştırılmaz."
+      }
+    },
+    "named_cohorts": {
+      "yabanci": {
+        "column": "Uyruk",
+        "operator": "<>",
+        "value": "Türkiye",
+        "aliases": [
+          "turk olmayan",
+          "turkiye disindaki"
+        ],
+        "label": "Yabancı uyruklu",
+        "note": "'Yabancı' = ana ülke DIŞINDAKİ her uyruk. Ana ülke bir kurulum varsayımıdır; başka bir ülkede çalıştırılacaksa 'value' güncellenmelidir."
+      },
+      "yerli": {
+        "column": "Uyruk",
+        "operator": "=",
+        "value": "Türkiye",
+        "label": "T.C. uyruklu"
       }
     },
     "status_filters": {

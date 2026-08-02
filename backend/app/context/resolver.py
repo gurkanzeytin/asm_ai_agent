@@ -10,6 +10,7 @@ from app.context.models import (
     ResolutionResult,
 )
 from app.reporting.output_policy import detect_requested_visualization
+from app.shared.history_period import replace_unbounded_history_marker
 
 # Reuse the context extractor's length-preserving fold directly. Importing
 # through ``app.semantics`` here eagerly initializes the semantic engine and,
@@ -233,6 +234,42 @@ class ContextResolver:
         )
         result.overridden_fields = self._overridden_fields(signals, context)
 
+        if (
+            context.pending_clarification
+            and context.pending_clarification.field == "history_period"
+        ):
+            resumed = self._resolve_pending_history_period(
+                question, context.pending_clarification.original_question or ""
+            )
+            if resumed is not None:
+                result.resolved_question = resumed
+                result.pending_clarification_resolved = True
+                result.applied = True
+                result.confidence = 1.0
+                result.follow_up_signals.append("pending_history_period_resolved")
+                result.inherited["previous_question"] = (
+                    context.pending_clarification.original_question or ""
+                )
+                return self._finalize(result, question, context, signals)
+
+        if (
+            context.pending_clarification
+            and context.pending_clarification.field == "duration_basis"
+        ):
+            resumed = self._resolve_pending_duration_basis(
+                question, context.pending_clarification.original_question or ""
+            )
+            if resumed is not None:
+                result.resolved_question = resumed
+                result.pending_clarification_resolved = True
+                result.applied = True
+                result.confidence = 1.0
+                result.follow_up_signals.append("pending_duration_basis_resolved")
+                result.inherited["previous_question"] = (
+                    context.pending_clarification.original_question or ""
+                )
+                return self._finalize(result, question, context, signals)
+
         # AI-INTELLIGENCE-017 (item 8): a reply to a pending GROUNDED VALUE
         # clarification ("hepsini", "ilkini", an explicit candidate) must be
         # evaluated FIRST — before the unsupported-status guard, before
@@ -441,6 +478,38 @@ class ContextResolver:
                 result.follow_up_signals = []
                 result.confidence = 1.0
         return self._finalize(result, question, context, signals)
+
+    def _resolve_pending_history_period(
+        self, reply: str, original_question: str
+    ) -> str | None:
+        """Apply a bounded prior-year clarification to its original question."""
+        if not original_question:
+            return None
+        folded_reply = _fold(reply)
+        explicit_year = _YEAR_TOKEN.search(folded_reply)
+        if explicit_year:
+            replacement = f"{explicit_year.group(0)} yilinda"
+        elif any(
+            marker in folded_reply
+            for marker in ("bir onceki takvim yili", "bir onceki yil", "gecen yil")
+        ):
+            replacement = "gecen yil"
+        else:
+            return None
+        return replace_unbounded_history_marker(original_question, replacement)
+
+    def _resolve_pending_duration_basis(
+        self, reply: str, original_question: str
+    ) -> str | None:
+        """Resume a duration request with an explicit stored/actual basis."""
+        if not original_question:
+            return None
+        folded_reply = _fold(reply)
+        if any(marker in folded_reply for marker in ("fiili", "gercek", "baslangic", "bitis")):
+            return f"{original_question} fiili sure baslangic bitis farki"
+        if any(marker in folded_reply for marker in ("planlanan", "takvim", "kayitli")):
+            return f"{original_question} planlanan randevu suresi"
+        return None
 
     def _overridden_fields(
         self, signals: ExtractedSignals, context: ConversationContext

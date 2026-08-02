@@ -157,8 +157,14 @@ DIMENSION_LABELS_TR: dict[str, str] = {
     "date": "Tarih",
 }
 
-# Analiz tipi (AnalyticsIntent / analytics_type) -> Türkçe etiket.
+# Analiz tipi -> Türkçe etiket. İki ayrı sözlük buraya akar ve İKİSİ de
+# eksiksiz olmak zorundadır: AnalyticsIntent değerleri (trend, comparison, ...)
+# ve QueryPlan.analysis_type değerleri (count, duration_analysis, ...). İkincisi
+# uzun süre eksikti; get_analysis_type_label o sırada İngilizce yedeğe düşüp
+# Türkçe arayüzde "Duration Analysis"/"Count" yazıyordu.
+# `tests/test_no_english_templates.py` her ikisinin de eksiksiz kalmasını denetler.
 ANALYSIS_TYPE_LABELS_TR: dict[str, str] = {
+    # AnalyticsIntent
     "trend": "Eğilim Analizi",
     "comparison": "Karşılaştırma Analizi",
     "growth_rate": "Büyüme Oranı Analizi",
@@ -176,6 +182,32 @@ ANALYSIS_TYPE_LABELS_TR: dict[str, str] = {
     "summary": "Özet Analiz",
     "list": "Liste Görünümü",
     "none": "Sonuç Yok",
+    # QueryPlan.analysis_type — hacim ve kırılım
+    "count": "Sayım Analizi",
+    "distinct_count": "Tekil Sayım Analizi",
+    "top_n": "En Yüksek N Analizi",
+    "bottom_n": "En Düşük N Analizi",
+    "cross_analysis": "Çapraz Kırılım Analizi",
+    "distribution_inequality": "Dağılım Dengesizliği Analizi",
+    "multi_metric_performance": "Çoklu Metrik Performans Analizi",
+    # QueryPlan.analysis_type — zaman ve karşılaştırma
+    "time_trend": "Zaman Eğilimi Analizi",
+    "period_comparison": "Dönem Karşılaştırması",
+    "baseline_comparison": "Referans Dönem Karşılaştırması",
+    "adaptive_time_comparison": "Uyarlanabilir Dönem Karşılaştırması",
+    "variance_analysis": "Sapma Analizi",
+    "anomaly_comparison": "Anomali Karşılaştırması",
+    "anomaly_candidate": "Anomali Adayı Analizi",
+    # QueryPlan.analysis_type — oran ve dönüşüm
+    "ratio": "Oran Analizi",
+    "percentage": "Yüzde Analizi",
+    "conversion": "Dönüşüm Analizi",
+    # QueryPlan.analysis_type — süre ve davranış
+    "duration_analysis": "Süre Analizi",
+    "lead_time_analysis": "Randevu Alma Öncesi Süre Analizi",
+    "cohort_analysis": "Kohort Analizi",
+    "repeat_behavior": "Tekrar Eden Hasta Analizi",
+    "data_quality": "Veri Kalitesi Analizi",
 }
 
 # Zaman kırılımı (time_grain / grouping_granularity) -> Türkçe etiket.

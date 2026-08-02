@@ -12,7 +12,7 @@ from app.application_models.workflow_models import QueryResult
 from app.database_intelligence.models import ViewMetadata
 from app.llm.schemas import LLMResponse
 from app.planning.compliance import PlanComplianceValidator
-from app.planning.models import QueryPlan
+from app.planning.models import DateFilterPlan, QueryPlan
 from app.planning.planner import QueryPlanner
 from app.semantics import catalog
 from app.semantics.models import SemanticFrame
@@ -87,6 +87,50 @@ async def test_llm_fallback_selection_for_unsupported_plan():
         "prompt",
         query_plan=QueryPlan(question="q", analysis_type="unsupported_complex"),
     )
+    assert generated.sql_source == "llm"
+    assert provider.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_typed_schema_reasoning_plan_uses_llm_sql_with_plan_compliance():
+    class DurationProvider(_Provider):
+        async def generate(self, *args, **kwargs):
+            self.calls += 1
+            return LLMResponse(
+                content=(
+                    "SELECT AVG(CAST(RandevuSuresi AS FLOAT)) "
+                    "AS appointment_duration_average "
+                    "FROM dbo.vw_RandevuRaporu "
+                    "WHERE BaslangicTarihi >= '2025-01-01' "
+                    "AND BaslangicTarihi < DATEADD(day, 1, '2025-12-31');"
+                ),
+                model="fake",
+                latency_ms=1.0,
+            )
+
+    provider = DurationProvider()
+    service = SQLService(provider, _Parser(), SQLValidator())
+    plan = QueryPlan(
+        question="Geçen seneki görüşmeler ne kadar vakit almış?",
+        planning_source="llm_schema_reasoning",
+        output_table="dbo.vw_RandevuRaporu",
+        fact_table="dbo.vw_RandevuRaporu",
+        date_filters=[
+            DateFilterPlan(
+                expression="schema_reasoning:previous_year",
+                start_date="2025-01-01",
+                end_date="2025-12-31",
+                column="BaslangicTarihi",
+            )
+        ],
+        analysis_type="average",
+        aggregation="AVG(CAST(RandevuSuresi AS FLOAT))",
+        metrics=["appointment_duration_average"],
+        required_columns=["RandevuSuresi", "BaslangicTarihi"],
+    )
+
+    generated = await service.generate_sql("prompt", query_plan=plan)
+
     assert generated.sql_source == "llm"
     assert provider.calls == 1
 
@@ -313,6 +357,18 @@ def test_appointments_per_patient_repeat_behavior_builds_deterministic_sql():
     assert "BaslangicTarihi >= '2025-01-01'" in built.sql
 
 
+def test_year_scoped_average_appointment_duration_builds_deterministic_sql():
+    plan = _plan("2024 yılının ortalama randevu süresi nedir?")
+
+    assert plan.metrics == ["appointment_duration_average"]
+    built = DeterministicSQLBuilder().build(plan)
+    assert not isinstance(built, UnsupportedPlan)
+    assert "AVG(CAST(RandevuSuresi AS FLOAT))" in built.sql
+    assert "BaslangicTarihi >= '2024-01-01'" in built.sql
+    assert "2024-12-31" in built.sql
+    assert SQLValidator().validate(built.sql).valid
+
+
 def test_repeat_patient_count_uses_having_cte_without_patient_group_leak():
     plan = _plan("2024 yilinda birden fazla randevusu olan kac hasta var?")
 
@@ -394,6 +450,17 @@ def test_cross_branch_repeat_breakdown_cte_passes_projection_compliance():
     assert compliance.compliant is True
 
 
+def test_cross_branch_repeat_keeps_explicit_branch_name_breakdown():
+    plan = _plan("Şube adı bazında farklı şubelerde tekrar eden hasta sayısını göster.")
+
+    assert plan.metrics == ["cross_branch_repeat_patient_count"]
+    assert plan.dimensions == ["SubeAdi"]
+    built = DeterministicSQLBuilder().build(plan)
+    assert not isinstance(built, UnsupportedPlan)
+    assert "v.SubeAdi AS SubeAdi" in built.sql
+    assert "GROUP BY v.SubeAdi" in built.sql
+
+
 def test_same_day_multi_service_patient_is_scalar_until_breakdown_is_explicit():
     plan = _plan("2024 yilinda ayni gun icinde ayni hasta birden fazla hizmet almis mi?")
 
@@ -472,6 +539,29 @@ def test_patient_appointment_span_days_routes_to_cte_and_top_patients():
     assert not isinstance(top_sql, UnsupportedPlan)
     assert "SELECT TOP (10) HastaId AS HastaId" in top_sql.sql
     assert "ORDER BY patient_appointment_span_days DESC" in top_sql.sql
+
+
+@pytest.mark.parametrize(
+    ("question", "dimension"),
+    [
+        ("Şube adı bazında hasta ilk-son randevu gün farkını göster.", "SubeAdi"),
+        (
+            "Bölüm adı raporlama bazında hasta ilk-son randevu gün farkını göster.",
+            "GenelRandevuBolumAdi",
+        ),
+        ("Randevu tipi bazında hasta ilk-son randevu gün farkını göster.", "RandevuTipiAdi"),
+        ("Hasta ilk-son randevu gün farkını randevu türü kırılımında göster.", "RandevuTipiAdi"),
+    ],
+)
+def test_patient_span_keeps_explicit_business_label_breakdowns(question, dimension):
+    plan = _plan(question)
+
+    assert plan.metrics == ["patient_appointment_span_days"]
+    assert plan.dimensions == [dimension]
+    built = DeterministicSQLBuilder().build(plan)
+    assert not isinstance(built, UnsupportedPlan)
+    assert f"GROUP BY {dimension}, HastaId" in built.sql
+    assert f"GROUP BY {dimension}\n" in built.sql
 
 
 def test_multi_period_patient_overlap_uses_or_scoped_presence_cte():

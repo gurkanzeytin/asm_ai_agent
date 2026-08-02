@@ -9,19 +9,102 @@
       "turns": [
         {
           "question": "Bugunku randevu sayisini subelere gore goster",
-          "expected": {"follow_up": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "date_column": "BaslangicTarihi", "date_start": "{today}", "date_end": "{today}", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": false,
+            "analysis_type": "count",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [
+              "SubeAdi"
+            ],
+            "date_column": "BaslangicTarihi",
+            "date_start": "{today}",
+            "date_end": "{today}",
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "Sadece bekleyenleri goster",
-          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "date_column": "BaslangicTarihi", "date_start": "{today}", "date_end": "{today}", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "count",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [
+              "SubeAdi"
+            ],
+            "date_column": "BaslangicTarihi",
+            "date_start": "{today}",
+            "date_end": "{today}",
+            "extra_include": [
+              "Beklemede"
+            ],
+            "extra_exclude": [
+              "Gerçekleşti",
+              "Gelmedi"
+            ],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "Bunu grafik yap",
-          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "date_column": "BaslangicTarihi", "date_start": "{today}", "date_end": "{today}", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": "visualization", "visible_sections": ["chart"]}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "count",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [
+              "SubeAdi"
+            ],
+            "date_column": "BaslangicTarihi",
+            "date_start": "{today}",
+            "date_end": "{today}",
+            "extra_include": [
+              "Beklemede"
+            ],
+            "extra_exclude": [
+              "Gerçekleşti",
+              "Gelmedi"
+            ],
+            "response_mode": "visualization",
+            "visible_sections": [
+              "chart"
+            ]
+          }
         },
         {
           "question": "SQL ini ver",
-          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["SubeAdi"], "date_column": "BaslangicTarihi", "date_start": "{today}", "date_end": "{today}", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": "sql", "visible_sections": ["sql"]}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "count",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [
+              "SubeAdi"
+            ],
+            "date_column": "BaslangicTarihi",
+            "date_start": "{today}",
+            "date_end": "{today}",
+            "extra_include": [
+              "Beklemede"
+            ],
+            "extra_exclude": [
+              "Gerçekleşti",
+              "Gelmedi"
+            ],
+            "response_mode": "sql",
+            "visible_sections": [
+              "sql"
+            ]
+          }
         }
       ]
     },
@@ -31,19 +114,96 @@
       "turns": [
         {
           "question": "Ocak 2026 icin doktor bazinda randevu sayilarini goster",
-          "expected": {"follow_up": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["DoktorId"], "date_column": "BaslangicTarihi", "date_start": "2026-01-01", "date_end": "2026-01-31", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": false,
+            "analysis_type": "count",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [
+              "DoktorId"
+            ],
+            "date_column": "BaslangicTarihi",
+            "date_start": "2026-01-01",
+            "date_end": "2026-01-31",
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "Yalniz gerceklesenleri goster",
-          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["DoktorId"], "date_column": "BaslangicTarihi", "date_start": "2026-01-01", "date_end": "2026-01-31", "extra_include": ["Gerçekleşti"], "extra_exclude": ["Beklemede", "Gelmedi"], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "count",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [
+              "DoktorId"
+            ],
+            "date_column": "BaslangicTarihi",
+            "date_start": "2026-01-01",
+            "date_end": "2026-01-31",
+            "extra_include": [
+              "Gerçekleşti"
+            ],
+            "extra_exclude": [
+              "Beklemede",
+              "Gelmedi"
+            ],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "O zaman gelmeyenleri oran olarak goster",
-          "expected": {"follow_up": true, "analysis_type": "ratio", "metrics": ["no_show_rate"], "dimensions": ["DoktorId"], "date_column": "BaslangicTarihi", "date_start": "2026-01-01", "date_end": "2026-01-31", "extra_include": [], "extra_exclude": ["Gerçekleşti", "Beklemede"], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "ratio",
+            "metrics": [
+              "no_show_rate"
+            ],
+            "dimensions": [
+              "DoktorId"
+            ],
+            "date_column": "BaslangicTarihi",
+            "date_start": "2026-01-01",
+            "date_end": "2026-01-31",
+            "extra_include": [],
+            "extra_exclude": [
+              "Gerçekleşti",
+              "Beklemede"
+            ],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "Bunu tabloya cevir",
-          "expected": {"follow_up": true, "analysis_type": "ratio", "metrics": ["no_show_rate"], "dimensions": ["DoktorId"], "date_column": "BaslangicTarihi", "date_start": "2026-01-01", "date_end": "2026-01-31", "extra_include": [], "extra_exclude": ["Gerçekleşti", "Beklemede"], "response_mode": "data", "visible_sections": ["table"]}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "ratio",
+            "metrics": [
+              "no_show_rate"
+            ],
+            "dimensions": [
+              "DoktorId"
+            ],
+            "date_column": "BaslangicTarihi",
+            "date_start": "2026-01-01",
+            "date_end": "2026-01-31",
+            "extra_include": [],
+            "extra_exclude": [
+              "Gerçekleşti",
+              "Beklemede"
+            ],
+            "response_mode": "data",
+            "visible_sections": [
+              "table"
+            ]
+          }
         }
       ]
     },
@@ -53,19 +213,87 @@
       "turns": [
         {
           "question": "Bu ay cinsiyete gore randevu dagilimini goster",
-          "expected": {"follow_up": false, "analysis_type": "distribution", "metrics": ["appointment_count"], "dimensions": ["CinsiyetId"], "date_column": "BaslangicTarihi", "date_start": "2026-07-01", "date_end": "2026-07-31", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": false,
+            "analysis_type": "distribution",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [
+              "CinsiyetId"
+            ],
+            "date_column": "BaslangicTarihi",
+            "date_start": "{current_month_start}",
+            "date_end": "{current_month_end}",
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "Aynisini gecen ay icin goster",
-          "expected": {"follow_up": true, "analysis_type": "distribution", "metrics": ["appointment_count"], "dimensions": ["CinsiyetId"], "date_column": "BaslangicTarihi", "date_start": "2026-06-01", "date_end": "2026-06-30", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "distribution",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [
+              "CinsiyetId"
+            ],
+            "date_column": "BaslangicTarihi",
+            "date_start": "{previous_month_start}",
+            "date_end": "{previous_month_end}",
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "Bunu grafik ciz",
-          "expected": {"follow_up": true, "analysis_type": "distribution", "metrics": ["appointment_count"], "dimensions": ["CinsiyetId"], "date_column": "BaslangicTarihi", "date_start": "2026-06-01", "date_end": "2026-06-30", "extra_include": [], "extra_exclude": [], "response_mode": "visualization", "visible_sections": ["chart"]}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "distribution",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [
+              "CinsiyetId"
+            ],
+            "date_column": "BaslangicTarihi",
+            "date_start": "{previous_month_start}",
+            "date_end": "{previous_month_end}",
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": "visualization",
+            "visible_sections": [
+              "chart"
+            ]
+          }
         },
         {
           "question": "SQL sorgusunu ver",
-          "expected": {"follow_up": true, "analysis_type": "distribution", "metrics": ["appointment_count"], "dimensions": ["CinsiyetId"], "date_column": "BaslangicTarihi", "date_start": "2026-06-01", "date_end": "2026-06-30", "extra_include": [], "extra_exclude": [], "response_mode": "sql", "visible_sections": ["sql"]}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "distribution",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [
+              "CinsiyetId"
+            ],
+            "date_column": "BaslangicTarihi",
+            "date_start": "{previous_month_start}",
+            "date_end": "{previous_month_end}",
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": "sql",
+            "visible_sections": [
+              "sql"
+            ]
+          }
         }
       ]
     },
@@ -75,15 +303,64 @@
       "turns": [
         {
           "question": "Son 20 randevuyu getir",
-          "expected": {"follow_up": false, "analysis_type": "list", "metrics": [], "dimensions": [], "limit": 20, "ranking": "DESC", "extra_include": [], "extra_exclude": [], "response_mode": "data", "visible_sections": ["table"]}
+          "expected": {
+            "follow_up": false,
+            "analysis_type": "list",
+            "metrics": [],
+            "dimensions": [],
+            "limit": 20,
+            "ranking": "DESC",
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": "data",
+            "visible_sections": [
+              "table"
+            ]
+          }
         },
         {
           "question": "Sadece gelmedi durumundakileri getir",
-          "expected": {"follow_up": true, "analysis_type": "list", "metrics": [], "dimensions": [], "limit": 20, "ranking": "DESC", "extra_include": ["Gelmedi"], "extra_exclude": ["Beklemede", "Gerçekleşti"], "response_mode": "data", "visible_sections": ["table"]}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "list",
+            "metrics": [],
+            "dimensions": [],
+            "limit": 20,
+            "ranking": "DESC",
+            "extra_include": [
+              "Gelmedi"
+            ],
+            "extra_exclude": [
+              "Beklemede",
+              "Gerçekleşti"
+            ],
+            "response_mode": "data",
+            "visible_sections": [
+              "table"
+            ]
+          }
         },
         {
           "question": "Bunu SQL olarak ver",
-          "expected": {"follow_up": true, "analysis_type": "list", "metrics": [], "dimensions": [], "limit": 20, "ranking": "DESC", "extra_include": ["Gelmedi"], "extra_exclude": ["Beklemede", "Gerçekleşti"], "response_mode": "sql", "visible_sections": ["sql"]}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "list",
+            "metrics": [],
+            "dimensions": [],
+            "limit": 20,
+            "ranking": "DESC",
+            "extra_include": [
+              "Gelmedi"
+            ],
+            "extra_exclude": [
+              "Beklemede",
+              "Gerçekleşti"
+            ],
+            "response_mode": "sql",
+            "visible_sections": [
+              "sql"
+            ]
+          }
         }
       ]
     },
@@ -93,15 +370,56 @@
       "turns": [
         {
           "question": "Subelere gore protokole donusum oranini goster",
-          "expected": {"follow_up": false, "analysis_type": "conversion", "metrics": ["protocol_conversion_rate"], "dimensions": ["SubeAdi"], "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": false,
+            "analysis_type": "conversion",
+            "metrics": [
+              "protocol_conversion_rate"
+            ],
+            "dimensions": [
+              "SubeAdi"
+            ],
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "Bunu grafik yap",
-          "expected": {"follow_up": true, "analysis_type": "conversion", "metrics": ["protocol_conversion_rate"], "dimensions": ["SubeAdi"], "extra_include": [], "extra_exclude": [], "response_mode": "visualization", "visible_sections": ["chart"]}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "conversion",
+            "metrics": [
+              "protocol_conversion_rate"
+            ],
+            "dimensions": [
+              "SubeAdi"
+            ],
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": "visualization",
+            "visible_sections": [
+              "chart"
+            ]
+          }
         },
         {
           "question": "Aynisini branslara gore goster",
-          "expected": {"follow_up": true, "analysis_type": "conversion", "metrics": ["protocol_conversion_rate"], "dimensions": ["GenelRandevuBolumAdi"], "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "conversion",
+            "metrics": [
+              "protocol_conversion_rate"
+            ],
+            "dimensions": [
+              "GenelRandevuBolumAdi"
+            ],
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": null,
+            "visible_sections": []
+          }
         }
       ]
     },
@@ -111,15 +429,60 @@
       "turns": [
         {
           "question": "Doktorlara gore ortalama randevu suresini goster",
-          "expected": {"follow_up": false, "analysis_type": "duration_analysis", "metrics": ["appointment_duration_average"], "dimensions": ["GenelRandevuKaynakAdi"], "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": false,
+            "analysis_type": "duration_analysis",
+            "metrics": [
+              "appointment_duration_average"
+            ],
+            "dimensions": [
+              "GenelRandevuKaynakAdi"
+            ],
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "En yuksek 10 doktoru goster",
-          "expected": {"follow_up": true, "analysis_type": "ranking", "metrics": ["appointment_duration_average"], "dimensions": ["GenelRandevuKaynakAdi"], "limit": 10, "ranking": "DESC", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "ranking",
+            "metrics": [
+              "appointment_duration_average"
+            ],
+            "dimensions": [
+              "GenelRandevuKaynakAdi"
+            ],
+            "limit": 10,
+            "ranking": "DESC",
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "Bunu tablo olarak getir",
-          "expected": {"follow_up": true, "analysis_type": "ranking", "metrics": ["appointment_duration_average"], "dimensions": ["GenelRandevuKaynakAdi"], "limit": 10, "ranking": "DESC", "extra_include": [], "extra_exclude": [], "response_mode": "data", "visible_sections": ["table"]}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "ranking",
+            "metrics": [
+              "appointment_duration_average"
+            ],
+            "dimensions": [
+              "GenelRandevuKaynakAdi"
+            ],
+            "limit": 10,
+            "ranking": "DESC",
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": "data",
+            "visible_sections": [
+              "table"
+            ]
+          }
         }
       ]
     },
@@ -129,15 +492,75 @@
       "turns": [
         {
           "question": "Bugun olusturulan randevu sayisini randevuyu verenlere gore goster",
-          "expected": {"follow_up": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["RandevuyuVeren"], "date_column": "CreatedDate", "date_start": "{today}", "date_end": "{today}", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": false,
+            "analysis_type": "count",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [
+              "RandevuyuVeren"
+            ],
+            "date_column": "CreatedDate",
+            "date_start": "{today}",
+            "date_end": "{today}",
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "Sadece bekleyenler",
-          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["RandevuyuVeren"], "date_column": "CreatedDate", "date_start": "{today}", "date_end": "{today}", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "count",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [
+              "RandevuyuVeren"
+            ],
+            "date_column": "CreatedDate",
+            "date_start": "{today}",
+            "date_end": "{today}",
+            "extra_include": [
+              "Beklemede"
+            ],
+            "extra_exclude": [
+              "Gerçekleşti",
+              "Gelmedi"
+            ],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "Bunun grafigini ciz",
-          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": ["RandevuyuVeren"], "date_column": "CreatedDate", "date_start": "{today}", "date_end": "{today}", "extra_include": ["Beklemede"], "extra_exclude": ["Gerçekleşti", "Gelmedi"], "response_mode": "visualization", "visible_sections": ["chart"]}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "count",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [
+              "RandevuyuVeren"
+            ],
+            "date_column": "CreatedDate",
+            "date_start": "{today}",
+            "date_end": "{today}",
+            "extra_include": [
+              "Beklemede"
+            ],
+            "extra_exclude": [
+              "Gerçekleşti",
+              "Gelmedi"
+            ],
+            "response_mode": "visualization",
+            "visible_sections": [
+              "chart"
+            ]
+          }
         }
       ]
     },
@@ -147,15 +570,56 @@
       "turns": [
         {
           "question": "Bransa gore gelmeme oranini goster",
-          "expected": {"follow_up": false, "analysis_type": "ratio", "metrics": ["no_show_rate"], "dimensions": ["GenelRandevuBolumAdi"], "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": false,
+            "analysis_type": "ratio",
+            "metrics": [
+              "no_show_rate"
+            ],
+            "dimensions": [
+              "GenelRandevuBolumAdi"
+            ],
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "Aynisini randevu tipine gore goster",
-          "expected": {"follow_up": true, "analysis_type": "ratio", "metrics": ["no_show_rate"], "dimensions": ["RandevuTipiAdi"], "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "ratio",
+            "metrics": [
+              "no_show_rate"
+            ],
+            "dimensions": [
+              "RandevuTipiAdi"
+            ],
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "SQL ini ver",
-          "expected": {"follow_up": true, "analysis_type": "ratio", "metrics": ["no_show_rate"], "dimensions": ["RandevuTipiAdi"], "extra_include": [], "extra_exclude": [], "response_mode": "sql", "visible_sections": ["sql"]}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "ratio",
+            "metrics": [
+              "no_show_rate"
+            ],
+            "dimensions": [
+              "RandevuTipiAdi"
+            ],
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": "sql",
+            "visible_sections": [
+              "sql"
+            ]
+          }
         }
       ]
     },
@@ -165,15 +629,58 @@
       "turns": [
         {
           "question": "Kategoriye gore sifir sureli kayit sayisini goster",
-          "expected": {"follow_up": false, "analysis_type": "data_quality", "metrics": ["zero_or_negative_duration_count"], "dimensions": ["KategoriAdi"], "extra_include": [], "extra_exclude": [], "response_mode": "data", "visible_sections": ["table"]}
+          "expected": {
+            "follow_up": false,
+            "analysis_type": "data_quality",
+            "metrics": [
+              "zero_or_negative_duration_count"
+            ],
+            "dimensions": [
+              "KategoriAdi"
+            ],
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": "data",
+            "visible_sections": [
+              "table"
+            ]
+          }
         },
         {
           "question": "Bunu hizmete gore goster",
-          "expected": {"follow_up": true, "analysis_type": "data_quality", "metrics": ["zero_or_negative_duration_count"], "dimensions": ["HizmetAdi"], "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "data_quality",
+            "metrics": [
+              "zero_or_negative_duration_count"
+            ],
+            "dimensions": [
+              "HizmetAdi"
+            ],
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "Tabloyu getir",
-          "expected": {"follow_up": true, "analysis_type": "data_quality", "metrics": ["zero_or_negative_duration_count"], "dimensions": ["HizmetAdi"], "extra_include": [], "extra_exclude": [], "response_mode": "data", "visible_sections": ["table"]}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "data_quality",
+            "metrics": [
+              "zero_or_negative_duration_count"
+            ],
+            "dimensions": [
+              "HizmetAdi"
+            ],
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": "data",
+            "visible_sections": [
+              "table"
+            ]
+          }
         }
       ]
     },
@@ -183,15 +690,61 @@
       "turns": [
         {
           "question": "Uyruk ve cinsiyete gore randevu sayisini goster",
-          "expected": {"follow_up": false, "analysis_type": "cross_analysis", "metrics": ["appointment_count"], "dimensions": ["CinsiyetId", "Uyruk"], "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": false,
+            "analysis_type": "cross_analysis",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [
+              "CinsiyetId",
+              "Uyruk"
+            ],
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "Bunu grafik yap",
-          "expected": {"follow_up": true, "analysis_type": "cross_analysis", "metrics": ["appointment_count"], "dimensions": ["CinsiyetId", "Uyruk"], "extra_include": [], "extra_exclude": [], "response_mode": "visualization", "visible_sections": ["chart"]}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "cross_analysis",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [
+              "CinsiyetId",
+              "Uyruk"
+            ],
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": "visualization",
+            "visible_sections": [
+              "chart"
+            ]
+          }
         },
         {
           "question": "Sadece SQL ver",
-          "expected": {"follow_up": true, "analysis_type": "cross_analysis", "metrics": ["appointment_count"], "dimensions": ["CinsiyetId", "Uyruk"], "extra_include": [], "extra_exclude": [], "response_mode": "sql", "visible_sections": ["sql"]}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "cross_analysis",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [
+              "CinsiyetId",
+              "Uyruk"
+            ],
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": "sql",
+            "visible_sections": [
+              "sql"
+            ]
+          }
         }
       ]
     },
@@ -201,11 +754,39 @@
       "turns": [
         {
           "question": "2025 Mayis ayinda Kardiyoloji bolumunde kac randevu oldu?",
-          "expected": {"follow_up": false, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": [], "date_column": "BaslangicTarihi", "date_start": "2025-05-01", "date_end": "2025-05-31", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": false,
+            "analysis_type": "count",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [],
+            "date_column": "BaslangicTarihi",
+            "date_start": "2025-05-01",
+            "date_end": "2025-05-31",
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "Peki Haziran ayinda?",
-          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": [], "date_column": "BaslangicTarihi", "date_start": "2025-06-01", "date_end": "2025-06-30", "extra_include": [], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "count",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [],
+            "date_column": "BaslangicTarihi",
+            "date_start": "2025-06-01",
+            "date_end": "2025-06-30",
+            "extra_include": [],
+            "extra_exclude": [],
+            "response_mode": null,
+            "visible_sections": []
+          }
         }
       ]
     },
@@ -215,11 +796,48 @@
       "turns": [
         {
           "question": "Mayis 2025'te gerceklesen randevu sayisini goster",
-          "expected": {"follow_up": false, "analysis_type": "count", "metrics": ["completed_appointment_count"], "dimensions": [], "date_column": "BaslangicTarihi", "date_start": "2025-05-01", "date_end": "2025-05-31", "extra_include": ["Gerçekleşti"], "extra_exclude": [], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": false,
+            "analysis_type": "count",
+            "metrics": [
+              "completed_appointment_count"
+            ],
+            "dimensions": [],
+            "date_column": "BaslangicTarihi",
+            "date_start": "2025-05-01",
+            "date_end": "2025-05-31",
+            "extra_include": [
+              "Gerçekleşti"
+            ],
+            "extra_exclude": [],
+            "response_mode": null,
+            "visible_sections": []
+          }
         },
         {
           "question": "Peki gerceklesmeyenler?",
-          "expected": {"follow_up": true, "analysis_type": "count", "metrics": ["appointment_count"], "dimensions": [], "date_column": "BaslangicTarihi", "date_start": "2025-05-01", "date_end": "2025-05-31", "extra_include": ["Beklemede", "Gelmedi", "Giriş Yapılmış", "İşlem Sürmekte"], "extra_exclude": ["Gerçekleşti"], "response_mode": null, "visible_sections": []}
+          "expected": {
+            "follow_up": true,
+            "analysis_type": "count",
+            "metrics": [
+              "appointment_count"
+            ],
+            "dimensions": [],
+            "date_column": "BaslangicTarihi",
+            "date_start": "2025-05-01",
+            "date_end": "2025-05-31",
+            "extra_include": [
+              "Beklemede",
+              "Gelmedi",
+              "Giriş Yapılmış",
+              "İşlem Sürmekte"
+            ],
+            "extra_exclude": [
+              "Gerçekleşti"
+            ],
+            "response_mode": null,
+            "visible_sections": []
+          }
         }
       ]
     }

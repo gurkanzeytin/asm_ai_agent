@@ -65,6 +65,8 @@
         "tekil hasta",
         "kac hasta",
         "hasta sayisi",
+        "hasta tarafinda tekil sayi",
+        "hastalarda tekil sayi",
         "kac farkli hasta",
         "benzersiz hasta",
         "ayri hasta",
@@ -73,7 +75,14 @@
         "hastalarin orani",
         "hastalarin yuzdesi",
         "degisik hasta",
-        "kac degisik hasta"
+        "kac degisik hasta",
+        "farkli kisi",
+        "kac farkli kisi"
+      ],
+      "compositional_signals": [
+        ["hasta", "kisi"],
+        ["tekil", "benzersiz", "farkli", "ayri"],
+        ["kac", "sayi", "adet", "adedi", "toplam"]
       ],
       "compatible_dimensions_group": "standard",
       "default_time_column": "BaslangicTarihi",
@@ -127,7 +136,6 @@
         "hasta basina randevu",
         "hasta basi randevu",
         "kisi basina randevu",
-        "ortalama randevu adedi",
         "randevusu en fazla olan hasta",
         "en sik gelen hasta",
         "hasta basina",
@@ -135,6 +143,11 @@
         "tekrar ziyaret",
         "randevusu en fazla olan",
         "en sik gelen"
+      ],
+      "compositional_signals": [
+        ["hasta", "kisi"],
+        ["ortalama", "ort", "basina"],
+        ["randevu", "gelme", "gelmis", "kez", "kere"]
       ],
       "compatible_dimensions_group": "standard",
       "default_time_column": "BaslangicTarihi",
@@ -163,6 +176,11 @@
         "tekrar eden hasta",
         "birden fazla gelen",
         "tek seferlik"
+      ],
+      "compositional_signals": [
+        ["hasta", "kisi"],
+        ["randevu", "randvu", "gelme", "gelen"],
+        ["tekrar", "birden fazla", "birden cok", "cok kere", "iki kere"]
       ],
       "compatible_dimensions_group": "organizational",
       "default_time_column": "BaslangicTarihi",
@@ -244,6 +262,13 @@
         "birden fazla doktorla islem gormus",
         "ayni gun coklu doktor",
         "ayni gun birden fazla doktor"
+      ],
+      "compositional_signals": [
+        ["hasta", "kisi"],
+        ["ayni", "tek", "bir"],
+        ["gun", "gunde", "tarih", "tarihte", "takvim tarihi"],
+        ["doktor", "hekim"],
+        ["birden fazla", "birden cok", "iki ayri", "farkli", "degisik", "coklu"]
       ],
       "compatible_dimensions_group": "standard",
       "default_time_column": "BaslangicTarihi",
@@ -547,6 +572,11 @@
         "ay bazinda",
         "aylik dagilim"
       ],
+      "compositional_signals": [
+        ["ay", "aylik"],
+        ["randevu", "randvu"],
+        ["gidisat", "trend", "degisim", "dagilim"]
+      ],
       "compatible_dimensions_group": "organizational",
       "default_time_column": "BaslangicTarihi",
       "null_behavior": "COUNT(*) null'lardan etkilenmez",
@@ -568,6 +598,11 @@
         "gunde ortalama kac randevu",
         "gun basina randevu",
         "gunluk ortalama"
+      ],
+      "compositional_signals": [
+        ["gunluk", "gunde", "gun basina", "takvim gunu", "gunune dusen"],
+        ["ortalama", "ort"],
+        ["randevu", "randvu"]
       ],
       "compatible_dimensions_group": "organizational",
       "default_time_column": "BaslangicTarihi",
@@ -624,6 +659,12 @@
         "gununde alinan randevu",
         "ayni gun icinde"
       ],
+      "compositional_signals": [
+        ["ayni", "gununde"],
+        ["gun", "gunu", "gunuyle", "tarih"],
+        ["alinan", "alinip", "olusturulan", "olusturuldugu", "olusturma", "kayit", "kaydedilen"],
+        ["randevu", "kac", "sayi", "adet"]
+      ],
       "compatible_dimensions_group": "organizational",
       "default_time_column": "BaslangicTarihi",
       "null_behavior": "NULL tarihler koşulu sağlamaz",
@@ -673,6 +714,12 @@
         "protokol acilis gecikme",
         "protokol acilisi randevudan"
       ],
+      "compositional_signals": [
+        ["protokol"],
+        ["acilis", "aciliyor", "aciliyo", "acilma", "acilan", "acilmis"],
+        ["randevu"],
+        ["sonra", "gecikme", "gec", "sure"]
+      ],
       "compatible_dimensions_group": "organizational",
       "default_time_column": "BaslangicTarihi",
       "null_behavior": "Protokolü olmayan (NULL) kayıtlar ortalamaya girmez",
@@ -693,6 +740,11 @@
         "fiili sure",
         "gercek sure",
         "tarihlere gore sure"
+      ],
+      "compositional_signals": [
+        ["fiili", "gercek"],
+        ["sure", "surmus", "suruyor", "dakika"],
+        ["ortalama", "ort", "ne kadar"]
       ],
       "compatible_dimensions_group": "standard",
       "default_time_column": "BaslangicTarihi",
@@ -716,6 +768,11 @@
         "planlanan sure farki",
         "sapma suresi",
         "planlanan sure ile gercek sure"
+      ],
+      "compositional_signals": [
+        ["planlanan", "takvim", "randevu suresi"],
+        ["fiili", "gercek"],
+        ["fark", "sapma", "oynuyor", "uyusmaz", "celis"]
       ],
       "compatible_dimensions_group": "organizational",
       "default_time_column": "BaslangicTarihi",
@@ -924,7 +981,13 @@
         "doktor bilgisi olmayan",
         "doktor bilgisi eksik",
         "doktoru olmayan",
-        "eksik doktor"
+        "eksik doktor",
+        "doktoru girilmemis",
+        "hekim bilgisi atanmamis"
+      ],
+      "compositional_signals": [
+        ["doktor", "hekim"],
+        ["eksik", "bos", "null", "girilmemis", "atanmamis", "atanmayan", "atlanmis"]
       ],
       "compatible_dimensions_group": "organizational",
       "default_time_column": "BaslangicTarihi",
@@ -946,7 +1009,13 @@
         "bolumu eksik",
         "bolum bilgisi olmayan",
         "bolumsuz kayit",
-        "veri eksikligi"
+        "veri eksikligi",
+        "bolumu bos",
+        "bolum girilmemis"
+      ],
+      "compositional_signals": [
+        ["bolum", "klinik"],
+        ["eksik", "bos", "null", "girilmemis", "atanmamis", "birakilan"]
       ],
       "compatible_dimensions_group": "organizational",
       "default_time_column": "BaslangicTarihi",
@@ -971,7 +1040,14 @@
         "tarihi bozuk",
         "baslangictan once",
         "veri kalitesi sorunlu",
-        "sorunlu kayit"
+        "sorunlu kayit",
+        "baslangici bitisinden sonra",
+        "bitis baslangictan erken"
+      ],
+      "compositional_signals": [
+        ["baslangic", "baslama"],
+        ["bitis"],
+        ["erken", "once", "sonra"]
       ],
       "compatible_dimensions_group": "organizational",
       "default_time_column": "BaslangicTarihi",
@@ -993,7 +1069,13 @@
         "sifir sureli",
         "negatif sure",
         "suresi hatali",
-        "sifir veya negatif"
+        "sifir veya negatif",
+        "sure sifir",
+        "sure eksi"
+      ],
+      "compositional_signals": [
+        ["sure", "dakika"],
+        ["sifir", "0", "negatif", "eksi", "0dan kucuk", "0 dan kucuk"]
       ],
       "compatible_dimensions_group": "organizational",
       "default_time_column": "BaslangicTarihi",
@@ -1018,7 +1100,14 @@
         "sure uyusmayan",
         "tarih farki uyusmayan",
         "planlanandan uzun",
-        "sure uyusmazligi"
+        "sure uyusmazligi",
+        "sure farki tutmayan",
+        "kayitli sure tutmayan",
+        "saat farki tutmayan"
+      ],
+      "compositional_signals": [
+        ["sure", "dakika", "tarih farki"],
+        ["uyusmayan", "tutmayan", "celisen", "celiski", "tutarsiz"]
       ],
       "compatible_dimensions_group": "organizational",
       "default_time_column": "BaslangicTarihi",
@@ -1111,6 +1200,10 @@
         "giris orani",
         "giris yapilmislarin orani"
       ],
+      "compositional_signals": [
+        ["giris", "check in", "checkin"],
+        ["oran", "yuzde", "pay", "hisse"]
+      ],
       "compatible_dimensions_group": "standard",
       "default_time_column": "BaslangicTarihi",
       "null_behavior": "NULLIF ile sifira bolme korumasi",
@@ -1135,7 +1228,13 @@
         "islem surmekte olan",
         "islem surmekte olan randevu",
         "islemde olan randevu",
-        "islem suren randevu"
+        "islem suren randevu",
+        "islemi devam eden",
+        "halen devam eden"
+      ],
+      "compositional_signals": [
+        ["islemde", "islemi suren", "devam eden"],
+        ["kac", "sayi", "adet", "adedi", "toplam"]
       ],
       "compatible_dimensions_group": "standard",
       "default_time_column": "BaslangicTarihi",
@@ -1204,7 +1303,13 @@
       "synonyms": [
         "bekleme orani",
         "beklemede olanlarin orani",
-        "bekleyenlerin orani"
+        "bekleyenlerin orani",
+        "bekleyenlerin payi",
+        "bekliyor olanlarin payi"
+      ],
+      "compositional_signals": [
+        ["bekleyen", "bekleme", "bekleme sirasi", "bekleme sirasinda", "sirada duran", "kuyruk"],
+        ["oran", "yuzde", "yuzdesi", "pay", "payi", "hisse"]
       ],
       "compatible_dimensions_group": "standard",
       "default_time_column": "BaslangicTarihi",

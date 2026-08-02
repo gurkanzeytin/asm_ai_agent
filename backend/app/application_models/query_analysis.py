@@ -42,8 +42,9 @@ class QueryAnalysis(BaseModel):
     """Structured deterministic NLU analysis used to enrich schema retrieval.
 
     Pipeline stages captured for observability:
-        original_query -> normalized_query stages -> rewritten_query
-        -> expanded_query -> final_query (sent to SQL generation).
+        original_query -> catalog_query (orthography only) -> normalized_query
+        stages -> rewritten_query -> expanded_query -> final_query (sent to SQL
+        generation).
 
     ``normalized_query`` keeps its historical meaning: the fully rewritten and
     expanded natural-language query used for schema retrieval.
@@ -53,6 +54,7 @@ class QueryAnalysis(BaseModel):
 
     original_query: str
     normalized_query: str
+    catalog_query: str = ""
     rewritten_query: str = ""
     expanded_query: str = ""
     final_query: str = ""

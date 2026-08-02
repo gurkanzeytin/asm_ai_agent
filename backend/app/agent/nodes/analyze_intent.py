@@ -8,6 +8,8 @@ from app.semantics.models import SemanticFrame
 from app.services.answerability import AnswerabilityGuard
 from app.services.interfaces import IIntentClassifier
 from app.services.query_analyzer import QueryAnalyzer
+from app.services.schema_answerability import SchemaAnswerabilityService
+from app.services.schema_capability import SchemaCapabilityService
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +22,8 @@ class AnalyzeIntentNode(IAgentNode):
         intent_classifier: IIntentClassifier,
         query_analyzer: QueryAnalyzer | None = None,
         answerability_guard: AnswerabilityGuard | None = None,
+        schema_answerability_service: SchemaAnswerabilityService | None = None,
+        schema_capability_service: SchemaCapabilityService | None = None,
     ):
         """Initializes the node with an intent classifier.
 
@@ -27,12 +31,16 @@ class AnalyzeIntentNode(IAgentNode):
             intent_classifier: Configured IIntentClassifier instance.
             query_analyzer: Optional analyzer used for ambiguity detection.
             answerability_guard: Optional guard deciding schema-domain coverage (AG-022).
+            schema_answerability_service: Optional bounded LLM second opinion used only
+                for otherwise unknown schema-domain questions.
         """
         self.intent_classifier = intent_classifier
         self.query_analyzer = query_analyzer or QueryAnalyzer()
         self.answerability_guard = answerability_guard or AnswerabilityGuard(
             query_analyzer=self.query_analyzer
         )
+        self.schema_answerability_service = schema_answerability_service
+        self.schema_capability_service = schema_capability_service or SchemaCapabilityService()
         self.semantic_engine = SemanticUnderstandingEngine(
             query_analyzer=self.query_analyzer
         )
@@ -50,6 +58,31 @@ class AnalyzeIntentNode(IAgentNode):
         start_time = time.perf_counter()
 
         try:
+            capability_answer = self.schema_capability_service.answer(
+                state.raw_question or state.question
+            )
+            if capability_answer is not None:
+                duration = (time.perf_counter() - start_time) * 1000
+                logger.info(
+                    "Schema capability question recognized; skipping intent/SQL path.",
+                    extra={"column": capability_answer.column},
+                )
+                return state.model_copy(
+                    update={
+                        "schema_capability_answer": capability_answer,
+                        "answerable": True,
+                        "answerability_signals": [
+                            f"schema_capability:{capability_answer.column}"
+                        ],
+                        "current_node": "analyze_intent",
+                        "completed_nodes": state.completed_nodes + ["analyze_intent"],
+                        "duration_ms": state.duration_ms + duration,
+                        "node_timings": {
+                            **state.node_timings,
+                            "analyze_intent": duration,
+                        },
+                    }
+                )
             intent_result = self.intent_classifier.classify(state.question)
             ambiguity = self.query_analyzer.detect_ambiguity(state.question)
             if (
@@ -90,6 +123,40 @@ class AnalyzeIntentNode(IAgentNode):
                 state.answerability_context_signals,
                 context=state.answerability_input,
             )
+            schema_decision = None
+            if (
+                not answerability.answerable
+                and answerability.reason == "no_domain_signal"
+                and ambiguity is None
+                and self.schema_answerability_service is not None
+            ):
+                schema_decision = await self.schema_answerability_service.assess(
+                    state.question
+                )
+                if schema_decision is not None and schema_decision.approved:
+                    answerability = answerability.model_copy(
+                        update={
+                            "answerable": True,
+                            "reason": "llm_schema_reasoning",
+                            "signals": [
+                                *answerability.signals,
+                                "schema_reasoning:answerable",
+                                *(
+                                    f"schema_column:{column}"
+                                    for column in schema_decision.supporting_columns
+                                ),
+                            ],
+                        }
+                    )
+                    logger.info(
+                        "Unknown domain wording accepted by bounded schema reasoning.",
+                        extra={
+                            "question": state.question,
+                            "confidence": schema_decision.confidence,
+                            "supporting_columns": schema_decision.supporting_columns,
+                            "supporting_metrics": schema_decision.supporting_metrics,
+                        },
+                    )
 
             duration = (time.perf_counter() - start_time) * 1000
             logger.info("AnalyzeIntentNode completed successfully.")
@@ -100,6 +167,7 @@ class AnalyzeIntentNode(IAgentNode):
                     "semantic_frame": semantic_frame,
                     "answerable": answerability.answerable,
                     "answerability_signals": answerability.signals,
+                    "schema_reasoning_decision": schema_decision,
                     # A pre-seeded ambiguity (e.g. from the conversational
                     # context resolver) takes precedence over local detection.
                     "ambiguity": state.ambiguity or ambiguity,
