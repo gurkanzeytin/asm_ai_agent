@@ -109,7 +109,7 @@ function Index() {
               className="min-h-full"
             >
               {chat.messages.length === 0 ? (
-                <EmptyState />
+                <EmptyState onPrompt={(prompt) => void chat.send(prompt)} />
               ) : (
                 <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8">
                   {chat.messages.map((message) => (

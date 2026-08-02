@@ -103,9 +103,7 @@ export function ChatMessage({
     const isSqlOnly =
       message.responseMode === "sql" ||
       Boolean(
-        sections?.includes("sql") &&
-          !sections.includes("table") &&
-          !sections.includes("chart"),
+        sections?.includes("sql") && !sections.includes("table") && !sections.includes("chart"),
       );
     if (isSqlOnly && result?.query?.trim()) {
       return result.query.trim();
@@ -323,6 +321,28 @@ export function ChatMessage({
                   </motion.div>
                 )}
               </AnimatePresence>
+            </div>
+          )}
+        {!isUser &&
+          !message.streaming &&
+          message.suggestedQuestions &&
+          message.suggestedQuestions.length > 0 && (
+            <div className="mt-1 w-full rounded-xl border border-border/60 bg-muted/20 p-3">
+              <p className="mb-2 text-[11px] font-medium text-muted-foreground">
+                {tr.chat.suggestedQuestions}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {message.suggestedQuestions.map((question) => (
+                  <button
+                    key={question}
+                    type="button"
+                    onClick={() => onPrompt?.(question)}
+                    className="rounded-full border border-border bg-background px-3 py-1.5 text-left text-xs text-foreground transition hover:border-primary/50 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         {!isUser && !message.streaming && (

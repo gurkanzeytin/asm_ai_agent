@@ -78,6 +78,10 @@ class WorkflowResult(BaseModel):
         default=None,
         description="Controlled AgentOutcome value describing how the run resolved (AG-022).",
     )
+    suggested_questions: List[str] = Field(
+        default_factory=list,
+        description="Safe, actionable questions the UI may offer as one-click continuations.",
+    )
 
     # Conversational context / chat-memory diagnostics (optional, backward compatible).
     session_id: Optional[str] = Field(

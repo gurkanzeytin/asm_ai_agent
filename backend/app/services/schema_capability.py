@@ -7,11 +7,14 @@ import re
 from app.application_models.schema_capability import SchemaCapabilityAnswer
 from app.semantics import catalog
 from app.semantics.catalog import ColumnSpec
+from app.semantics.question_examples import column_question_examples
 from app.semantics.view_mapping import fold
 
 _FIELD_MARKER = re.compile(r"\b(alan\w*|kolon\w*|sutun\w*|field\w*)\b")
 _CAPABILITY_MARKER = re.compile(
     r"\bhangi\s+analiz\w*\b|"
+    r"\bhangi\s+soru\w*\s+sor\w*\b|"
+    r"\bornek\s+soru\w*\b|"
     r"\b(?:ne|neler)\s+(?:ise\s+yarar|yapilabilir|analiz\s+edilebilir)\b|"
     r"\b(?:acikla|anlat)\w*\b"
 )
@@ -47,11 +50,13 @@ class SchemaCapabilityService:
             return None
 
         protected = column.pii or not column.selectable
+        examples = column_question_examples(column)
         return SchemaCapabilityAnswer(
             column=column.column,
             business_name=column.business_name,
-            markdown=self._build_markdown(column, protected=protected),
+            markdown=self._build_markdown(column, protected=protected, examples=examples),
             protected=protected,
+            example_questions=examples,
         )
 
     @staticmethod
@@ -75,7 +80,9 @@ class SchemaCapabilityService:
         return matches[0][3]
 
     @staticmethod
-    def _build_markdown(spec: ColumnSpec, *, protected: bool) -> str:
+    def _build_markdown(
+        spec: ColumnSpec, *, protected: bool, examples: list[str]
+    ) -> str:
         metric_catalog = catalog.load_metric_catalog()
         related_metrics = [
             metric.name
@@ -145,5 +152,8 @@ class SchemaCapabilityService:
         if spec.common_mistakes:
             lines.extend(["", "## Dikkat", ""])
             lines.extend(f"- {warning}" for warning in spec.common_mistakes[:5])
+
+        lines.extend(["", "## Örnek sorular", ""])
+        lines.extend(f'- “{question}”' for question in examples[:4])
 
         return "\n".join(lines)

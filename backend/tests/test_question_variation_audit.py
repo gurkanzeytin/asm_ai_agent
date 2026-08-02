@@ -67,7 +67,7 @@ def test_every_column_capability_probe_has_a_non_sql_schema_answer():
         if result.case.family == "column_capability"
     ]
 
-    assert len(results) == len(catalog.load_column_catalog().columns)
+    assert len(results) == len(catalog.load_column_catalog().columns) * 3
     assert all(result.passed and not result.deterministic for result in results)
 
 

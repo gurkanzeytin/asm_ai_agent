@@ -316,6 +316,10 @@ class ReportResponse(BaseModel):
             "RETURN_HELP, OUT_OF_SCOPE, REWRITE_AND_RETRY, NO_RESULT_GUIDANCE, SAFE_ERROR."
         ),
     )
+    suggested_questions: List[str] = Field(
+        default_factory=list,
+        description="Safe one-click alternatives for clarification, help, or guidance outcomes.",
+    )
 
     # Conversational context / chat-memory diagnostics (optional, backward compatible —
     # existing clients that ignore these fields are unaffected).

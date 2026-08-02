@@ -5,6 +5,7 @@ from app.agent.nodes.analyze_intent import AnalyzeIntentNode
 from app.agent.nodes.generate_schema_capability import GenerateSchemaCapabilityNode
 from app.agent.state import AgentState
 from app.semantics import catalog
+from app.semantics.schema_knowledge import load_schema_knowledge
 from app.services.schema_capability import SchemaCapabilityService
 
 
@@ -29,6 +30,26 @@ def test_service_answers_every_catalog_column_probe():
     assert {answer.column for answer in answers if answer} == (
         catalog.load_column_catalog().column_names()
     )
+    assert all(len(answer.example_questions) >= 2 for answer in answers if answer)
+
+
+def test_service_recognizes_natural_example_question_request():
+    answer = SchemaCapabilityService().answer(
+        "Randevu süresi sütunuyla hangi soruları sorabilirim?"
+    )
+
+    assert answer is not None
+    assert "## Örnek sorular" in answer.markdown
+    assert "ortalama randevu süresi" in answer.markdown.casefold()
+
+
+def test_llm_schema_context_contains_examples_for_every_column():
+    knowledge = load_schema_knowledge()
+
+    assert len(knowledge.columns) == 24
+    assert all(len(column.example_questions) >= 2 for column in knowledge.columns)
+    rendered = knowledge.render_for_llm()
+    assert rendered.count("examples=") == len(knowledge.columns)
 
 
 @pytest.mark.parametrize(
@@ -52,6 +73,7 @@ def test_pii_capability_answer_never_offers_raw_values():
     assert answer.protected
     assert "Ham değerleri" in answer.markdown
     assert "kişi listesini göstermem" in answer.markdown
+    assert all("listele" not in question.casefold() for question in answer.example_questions)
 
 
 def test_unverified_metrics_are_not_advertised_as_supported():

@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.semantics import catalog, view_mapping
+from app.semantics.question_examples import column_question_examples
 
 
 class ColumnKnowledge(BaseModel):
@@ -30,6 +31,7 @@ class ColumnKnowledge(BaseModel):
     filterable: bool = True
     groupable: bool = False
     aggregatable: str = "none"
+    example_questions: list[str] = Field(default_factory=list)
 
 
 class MetricKnowledge(BaseModel):
@@ -74,6 +76,7 @@ class SchemaKnowledge(BaseModel):
         for column in self.columns:
             rules = " | ".join(column.business_rules) or "none"
             values = ", ".join(column.known_values) or "none"
+            examples = " | ".join(column.example_questions) or "none"
             lines.append(
                 f"- {column.name}: {column.business_name}; {column.description}; "
                 f"role={column.data_role}; type={column.semantic_type}; "
@@ -82,7 +85,7 @@ class SchemaKnowledge(BaseModel):
                 f"selectable={column.selectable}; pii={column.pii}; "
                 f"related_metrics={','.join(column.related_metrics) or 'none'}; "
                 f"known_values={values}; value_grounding={column.value_grounding}; "
-                f"rules={rules}"
+                f"rules={rules}; examples={examples}"
             )
         lines.append("METRICS")
         for metric in self.metrics:
@@ -160,6 +163,7 @@ def load_schema_knowledge() -> SchemaKnowledge:
             filterable=spec.filterable,
             groupable=spec.groupable,
             aggregatable=spec.aggregatable,
+            example_questions=column_question_examples(spec),
         )
         for spec in column_catalog.columns
     ]

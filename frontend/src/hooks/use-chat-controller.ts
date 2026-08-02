@@ -30,6 +30,7 @@ import {
 import { tr } from "@/locales/tr";
 import { MAX_UI_ROWS_PER_PAGE } from "@/lib/result-limits";
 import { traceChatRuntime } from "@/lib/chat-runtime-trace";
+import { COLUMN_QUESTION_STARTERS } from "@/lib/column-question-starters";
 
 const TABLE_HIDDEN_OUTCOMES = new Set([
   "OUT_OF_SCOPE",
@@ -336,6 +337,7 @@ export function useChatController() {
                 errorKind: messageErrorKind,
                 errorCode: messageErrorCode,
                 outcome: response.outcome ?? undefined,
+                suggestedQuestions: response.suggested_questions,
                 rowCount: boundedQueryResult?.row_count,
                 sqlResult,
                 responseMode,
@@ -415,6 +417,7 @@ export function useChatController() {
                 status: "error",
                 errorKind: errorInfo.kind,
                 errorCode: errorInfo.code,
+                suggestedQuestions: [...COLUMN_QUESTION_STARTERS.slice(0, 4)],
               }
             : item,
         ),

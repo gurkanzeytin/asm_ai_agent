@@ -18,6 +18,8 @@ export interface Message {
   errorKind?: MessageErrorKind;
   errorCode?: string;
   outcome?: string;
+  /** Backend-derived or local safe questions offered as one-click continuations. */
+  suggestedQuestions?: string[];
   rowCount?: number;
   prompt?: string;
   sqlResult?: SqlResult;

@@ -7,8 +7,40 @@ import { PromptBox } from "./PromptBox";
 import { Sidebar } from "./Sidebar";
 import { SqlResultsTable } from "./SqlResultsTable";
 import { SqlChartPanel } from "./SqlChartPanel";
+import { EmptyState } from "./EmptyState";
 
 describe("sohbet arayüzü düzenlemeleri", () => {
+  it("boş ekrandaki sütun-temelli örnek soruyu tek tıkla gönderir", () => {
+    const onPrompt = vi.fn();
+    render(<EmptyState onPrompt={onPrompt} />);
+
+    const starter = screen.getByRole("button", {
+      name: "2024 yılındaki ortalama randevu süresi nedir?",
+    });
+    fireEvent.click(starter);
+
+    expect(onPrompt).toHaveBeenCalledWith("2024 yılındaki ortalama randevu süresi nedir?");
+  });
+
+  it("kontrollü yanıttan sonra backend önerilerini tıklanabilir gösterir", () => {
+    const onPrompt = vi.fn();
+    render(
+      <ChatMessage
+        message={{
+          id: "guided-answer",
+          role: "assistant",
+          content: "Bu soru için bir seçim gerekiyor.",
+          createdAt: 1,
+          suggestedQuestions: ["Randevu sayısı", "Gelmeme oranı"],
+        }}
+        onPrompt={onPrompt}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Gelmeme oranı" }));
+    expect(onPrompt).toHaveBeenCalledWith("Gelmeme oranı");
+  });
+
   it("tamamlanan sıfır sonuç yanıtını görünür asistan metni olarak gösterir", () => {
     render(
       <ChatMessage

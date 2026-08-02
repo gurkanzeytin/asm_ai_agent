@@ -176,15 +176,28 @@ def generate_question_variations() -> tuple[GeneratedQuestion, ...]:
                     )
 
     for column in column_catalog.columns:
-        cases.append(
+        capability_questions = (
+            (
+                f"VAR-COLUMN-{column.column}",
+                f"{column.business_name} alanını kullanarak hangi analizi yapabilirsin?",
+            ),
+            (
+                f"VAR-COLUMN-{column.column}-QUESTIONS",
+                f"{column.business_name} sütunuyla hangi soruları sorabilirim?",
+            ),
+            (
+                f"VAR-COLUMN-{column.column}-EXAMPLES",
+                f"{column.business_name} kolonu için örnek sorular ver.",
+            ),
+        )
+        cases.extend(
             GeneratedQuestion(
-                id=f"VAR-COLUMN-{column.column}",
-                question=(
-                    f"{column.business_name} alanını kullanarak hangi analizi yapabilirsin?"
-                ),
+                id=case_id,
+                question=question,
                 family="column_capability",
                 expected_columns=(column.column,),
             )
+            for case_id, question in capability_questions
         )
         if column.pii or not column.selectable:
             cases.append(
@@ -217,6 +230,8 @@ def audit_question_variations() -> tuple[VariationAuditResult, ...]:
                 failures.append("capability_answer_missing")
             elif capability.column not in case.expected_columns:
                 failures.append("capability_column_mismatch")
+            elif len(capability.example_questions) < 2:
+                failures.append("capability_examples_missing")
             results.append(
                 VariationAuditResult(
                     case=case,

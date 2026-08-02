@@ -13,3 +13,7 @@ class SchemaCapabilityAnswer(BaseModel):
         default=False,
         description="Whether raw values are protected by PII/selectability policy.",
     )
+    example_questions: list[str] = Field(
+        default_factory=list,
+        description="Catalog-derived, safe natural-language questions for this column.",
+    )

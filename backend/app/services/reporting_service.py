@@ -20,6 +20,7 @@ from app.reporting.output_policy import (
 )
 from app.reporting.presentation import get_dimension_label, get_metric_label
 from app.services.answerability import AnswerabilityInput
+from app.services.question_suggestions import build_suggested_questions
 from app.services.workflow_progress import (
     ProgressCallback,
     reset_progress_callback,
@@ -317,6 +318,7 @@ class ReportingService:
         query_plan_dto = final_state.get("query_plan")
         semantic_frame_dto = final_state.get("semantic_frame")
         ambiguity_dto = final_state.get("ambiguity")
+        schema_capability_dto = final_state.get("schema_capability_answer")
 
         # AG-022 SAFE_ERROR: the workflow must never end without a user-facing
         # response. If no node produced a report, synthesize friendly guidance.
@@ -607,6 +609,11 @@ class ReportingService:
             if query_plan_dto is not None
             else (resolution.resolved_signals if resolution else None)
         )
+        suggested_questions = build_suggested_questions(
+            outcome=outcome,
+            ambiguity_options=ambiguity_dto.options if ambiguity_dto is not None else None,
+            capability=schema_capability_dto,
+        )
 
         return WorkflowResult(
             workflow_id=workflow_id,
@@ -629,6 +636,7 @@ class ReportingService:
             insights=insights_dto,
             observations=observations_dto,
             outcome=outcome,
+            suggested_questions=suggested_questions,
             session_id=session_id,
             follow_up_detected=resolution.follow_up_detected if resolution else False,
             follow_up_confidence=resolution.follow_up_confidence if resolution else 1.0,

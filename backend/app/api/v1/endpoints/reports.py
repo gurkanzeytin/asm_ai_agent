@@ -204,6 +204,7 @@ def _map_to_response(result: WorkflowResult) -> ReportResponse:
         observations=observations_schema,
         visualization=visualization_schema,
         outcome=result.outcome,
+        suggested_questions=result.suggested_questions,
         session_id=result.session_id,
         follow_up_detected=result.follow_up_detected,
         follow_up_confidence=result.follow_up_confidence,

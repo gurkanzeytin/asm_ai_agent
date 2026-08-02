@@ -140,6 +140,7 @@ export interface ReportResponse {
   observations?: ObservationsPayload | null;
   visualization?: VisualizationPayload | null;
   outcome?: string | null;
+  suggested_questions?: string[];
   session_id?: string | null;
   follow_up_detected?: boolean;
   follow_up_confidence?: number;
@@ -173,6 +174,7 @@ const reportResponseSchema = z
     question: z.string(),
     response_mode: z.enum(["answer", "sql", "data", "visualization"]).nullable().optional(),
     visible_sections: z.array(z.string()).optional(),
+    suggested_questions: z.array(z.string()).optional(),
     session_id: z.string().nullable().optional(),
     follow_up_detected: z.boolean().optional(),
     follow_up_confidence: z.number().optional(),

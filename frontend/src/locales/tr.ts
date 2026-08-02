@@ -53,6 +53,7 @@ export const tr = {
     titleHighlight: "olabilirim",
     description:
       "Kurumunuz hakkında sorular sorun, veritabanında sorgular çalıştırın, belgeleri analiz edin veya doğal dille raporlar oluşturun.",
+    questionStarters: "Şunlardan biriyle başlayabilirsiniz",
   },
 
   details: {
@@ -125,6 +126,7 @@ export const tr = {
     retry: "Yeniden dene",
     editQuestion: "Soruyu düzenle",
     jumpToLatest: "Son yanıta git",
+    suggestedQuestions: "Buradan devam edebilirsiniz",
   },
 
   sqlTable: {

@@ -79,6 +79,7 @@ def _make_workflow_result(errors: list | None = None) -> WorkflowResult:
             total_ms=4321.0,
         ),
         errors=errors or [],
+        suggested_questions=["Şubelere göre randevu sayısını göster."],
     )
 
 
@@ -114,6 +115,7 @@ async def test_report_success(client: AsyncClient):
         assert data["workflow_id"] == "wf-test-001"
         assert data["question"] == "Which doctor has the highest number of appointments?"
         assert "SELECT" in data["generated_sql"]
+        assert data["suggested_questions"] == ["Şubelere göre randevu sayısını göster."]
 
         qr = data["query_result"]
         assert qr["columns"] == ["ad_soyad", "randevu_sayisi"]
