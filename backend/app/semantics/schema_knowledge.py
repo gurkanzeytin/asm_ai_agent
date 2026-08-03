@@ -25,6 +25,9 @@ class ColumnKnowledge(BaseModel):
     business_rules: list[str] = Field(default_factory=list)
     known_values: list[str] = Field(default_factory=list)
     value_grounding: Literal["verified", "partial", "live_db_required", "not_applicable"]
+    known_values_complete: bool = False
+    verified_distinct_count: int | None = None
+    values_verified_at: str = ""
     value_notes: str = ""
     pii: bool = False
     selectable: bool = True
@@ -77,6 +80,7 @@ class SchemaKnowledge(BaseModel):
             rules = " | ".join(column.business_rules) or "none"
             values = ", ".join(column.known_values) or "none"
             examples = " | ".join(column.example_questions) or "none"
+            value_notes = column.value_notes or "none"
             lines.append(
                 f"- {column.name}: {column.business_name}; {column.description}; "
                 f"role={column.data_role}; type={column.semantic_type}; "
@@ -85,6 +89,10 @@ class SchemaKnowledge(BaseModel):
                 f"selectable={column.selectable}; pii={column.pii}; "
                 f"related_metrics={','.join(column.related_metrics) or 'none'}; "
                 f"known_values={values}; value_grounding={column.value_grounding}; "
+                f"known_values_complete={column.known_values_complete}; "
+                f"verified_distinct_count={column.verified_distinct_count}; "
+                f"values_verified_at={column.values_verified_at or 'none'}; "
+                f"value_notes={value_notes}; "
                 f"rules={rules}; examples={examples}"
             )
         lines.append("METRICS")
@@ -109,7 +117,7 @@ def _value_grounding(spec: catalog.ColumnSpec) -> str:
     categorical = "categorical" in spec.semantic_type or spec.semantic_type.endswith("_code")
     if not categorical:
         return "not_applicable"
-    if spec.known_values and spec.values_verified:
+    if spec.known_values and spec.values_verified and spec.known_values_complete:
         return "verified"
     if spec.known_values:
         return "partial"
@@ -157,6 +165,9 @@ def load_schema_knowledge() -> SchemaKnowledge:
             business_rules=[*spec.common_mistakes, *concept_rules.get(spec.column, [])],
             known_values=list(spec.known_values),
             value_grounding=_value_grounding(spec),
+            known_values_complete=spec.known_values_complete,
+            verified_distinct_count=spec.verified_distinct_count,
+            values_verified_at=spec.values_verified_at,
             value_notes=spec.value_notes,
             pii=spec.pii,
             selectable=spec.selectable,

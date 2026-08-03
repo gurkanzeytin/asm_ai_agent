@@ -165,7 +165,10 @@
         "İşlem Sürmekte"
       ],
       "values_verified": true,
-      "value_notes": "İptal değeri kaynak görünümde doğrulanmamıştır ve filtre olarak üretilmez.",
+      "known_values_complete": true,
+      "verified_distinct_count": 5,
+      "values_verified_at": "2026-08-03",
+      "value_notes": "Canlı PusulaComed doğrulaması: beş değerin tamamı katalogdadır. İptal kaynak görünümde bulunmaz ve filtre olarak üretilmez.",
       "pii": false,
       "selectable": true,
       "filterable": true,
@@ -208,7 +211,7 @@
     {
       "column": "RandevuTipiAdi",
       "business_name": "Randevu tipi",
-      "description": "Okunabilir randevu tipi. Doğrulanmış değerler: Poliklinik, Ameliyat, Radyoloji, Kemoterapi (başka değerler olabilir).",
+      "description": "Okunabilir randevu tipi. Tam doğrulanmış değer kümesi: Poliklinik, Ameliyat, Radyoloji, Kemoterapi.",
       "data_role": "dimension",
       "semantic_type": "categorical",
       "synonyms": [
@@ -233,8 +236,11 @@
         "Radyoloji",
         "Kemoterapi"
       ],
-      "values_verified": false,
-      "value_notes": "Kısmi örnek kümedir; başka değerler canlı DB value grounding ile doğrulanmalıdır.",
+      "values_verified": true,
+      "known_values_complete": true,
+      "verified_distinct_count": 4,
+      "values_verified_at": "2026-08-03",
+      "value_notes": "Canlı PusulaComed doğrulamasında dört farklı değer bulundu; katalog tam kümedir. Radyoloji sözcüğü bölüm adı olarak da geçebildiğinden alan belirtilmeyen sorular netleştirilebilir.",
       "pii": false,
       "selectable": true,
       "filterable": true,
@@ -390,6 +396,9 @@
         "D"
       ],
       "values_verified": true,
+      "known_values_complete": true,
+      "verified_distinct_count": 3,
+      "values_verified_at": "2026-08-03",
       "value_notes": "E=erkek, K=kadın, D=diğer/bilinmiyor.",
       "pii": false,
       "selectable": true,
@@ -428,7 +437,7 @@
     {
       "column": "Uyruk",
       "business_name": "Uyruk",
-      "description": "Hastanın uyruğu / ülke adı.",
+      "description": "Hastanın uyruğu / ülke adı. Canlı kaynakta 149 farklı değer vardır; değerler tam normalize değildir.",
       "data_role": "demographic_dimension",
       "semantic_type": "categorical",
       "synonyms": [
@@ -445,12 +454,18 @@
       "related_columns": [
         "CinsiyetId"
       ],
-      "common_mistakes": [],
+      "common_mistakes": [
+        "Kaynak veride aynı ülkeyi temsil edebilen Irak/Irak 2, Ingiltere/Birleşik Krallık ve Dominik/Dominik Cum. çiftleri vardır; otomatik birleştirilmez.",
+        "Demonim eşleşmesi yalnız canlı değere tekil bağlanırsa uygulanır; birden fazla adayda netleştirme istenir."
+      ],
       "known_values": [
         "Türkiye"
       ],
       "values_verified": true,
-      "value_notes": "Yabancı cohort ana ülke değeri olarak Türkiye kullanır; diğer uyruklar canlı DB'den grounding gerektirir.",
+      "known_values_complete": false,
+      "verified_distinct_count": 149,
+      "values_verified_at": "2026-08-03",
+      "value_notes": "Türkiye değeri yabancı cohort karşıtlığı için doğrulanmıştır. Tam 149 değer prompt içine gömülmez; diğer uyruklar canlı DB ValueCatalog üzerinden grounding gerektirir. Kaynak ülke adları tam normalize değildir.",
       "pii": false,
       "selectable": true,
       "filterable": true,

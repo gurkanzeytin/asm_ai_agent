@@ -49,6 +49,19 @@ class ColumnSpec(BaseModel):
         default=False,
         description="Whether known_values were verified against the source deployment.",
     )
+    known_values_complete: bool = Field(
+        default=False,
+        description="Whether known_values is the complete live distinct-value set.",
+    )
+    verified_distinct_count: int | None = Field(
+        default=None,
+        ge=0,
+        description="Live distinct-value count at the last safe category validation.",
+    )
+    values_verified_at: str = Field(
+        default="",
+        description="ISO date of the last live category-value validation.",
+    )
     value_notes: str = Field(
         default="",
         description="Grounding caveats; empty when values are not applicable or not yet sampled.",
@@ -171,6 +184,24 @@ def load_column_catalog() -> ColumnCatalog:
         if unknown:
             raise CatalogValidationError(
                 f"Column '{spec.column}' references unknown related columns: {sorted(unknown)}"
+            )
+        if spec.known_values_complete and not spec.values_verified:
+            raise CatalogValidationError(
+                f"Column '{spec.column}' marks known_values complete but not verified"
+            )
+        if (
+            spec.verified_distinct_count is not None
+            and spec.verified_distinct_count < len(set(spec.known_values))
+        ):
+            raise CatalogValidationError(
+                f"Column '{spec.column}' has fewer verified distinct values than known_values"
+            )
+        if (
+            spec.known_values_complete
+            and spec.verified_distinct_count != len(set(spec.known_values))
+        ):
+            raise CatalogValidationError(
+                f"Column '{spec.column}' complete value count does not match known_values"
             )
     return catalog
 
