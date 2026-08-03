@@ -239,6 +239,44 @@ def test_degisik_maps_to_distinct_count(question, metric):
 
 
 @pytest.mark.parametrize(
+    "question",
+    [
+        "kaç adet hasta var",
+        "kaç tane hasta var",
+    ],
+)
+def test_counting_unit_filler_does_not_break_the_patient_metric(question):
+    """"adet"/"tane" mean nothing beyond "how many", but phrase matching is
+    consecutive, so they split "kaç hasta" and the question fell back to
+    appointment_count — answering with a randevu total (live UI testing,
+    2026-08-03).
+
+    A modifier between the two ("kaç adet TÜRK hasta var") genuinely leaves the
+    catalog with nothing to match; the planner's patient-volume fallback covers
+    that case instead — see test_planner_metric_consistency."""
+    matched = catalog.match_metrics(fold(question))
+    assert "unique_patient_count" in matched
+    assert "appointment_count" not in matched
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "kaç adet randevu var",
+        "randevu adedi nedir",
+        "gelmeyen randevu adedini ver",
+    ],
+)
+def test_counting_unit_filler_leaves_appointment_wording_alone(question):
+    """A synonym that names the counting unit itself ("randevu adedi") must keep
+    resolving exactly as before — the filler is skipped only BETWEEN term
+    tokens, never as a phrase's own first token."""
+    matched = catalog.match_metrics(fold(question))
+    assert matched
+    assert "unique_patient_count" not in matched
+
+
+@pytest.mark.parametrize(
     ("question", "metric", "forbidden"),
     [
         # Passive "gelinmiyor"/"en çok gelinmiyor" (no-show) must not fall back

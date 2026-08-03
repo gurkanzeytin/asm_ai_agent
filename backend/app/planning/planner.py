@@ -92,6 +92,15 @@ _DAY_TYPE_DIMENSION = "DayType"
 # dimension synonym list.
 _BARE_GENDER_TERM_PATTERN = re.compile(r"\b(kadin|erkek)\b")
 
+# The patient noun and its inflections, but NEVER the words that merely start
+# the same way: "hastane"/"hastanenin" is the branch, and "hastalık"/
+# "hastalıkları" is part of real department names ("Göz Hastalıkları", "Çocuk
+# Sağlığı ve Hastalıkları"). Folded text only.
+_PATIENT_NOUN_PATTERN = re.compile(r"\bhasta(?!ne|li)\w*\b")
+_APPOINTMENT_NOUN_PATTERN = re.compile(r"\brandevu\w*\b")
+# Wording that asks "how many", whatever unit word it uses.
+_COUNT_REQUEST_PATTERN = re.compile(r"\b(kac|sayi\w*|adet\w*|tane\w*)\b")
+
 # Generic organization-wide scope phrases ("tüm aile sağlığı merkezleri", "bütün
 # şubeler", "kurum genelinde", ...). These NEVER name a real branch value —
 # they mean "no branch filter, every record in scope" — and must never be
@@ -1222,6 +1231,20 @@ class QueryPlanner:
         # granularity wording to a single scalar COUNT(*).
         if pattern == "time_trend" and granularity is None:
             granularity = self._trend_granularity_from_dates(analysis.detected_dates)
+
+        # "kaç adet türk hasta var" counts PATIENTS, but the modifier between
+        # "kaç" and "hasta" splits unique_patient_count's synonym, so NO metric
+        # matched and the generic volume fallback below answered with a randevu
+        # total — a different question, answered confidently (live UI testing,
+        # 2026-08-03). When the wording counts patients and never names randevu,
+        # the implied volume is the distinct patient count, not the row count.
+        if (
+            not metrics
+            and _PATIENT_NOUN_PATTERN.search(folded)
+            and not _APPOINTMENT_NOUN_PATTERN.search(folded)
+            and _COUNT_REQUEST_PATTERN.search(folded)
+        ):
+            metrics = ["unique_patient_count"]
 
         # Volume is the implied metric for count-like patterns with no explicit metric.
         if not metrics and (

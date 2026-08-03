@@ -545,3 +545,49 @@ class TestGenderCohortFilterReachesSQL:
         # The department breakdown and the sanity-check volume both survive.
         assert resolved_plan.dimensions == ["GenelRandevuBolumAdi"]
         assert "appointment_count" in resolved_plan.metrics
+
+
+# ── Uyruk demonimleri (2026-08-03 canlı hata) ─────────────────────────────
+# "kaç adet türk hasta var" hiç uyruk filtresi üretmiyordu; soru sessizce TÜM
+# uyruklar üzerinden cevaplanıp "1.683.876 randevu" dönüyordu.
+
+class TestNationalityDemonyms:
+    def test_demonym_before_patient_noun_is_extracted(self):
+        assert extract_candidate_phrases("kaç adet türk hasta var") == {
+            "nationality": ["turk"]
+        }
+
+    def test_demonym_resolves_to_the_country_value(self):
+        result = resolve_value("nationality", "turk", ["Türkiye", "Türkmenistan"])
+        assert result.matched_value == "Türkiye"
+        assert result.grounded is True
+
+    def test_longer_demonym_wins_over_its_own_prefix(self):
+        # "türkmen" içinde "turk" de geçiyor; yanlış ülkeye çözülmemeli.
+        assert extract_candidate_phrases("türkmen hasta sayısı") == {
+            "nationality": ["turkmen"]
+        }
+
+    def test_two_demonyms_describe_a_comparison_not_a_filter(self):
+        assert "nationality" not in extract_candidate_phrases(
+            "türk ve alman hastaları karşılaştır"
+        )
+
+    def test_grouping_wording_stays_a_dimension(self):
+        assert "nationality" not in extract_candidate_phrases(
+            "Uyruklara göre hasta dağılımını görmek istiyorum."
+        )
+
+    def test_cohort_share_wording_is_not_a_filter(self):
+        assert "nationality" not in extract_candidate_phrases(
+            "türk hastaların oranı nedir"
+        )
+
+    def test_explicit_country_mention_still_wins(self):
+        assert extract_candidate_phrases("Bulgaristan uyruklu hasta sayısı nedir") == {
+            "nationality": ["Bulgaristan"]
+        }
+
+    def test_unknown_demonym_is_never_invented(self):
+        result = resolve_value("nationality", "turk", ["Almanya", "Bulgaristan"])
+        assert result.matched_value is None

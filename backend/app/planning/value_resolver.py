@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import difflib
 import re
+from collections.abc import Collection
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 
@@ -75,6 +76,58 @@ _DEPARTMENT_ALIASES: dict[str, tuple[str, ...]] = {
     "uroloji": ("uroloji",),
     "onkoloji": ("onkoloji",),
     "psikiyatri": ("psikiyatri", "ruh sagligi"),
+}
+
+# `Uyruk` stores COUNTRY names ("Türkiye", "Almanya", "Rusya Fed."), but people
+# ask with the DEMONYM ("türk hasta", "Suriyeli hastalar"). A demonym carries no
+# "uyruk" cue word and is not capitalised, so neither the proper-noun walk-back
+# nor the cue-root scan ever produced a candidate: "kaç adet türk hasta var"
+# dropped the nationality entirely and answered "1.683.876 randevu" — the total
+# over EVERY nationality, presented as if it were the answer (live UI testing,
+# 2026-08-03).
+#
+# Each expansion is the COUNTRY name, never the demonym, and is matched by
+# containment against the grounded value list — so "turk" resolves to "Türkiye"
+# without also matching "Türkmenistan", which the bare demonym would.
+# Search hints only: a demonym with no real nationality behind it still degrades
+# to `no_match` and is never invented.
+_NATIONALITY_ALIASES: dict[str, tuple[str, ...]] = {
+    "turk": ("turkiye",),
+    "turkiyeli": ("turkiye",),
+    "suriyeli": ("suriye",),
+    "alman": ("almanya",),
+    "rus": ("rusya",),
+    "bulgar": ("bulgaristan",),
+    "romen": ("romanya",),
+    "gurcu": ("gurcistan",),
+    "azeri": ("azerbaycan",),
+    "kazak": ("kazakistan",),
+    "ozbek": ("ozbekistan",),
+    "kirgiz": ("kirgizistan",),
+    "turkmen": ("turkmenistan",),
+    "ukraynali": ("ukrayna",),
+    "iranli": ("iran",),
+    "irakli": ("irak",),
+    "libyali": ("libya",),
+    "cezayirli": ("cezayir",),
+    "arnavut": ("arnavutluk",),
+    "ingiliz": ("ingiltere",),
+    "amerikali": ("abd",),
+    "kanadali": ("kanada",),
+    "sirp": ("sirbistan",),
+    "nijeryali": ("nijerya",),
+    "etiyopyali": ("etiyopya",),
+    "kamerunlu": ("kamerun",),
+    "moldovali": ("moldova",),
+    "kosovali": ("kosova",),
+    "bahreynli": ("bahreyn",),
+    "gabonlu": ("gabon",),
+}
+
+# Fields whose colloquial wording needs expanding before it can be grounded.
+_ALIASES_BY_FIELD: dict[str, dict[str, tuple[str, ...]]] = {
+    "department": _DEPARTMENT_ALIASES,
+    "nationality": _NATIONALITY_ALIASES,
 }
 
 # Cue-word ROOTS (folded), matched via startswith against each token to
@@ -343,6 +396,53 @@ class ResolvedValue:
     clarification_required: bool = False
 
 
+def _resolve_by_alias(
+    field_name: str,
+    original_text: str,
+    normalized_input: str,
+    normalized_map: dict[str, list[str]],
+    expansions: tuple[str, ...],
+) -> ResolvedValue | None:
+    """Grounds a colloquial term by looking for its expansion INSIDE real values.
+
+    Returns None when no expansion is behind the term, so the caller continues
+    with its own stages. Never invents: only values present in `normalized_map`
+    can come back, and several hits ask instead of guessing.
+    """
+    for expansion in expansions:
+        hits = sorted(
+            {
+                candidate
+                for norm, group in normalized_map.items()
+                if expansion in norm
+                for candidate in group
+            }
+        )
+        if len(hits) == 1:
+            return ResolvedValue(
+                field=field_name,
+                original_text=original_text,
+                normalized_text=normalized_input,
+                matched_value=hits[0],
+                match_type="alias",
+                confidence=0.9,
+                grounded=True,
+            )
+        if len(hits) > 1:
+            return ResolvedValue(
+                field=field_name,
+                original_text=original_text,
+                normalized_text=normalized_input,
+                matched_value=None,
+                match_type="ambiguous",
+                confidence=0.6,
+                alternatives=_dedupe_preserve_order(hits)[:5],
+                grounded=False,
+                clarification_required=True,
+            )
+    return None
+
+
 def resolve_value(field_name: str, original_text: str, candidates: list[str]) -> ResolvedValue:
     """Pure matcher: `original_text` against a pre-fetched grounded `candidates` list.
 
@@ -437,6 +537,22 @@ def resolve_value(field_name: str, original_text: str, candidates: list[str]) ->
             clarification_required=True,
         )
 
+    # A curated demonym outranks a coincidental prefix collision: "turk"
+    # prefix-matches both "Türkiye" and "Türkmenistan", so the generic stage
+    # below would ask which one was meant for every "türk hasta" question. The
+    # alias states the intent explicitly, and its expansion is still grounded by
+    # containment — a demonym whose country is absent from the data returns
+    # no_match rather than an invented value. Departments keep the late
+    # last-resort placement: their colloquial terms do not prefix-collide, and
+    # promoting them would override a legitimate prefix hit.
+    if field_name == "nationality" and normalized_input in _NATIONALITY_ALIASES:
+        alias_hit = _resolve_by_alias(
+            field_name, original_text, normalized_input, normalized_map,
+            _NATIONALITY_ALIASES[normalized_input],
+        )
+        if alias_hit is not None:
+            return alias_hit
+
     prefix_matches = sorted(
         {
             candidate
@@ -507,44 +623,21 @@ def resolve_value(field_name: str, original_text: str, candidates: list[str]) ->
             grounded=True,
         )
 
-    # Last resort for departments: expand a colloquial term ("kalp", "KBB",
-    # "pediatri") to the clinical wording and look for it INSIDE the grounded
-    # values — real department names carry qualifiers ("Kulak Burun Boğaz
-    # (Ataşehir)") that defeat prefix and fuzzy matching. Still grounded: only
-    # values that actually exist can be returned, and a term matching several
-    # different departments asks instead of guessing.
-    if field_name == "department":
-        for expansion in _DEPARTMENT_ALIASES.get(normalized_input, ()):
-            hits = sorted(
-                {
-                    candidate
-                    for norm, group in normalized_map.items()
-                    if expansion in norm
-                    for candidate in group
-                }
-            )
-            if len(hits) == 1:
-                return ResolvedValue(
-                    field=field_name,
-                    original_text=original_text,
-                    normalized_text=normalized_input,
-                    matched_value=hits[0],
-                    match_type="alias",
-                    confidence=0.9,
-                    grounded=True,
-                )
-            if len(hits) > 1:
-                return ResolvedValue(
-                    field=field_name,
-                    original_text=original_text,
-                    normalized_text=normalized_input,
-                    matched_value=None,
-                    match_type="ambiguous",
-                    confidence=0.6,
-                    alternatives=_dedupe_preserve_order(hits)[:5],
-                    grounded=False,
-                    clarification_required=True,
-                )
+    # Last resort for alias-carrying fields: expand a colloquial term to the
+    # wording the real values are built from and look for it INSIDE the grounded
+    # values — department names carry qualifiers ("Kulak Burun Boğaz
+    # (Ataşehir)") and nationalities are stored as countries ("Türkiye") rather
+    # than demonyms ("türk"), both of which defeat prefix and fuzzy matching.
+    # Still grounded: only values that actually exist can be returned, and a
+    # term matching several different values asks instead of guessing.
+    field_aliases = _ALIASES_BY_FIELD.get(field_name)
+    if field_aliases is not None:
+        alias_hit = _resolve_by_alias(
+            field_name, original_text, normalized_input, normalized_map,
+            field_aliases.get(normalized_input, ()),
+        )
+        if alias_hit is not None:
+            return alias_hit
 
     return ResolvedValue(
         field=field_name,
@@ -703,6 +796,35 @@ def extract_candidate_phrases(question: str) -> dict[str, list[str]]:
         shortest_alias = min(matched_gender_aliases, key=len)
         results["gender"] = [shortest_alias]
 
+    # Demonyms behave exactly like the gender aliases above: lowercase, no cue
+    # word, attached to the patient noun ("türk hasta"), so the proper-noun
+    # walk-back cannot see them. Only run when the cue-root scan found nothing —
+    # an explicit "Bulgaristan uyruklu" mention is already grounded and must not
+    # be overridden. Two different demonyms describe cohorts being compared, not
+    # one filter, so only a single match applies.
+    if "nationality" not in results:
+        hits = [
+            alias
+            for alias in _NATIONALITY_ALIASES
+            if re.search(rf"\b{re.escape(alias)}\w*\b", folded_question)
+        ]
+        # "türkmen" matches the "turk" alias too, which would resolve to a
+        # second, wrong country and disqualify the whole mention. The longest
+        # alias is the one actually written, so drop any alias that is merely a
+        # prefix of another hit.
+        matched_nationalities = [
+            alias
+            for alias in hits
+            if not any(other != alias and other.startswith(alias) for other in hits)
+        ]
+        matched_countries = {
+            _NATIONALITY_ALIASES[alias][0] for alias in matched_nationalities
+        }
+        if len(matched_countries) == 1 and _restricts_patient_cohort(
+            folded_question, matched_nationalities, prefix=True
+        ):
+            results["nationality"] = [min(matched_nationalities, key=len)]
+
     return results
 
 
@@ -716,18 +838,28 @@ def extract_candidate_phrases(question: str) -> dict[str, list[str]]:
 _COHORT_SHARE_WORDS = ("orani", "oran", "payi", "pay", "yuzdesi", "yuzde")
 
 
-def _gender_restricts_patient_cohort(folded_question: str) -> bool:
-    """True when a gender word modifies "hasta" as a genuine cohort filter.
+def _restricts_patient_cohort(
+    folded_question: str, aliases: Collection[str], *, prefix: bool = False
+) -> bool:
+    """True when one of `aliases` modifies "hasta" as a genuine cohort filter.
 
     Plain "Erkek hastaların en çok gittiği ilk 5 bölüm" carries no explicit
     filter marker ("sadece"/"için"), so it used to yield no gender candidate at
     all and the question silently answered over EVERY patient. Attachment to
     the patient noun is filter intent on its own; the share reading above is
     the one exception.
+
+    `prefix` lets an inflected demonym still attach ("türk hastaların" folds to
+    "turk hastalarin"); gender aliases stay exact, as they always were.
     """
     tokens = folded_question.split()
     for index, token in enumerate(tokens):
-        if token not in _GENDER_ALIASES:
+        matched = (
+            any(token.startswith(alias) for alias in aliases)
+            if prefix
+            else token in aliases
+        )
+        if not matched:
             continue
         following = tokens[index + 1 :][:2]
         if not following or not following[0].startswith("hasta"):
@@ -736,6 +868,11 @@ def _gender_restricts_patient_cohort(folded_question: str) -> bool:
             return False
         return True
     return False
+
+
+def _gender_restricts_patient_cohort(folded_question: str) -> bool:
+    """True when a gender word modifies "hasta" as a genuine cohort filter."""
+    return _restricts_patient_cohort(folded_question, _GENDER_ALIASES)
 
 
 # The field's own dimension noun may sit between the value and the share word

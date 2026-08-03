@@ -434,24 +434,58 @@ def _match_token(question_token: str, term_token: str, allow_prefix: bool) -> bo
     return allow_prefix and len(term_stem) >= 4 and question_stem.startswith(term_stem)
 
 
-def _phrase_position(folded_question: str, term: str, allow_prefix: bool = True) -> int:
-    """Token index of the term phrase in the question (-1 if absent).
+# Counting-unit words carry no meaning of their own — "kaç ADET hasta" and
+# "kaç TANE hasta" ask exactly what "kaç hasta" asks. Because phrase matching
+# is strictly consecutive, such a word sitting inside a synonym broke the match
+# entirely: "kaç adet türk hasta var" missed unique_patient_count's "kac hasta"
+# and fell back to the generic appointment_count, answering with a randevu
+# total for a question about patients (live UI testing, 2026-08-03). They are
+# skipped BETWEEN term tokens only, so a synonym that names one itself
+# ("randevu adedi") keeps matching exactly as before.
+_COUNT_UNIT_FILLERS = frozenset({"adet", "adedi", "adedini", "tane", "tanesi"})
 
-    Whole-token matching only: every term token must match a consecutive question
-    token (exact, stem-equal, or stem-prefix). Substring matches inside words
-    ('top' in 'toplam') never count.
+
+def _phrase_match(
+    folded_question: str, term: str, allow_prefix: bool = True
+) -> tuple[int, int] | None:
+    """Token span (start, end) the term phrase consumes, or None if absent.
+
+    Whole-token matching only: every term token must match a question token
+    (exact, stem-equal, or stem-prefix) in order, with only counting-unit
+    fillers allowed in between. Substring matches inside words ('top' in
+    'toplam') never count.
     """
     question_tokens = _TOKEN_PATTERN.findall(folded_question)
     term_tokens = _TOKEN_PATTERN.findall(fold(term))
     if not term_tokens or len(term_tokens) > len(question_tokens):
-        return -1
+        return None
     for start in range(len(question_tokens) - len(term_tokens) + 1):
-        if all(
-            _match_token(question_tokens[start + offset], term_token, allow_prefix)
-            for offset, term_token in enumerate(term_tokens)
-        ):
-            return start
-    return -1
+        cursor = start
+        for term_token in term_tokens:
+            # A filler may be skipped only between term tokens, never as the
+            # phrase's own first token — otherwise the span would start on a
+            # word the term does not contain.
+            while (
+                cursor > start
+                and cursor < len(question_tokens)
+                and question_tokens[cursor] in _COUNT_UNIT_FILLERS
+                and not _match_token(question_tokens[cursor], term_token, allow_prefix)
+            ):
+                cursor += 1
+            if cursor >= len(question_tokens) or not _match_token(
+                question_tokens[cursor], term_token, allow_prefix
+            ):
+                break
+            cursor += 1
+        else:
+            return start, cursor
+    return None
+
+
+def _phrase_position(folded_question: str, term: str, allow_prefix: bool = True) -> int:
+    """Token index of the term phrase in the question (-1 if absent)."""
+    match = _phrase_match(folded_question, term, allow_prefix)
+    return -1 if match is None else match[0]
 
 
 def _term_in(folded_question: str, term: str, allow_prefix: bool = True) -> bool:
@@ -462,11 +496,7 @@ def _phrase_span(
     folded_question: str, term: str, allow_prefix: bool = True
 ) -> tuple[int, int] | None:
     """Token span (start, end) of the term phrase in the question, or None if absent."""
-    start = _phrase_position(folded_question, term, allow_prefix)
-    if start < 0:
-        return None
-    term_tokens = _TOKEN_PATTERN.findall(fold(term))
-    return start, start + len(term_tokens)
+    return _phrase_match(folded_question, term, allow_prefix)
 
 
 def phrase_span(folded_question: str, term: str) -> tuple[int, int] | None:

@@ -420,3 +420,35 @@ def test_every_conditional_metric_builds_compliant_sql(metric_id):
 # analytical signals, deterministic SQL pipeline, compliance, reporting/
 # workflow) is the existing test suite itself — see the deliverable's test
 # run for exact counts. No duplicate assertions are added here.
+
+
+# ── Hasta sayılan sorular randevu saymamalı (2026-08-03 canlı hata) ────────
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "kaç adet türk hasta var",
+        "kaç adet hasta var",
+        "türk hasta sayısı nedir",
+    ],
+)
+def test_patient_count_question_never_falls_back_to_appointment_volume(question):
+    """"kaç adet türk hasta var" -> "1.683.876 randevu". Modifier between "kaç"
+    ve "hasta" katalog eşleşmesini böldüğü için hiçbir metrik bulunamıyor ve
+    jenerik hacim yedeği randevu sayıyordu."""
+    plan = plan_for(question)
+    assert plan.metrics == ["unique_patient_count"]
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "kaç adet randevu var",
+        "2024 yılında kaç randevu var",
+        "türk hastaların randevu sayısı nedir",
+    ],
+)
+def test_appointment_wording_still_counts_appointments(question):
+    """Randevu geçen soru hasta saymaya kaymamalı."""
+    plan = plan_for(question)
+    assert "unique_patient_count" not in plan.metrics
