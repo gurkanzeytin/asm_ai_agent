@@ -519,8 +519,13 @@ def test_single_window_comparison_uses_previous_window_not_last_30_days():
     assert isinstance(built, DeterministicSQL)
     assert "GETDATE()" not in built.sql
     assert "'2025-01-01'" in built.sql
-    # Equal-length window ending the day before the current one.
-    assert "'2024-01-02'" in built.sql and "'2024-12-31'" in built.sql
+    # A whole calendar year compares against the PREVIOUS CALENDAR YEAR. This
+    # was an equal-length day span until 2026-08-03, which over the 2024 leap
+    # year started at 2024-01-02 and reported 330.510 where the same system
+    # answers 330.534 for "2024 kaç randevu" — two numbers for one year. The
+    # point of this test (never fall back to the GETDATE()-relative default) is
+    # unchanged and still asserted above.
+    assert "'2024-01-01'" in built.sql and "'2024-12-31'" in built.sql
 
 
 def test_same_day_wording_is_not_a_context_reference():

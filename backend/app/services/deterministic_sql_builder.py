@@ -65,6 +65,30 @@ VERIFIED_STATUS_VALUES = {
     "waiting": "Beklemede",
 }
 DATE_COLUMN = "BaslangicTarihi"
+# Kept local rather than imported from app.planning.planner: the builder is a
+# leaf of the planning package and must not depend back on it.
+_MONTH_LABELS = (
+    "",
+    "Ocak",
+    "Şubat",
+    "Mart",
+    "Nisan",
+    "Mayıs",
+    "Haziran",
+    "Temmuz",
+    "Ağustos",
+    "Eylül",
+    "Ekim",
+    "Kasım",
+    "Aralık",
+)
+
+
+def _last_day_of_month(year: int, month: int) -> date:
+    """Last calendar day of the given month, leap years included."""
+    if month == 12:
+        return date(year, 12, 31)
+    return date(year, month + 1, 1) - timedelta(days=1)
 # GenelRandevuBolumAdi stores comma-separated composites ("Genel Cerrahi,
 # Ameliyathane, "); equality on the raw value never matches a single
 # department, so its predicates are rendered as delimiter-bounded containment.
@@ -1942,18 +1966,56 @@ class DeterministicSQLBuilder:
                     f"{column} >= '{previous_start}' "
                     f"AND {column} < DATEADD(day, 1, '{previous_end}')"
                 )
-                return (
-                    current,
-                    baseline,
-                    window.expression or window.start_date,
-                    "önceki dönem",
+                # Labels are user-visible ("… döneminde 213.855 randevu"), so
+                # they must never carry the FOLDED question text the date
+                # detector kept ("gecen yil"), nor the placeholder "önceki
+                # dönem" — which the report renderer turns into "önceki dönem
+                # döneminde". Whole calendar years label as the year itself, so
+                # the sentence reads the same as an explicit "2024 ve 2025"
+                # comparison.
+                current_label, baseline_label = self._window_labels(
+                    window, previous_start, previous_end
                 )
+                return current, baseline, current_label, baseline_label
         if adaptive_retry:
             return LAST_90, PREVIOUS_90, "son 90 gün", "önceki 90 gün"
         return LAST_30, PREVIOUS_30, "son 30 gün", "önceki 30 gün"
 
+    @staticmethod
+    def _window_labels(
+        window, previous_start: str, previous_end: str
+    ) -> tuple[str, str]:
+        """User-facing labels for a window and the window before it."""
+        try:
+            start = date.fromisoformat(window.start_date)
+            end = date.fromisoformat(window.end_date)
+            previous = date.fromisoformat(previous_start)
+        except ValueError:
+            return window.expression or window.start_date, "önceki dönem"
+        if start == date(start.year, 1, 1) and end == date(start.year, 12, 31):
+            return str(start.year), str(previous.year)
+        if start.day == 1 and end == _last_day_of_month(start.year, start.month):
+            return (
+                f"{_MONTH_LABELS[start.month]} {start.year}",
+                f"{_MONTH_LABELS[previous.month]} {previous.year}",
+            )
+        return (
+            f"{window.start_date} – {window.end_date}",
+            f"{previous_start} – {previous_end}",
+        )
+
     def _previous_window(self, start_date: str, end_date: str) -> tuple[str, str] | None:
-        """The equal-length window ending the day before `start_date`."""
+        """The comparable window before `start_date`.
+
+        A whole calendar year or month is compared against the PREVIOUS
+        CALENDAR year or month, not against an equal-length day span. Over a
+        leap-year boundary the two differ: 2025 is 365 days, so the equal-length
+        window before it starts 2024-01-02 and reported 330.510 for "geçen
+        seneye kıyasla" where the same system answers 330.534 for "2024 kaç
+        randevu" — two different numbers for the same year (offline sweep,
+        2026-08-03). Any other window keeps the equal-length definition, which
+        is the only meaningful one for an arbitrary range.
+        """
         try:
             start = date.fromisoformat(start_date)
             end = date.fromisoformat(end_date)
@@ -1961,6 +2023,14 @@ class DeterministicSQLBuilder:
             return None
         if end < start:
             return None
+        if start == date(start.year, 1, 1) and end == date(start.year, 12, 31):
+            return f"{start.year - 1}-01-01", f"{start.year - 1}-12-31"
+        if start.day == 1 and end == _last_day_of_month(start.year, start.month):
+            previous_month_end = start - timedelta(days=1)
+            return (
+                date(previous_month_end.year, previous_month_end.month, 1).isoformat(),
+                previous_month_end.isoformat(),
+            )
         length = (end - start).days + 1
         previous_end = start - timedelta(days=1)
         return (previous_end - timedelta(days=length - 1)).isoformat(), previous_end.isoformat()

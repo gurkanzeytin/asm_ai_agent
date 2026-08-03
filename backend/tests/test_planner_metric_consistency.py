@@ -26,6 +26,7 @@ from app.services.deterministic_sql_builder import (
     SUPPORTED_ANALYSIS_TYPES,
     DeterministicSQL,
     DeterministicSQLBuilder,
+    UnsupportedPlan,
 )
 from app.services.query_analyzer import QueryAnalyzer
 
@@ -452,3 +453,57 @@ def test_appointment_wording_still_counts_appointments(question):
     """Randevu geçen soru hasta saymaya kaymamalı."""
     plan = plan_for(question)
     assert "unique_patient_count" not in plan.metrics
+
+
+# ── Belirsiz yönetim sorusu LLM'e düşmemeli (2026-08-03 offline süpürme) ───
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Geçen seneye kıyasla işler nasıl gidiyor?",
+        "Son zamanlarda durumumuz nasıl?",
+        "Genel gidişat iyiye mi gidiyor?",
+    ],
+)
+def test_vague_management_question_stays_on_the_deterministic_path(question):
+    """`multi_metric_performance` sabit-şekilli karşılaştırma alias'ları
+    üretiyor ama uyum denetiminin muafiyet listesinde yoktu: doğru ve eksiksiz
+    deterministik SQL her seferinde reddedilip LLM yedeğine düşüyor, 58 sn
+    sonra SAFE_ERROR ile ölüyordu."""
+    plan = plan_for(question)
+    built, compliance = build_and_check(plan)
+    assert not isinstance(built, UnsupportedPlan)
+    assert compliance.compliant, compliance.missing_metrics or compliance.missing
+
+
+def test_flat_multi_metric_still_has_to_name_every_metric():
+    """Muafiyet SADECE karşılaştırma şekli için: düz çok-metrikli bir SELECT'te
+    sessizce düşen bir metrik hâlâ yakalanmalı."""
+    plan = plan_for("2024 için toplam ve gelmeyen randevu sayısını ver")
+    plan = plan.model_copy(update={"metrics": [*plan.metrics, "unique_patient_count"]})
+    built = DeterministicSQLBuilder().build(plan)
+    flat_sql = "SELECT COUNT(*) AS appointment_count FROM dbo.vw_RandevuRaporu;"
+    verdict = PlanComplianceValidator().check(flat_sql, plan)
+    assert not verdict.compliant
+    assert "unique_patient_count" in verdict.missing_metrics
+
+
+# ── "Geçen sene" takvim yılıdır, 365 gün değil (2026-08-03) ────────────────
+
+@pytest.mark.parametrize(
+    ("window", "expected"),
+    [
+        # 2024 artık yıl: eşit uzunluk kuralı 2024-01-02'den başlatıyordu ve
+        # "geçen seneye kıyasla" 330.510 derken "2024 kaç randevu" 330.534
+        # diyordu — aynı yıl için iki farklı sayı.
+        (("2025-01-01", "2025-12-31"), ("2024-01-01", "2024-12-31")),
+        (("2024-01-01", "2024-12-31"), ("2023-01-01", "2023-12-31")),
+        # Tam takvim ayı da bir önceki takvim ayıyla kıyaslanır.
+        (("2025-03-01", "2025-03-31"), ("2025-02-01", "2025-02-28")),
+        (("2025-01-01", "2025-01-31"), ("2024-12-01", "2024-12-31")),
+        # Keyfi aralık eşit uzunluk kuralında kalır.
+        (("2025-05-10", "2025-05-20"), ("2025-04-29", "2025-05-09")),
+    ],
+)
+def test_previous_window_aligns_to_the_calendar(window, expected):
+    assert DeterministicSQLBuilder()._previous_window(*window) == expected

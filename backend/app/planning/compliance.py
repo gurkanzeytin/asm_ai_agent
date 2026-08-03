@@ -400,6 +400,21 @@ class PlanComplianceValidator:
             "variance_analysis",
             "time_trend",
         }
+        # The carve-out above is keyed on analysis_type, which missed
+        # `multi_metric_performance`: the planner assigns it to vague
+        # management wording ("geçen seneye kıyasla işler nasıl gidiyor?") and
+        # the builder renders it through the SAME fixed current_/baseline_
+        # comparison shape, never as bare metric_id aliases. So a CORRECT,
+        # complete deterministic SQL was rejected every time, routed to the LLM
+        # fallback, and after 58s of generation plus one repair attempt the
+        # question died as SAFE_ERROR (offline sweep + live repro, 2026-08-03).
+        # Keying the exemption on the SHAPE the SQL actually carries rather
+        # than the declared type also keeps the check alive where it matters: a
+        # FLAT multi-metric select still has to name every metric, so a
+        # silently dropped metric is still caught.
+        renders_comparison_shape = bool(
+            re.search(r"\bas\s+current_period_count\b", folded_sql)
+        )
         missing_metrics = (
             sorted(
                 {
@@ -408,7 +423,11 @@ class PlanComplianceValidator:
                     if not re.search(rf"\bas\s+{re.escape(metric_id.lower())}\b", folded_sql)
                 }
             )
-            if len(plan.metrics) > 1 and plan.analysis_type not in _FIXED_SHAPE_ANALYSIS_TYPES
+            if (
+                len(plan.metrics) > 1
+                and plan.analysis_type not in _FIXED_SHAPE_ANALYSIS_TYPES
+                and not renders_comparison_shape
+            )
             else []
         )
         missing_dimensions = sorted(
