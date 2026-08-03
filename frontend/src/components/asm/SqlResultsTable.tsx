@@ -62,7 +62,12 @@ import { SqlSummaryStats } from "./SqlSummaryStats";
 import { tr } from "@/locales/tr";
 import { chartTypeFromRecommendation } from "./sql-chart-data";
 import { formatSqlCell } from "@/lib/sql-cell-format";
-import { buildMetricCards, resolveColumnMetadata, type ColumnMetadata } from "@/lib/presentation";
+import {
+  buildMetricCards,
+  formatDurationTr,
+  resolveColumnMetadata,
+  type ColumnMetadata,
+} from "@/lib/presentation";
 import {
   Dialog,
   DialogContent,
@@ -816,7 +821,7 @@ export function SqlResultsTable({
               )}
               {data.durationMs != null && (
                 <span className="text-[11px] font-normal text-muted-foreground/80">
-                  / {data.durationMs} ms
+                  / {formatDurationTr(data.durationMs)}
                 </span>
               )}
             </div>

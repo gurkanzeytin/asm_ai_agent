@@ -3,6 +3,7 @@ import {
   buildAnalyticsCards,
   buildMetricCards,
   formatAnalyticsValue,
+  formatDurationTr,
   getAnalyticsLabel,
   getColumnLabel,
   resolveColumnMetadata,
@@ -273,5 +274,23 @@ describe("buildAnalyticsCards", () => {
       { limit: 2 },
     );
     expect(cards).toHaveLength(2);
+  });
+});
+
+describe("formatDurationTr", () => {
+  // SQL sonuç tablosu süreyi ham float olarak basıyordu: "10309.890200000154 ms".
+  it("saniyenin altını tam sayı ms olarak yazar", () => {
+    expect(formatDurationTr(921.4832)).toBe("921 ms");
+    expect(formatDurationTr(0.2648)).toBe("0 ms");
+  });
+
+  it("saniyeyi aşan süreleri Türkçe ondalıkla saniyeye çevirir", () => {
+    expect(formatDurationTr(10309.890200000154)).toBe("10,3 sn");
+    expect(formatDurationTr(1000)).toBe("1,0 sn");
+  });
+
+  it("geçersiz süre için hiçbir şey yazmaz", () => {
+    expect(formatDurationTr(Number.NaN)).toBe("");
+    expect(formatDurationTr(-5)).toBe("");
   });
 });

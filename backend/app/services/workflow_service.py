@@ -100,12 +100,18 @@ class WorkflowService(IWorkflowService):
         query_result: QueryResult,
         execution_id: Optional[str] = None,
         insights: Optional["InsightResult"] = None,
+        metric_aliases: Optional[dict[str, str]] = None,
     ) -> GeneratedReport:
         """Coordinates narrative report generation delegation."""
         logger.info("WorkflowService execute_report_generation started.")
         try:
             report_dto = await self.report_service.generate_report(
-                question, sql, query_result, execution_id, insights=insights
+                question,
+                sql,
+                query_result,
+                execution_id,
+                insights=insights,
+                metric_aliases=metric_aliases,
             )
             logger.info("WorkflowService execute_report_generation completed successfully.")
             return report_dto

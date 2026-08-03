@@ -175,6 +175,18 @@ export function formatNumberTr(value: number): string {
   });
 }
 
+/** 10309.8902 -> "10,3 sn"; 87.4 -> "87 ms" (sorgu süresi rozeti). */
+export function formatDurationTr(milliseconds: number): string {
+  if (!Number.isFinite(milliseconds) || milliseconds < 0) return "";
+  if (milliseconds < 1000) {
+    return `${Math.round(milliseconds).toLocaleString("tr-TR")} ms`;
+  }
+  return `${(milliseconds / 1000).toLocaleString("tr-TR", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })} sn`;
+}
+
 /** 73.409332 -> "%73,4" (ondalık ayırıcı virgül, en fazla 1 ondalık). */
 export function formatPercentTr(value: number): string {
   return `%${value.toLocaleString("tr-TR", {

@@ -104,6 +104,7 @@ class IReportService(ABC):
         query_result: QueryResult,
         execution_id: Optional[str] = None,
         insights: Optional[InsightResult] = None,
+        metric_aliases: Optional[dict[str, str]] = None,
     ) -> GeneratedReport:
         """Invokes prompt services and LLM provider to synthesize a narrative report DTO.
 
@@ -153,6 +154,7 @@ class IWorkflowService(ABC):
         query_result: QueryResult,
         execution_id: Optional[str] = None,
         insights: Optional[InsightResult] = None,
+        metric_aliases: Optional[dict[str, str]] = None,
     ) -> GeneratedReport:
         """Coordinates narrative report generation.
 

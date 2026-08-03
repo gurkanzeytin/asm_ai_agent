@@ -45,6 +45,7 @@ class ReportService(IReportService):
         query_result: QueryResult,
         execution_id: str | None = None,
         insights: InsightResult | None = None,
+        metric_aliases: dict[str, str] | None = None,
     ) -> GeneratedReport:
         """Classifies results, renders templates first, and falls back to LLM analytics.
 
@@ -66,7 +67,7 @@ class ReportService(IReportService):
             # `render` returns None for any other ANALYTICAL result, which then
             # takes the insight path exactly as before.
             template_result = self.template_renderer.render(
-                report_type, query_result, question=question
+                report_type, query_result, question=question, metric_aliases=metric_aliases
             )
             if (
                 template_result is None

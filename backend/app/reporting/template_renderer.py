@@ -19,11 +19,62 @@ from app.reporting.presentation import (
     format_percent,
     format_value,
     get_column_label,
+    get_metric_label,
     label_for,
 )
 from app.reporting.report_classifier import ReportType
 from app.shared.result_limits import DEFAULT_GROUPED_RESULT_LIMIT
 from app.shared.result_window import cap_query_result, result_notice
+
+# Neutral wording used when the comparison's primary metric cannot be
+# identified — the pre-existing behaviour, kept as the safe degrade.
+_DEFAULT_COMPARISON_NOUN = "randevu"
+# Only count-shaped metrics read naturally in "… döneminde 19.050 <noun>".
+# A rate ("gelmeme oranı") would produce "19.050 gelmeme oranı"; rates take the
+# separate current_rate/baseline_rate branch, so they never reach this wording.
+_COUNTABLE_METRIC_SUFFIX = "_count"
+_TURKISH_LOWER = str.maketrans({"İ": "i", "I": "ı"})
+
+
+def _turkish_lower(text: str) -> str:
+    """Lowercases the way Turkish does: İ -> i, I -> ı (str.lower botches both)."""
+    return text.translate(_TURKISH_LOWER).lower()
+
+
+def _primary_metric_noun(metric_aliases: dict[str, str] | None) -> str:
+    """The Türkçe noun for the metric the comparison's headline numbers carry."""
+    for metric_id, alias in (metric_aliases or {}).items():
+        if alias != "current_period_count":
+            continue
+        if not metric_id.endswith(_COUNTABLE_METRIC_SUFFIX):
+            break
+        label = get_metric_label(metric_id)
+        return _turkish_lower(label) if label else _DEFAULT_COMPARISON_NOUN
+    return _DEFAULT_COMPARISON_NOUN
+
+
+def _secondary_metric_lines(
+    row: dict[str, Any], current_label: str, baseline_label: str
+) -> list[str]:
+    """One bullet per non-primary metric pair (current_<id>/baseline_<id>)."""
+    lines: list[str] = []
+    for key in row:
+        if not key.startswith("current_") or key == "current_period_count":
+            continue
+        metric_id = key[len("current_") :]
+        if metric_id.endswith("_label"):
+            continue
+        current = row.get(key)
+        baseline = row.get(f"baseline_{metric_id}")
+        if not (isinstance(current, Number) and isinstance(baseline, Number)):
+            continue
+        lines.append(
+            f"- **{get_metric_label(metric_id)}** — "
+            f"{current_label}: {format_number(current)}, "
+            f"{baseline_label}: {format_number(baseline)}"
+        )
+    return lines
+
 
 COMPARISON_CONTRACT_FALLBACK = (
     "# Karşılaştırma Yapılamadı\n\n"
@@ -47,6 +98,7 @@ class TemplateReportRenderer:
         report_type: ReportType,
         query_result: QueryResult,
         question: str | None = None,
+        metric_aliases: dict[str, str] | None = None,
     ) -> TemplateRenderResult | None:
         if report_type == ReportType.EMPTY:
             return self._render_empty(question)
@@ -58,7 +110,7 @@ class TemplateReportRenderer:
         # produced. The generic insight narrative that replaced it degraded to
         # "Sonuç kümesi için temel metrikler hesaplandı." — the user saw a
         # single KPI and none of the comparison (live UI testing, 2026-07-31).
-        typed = self._render_typed(query_result)
+        typed = self._render_typed(query_result, metric_aliases)
         if typed is not None:
             return typed
         if report_type == ReportType.ANALYTICAL:
@@ -92,7 +144,11 @@ class TemplateReportRenderer:
 
     # ── typed presentations ──────────────────────────────────────────────
 
-    def _render_typed(self, query_result: QueryResult) -> TemplateRenderResult | None:
+    def _render_typed(
+        self,
+        query_result: QueryResult,
+        metric_aliases: dict[str, str] | None = None,
+    ) -> TemplateRenderResult | None:
         if not query_result.rows:
             return None
         columns = set(query_result.columns)
@@ -101,7 +157,7 @@ class TemplateReportRenderer:
         if {"current_period_count", "baseline_period_count"} <= columns and len(
             query_result.rows
         ) == 1:
-            return self._render_comparison(query_result.rows[0])
+            return self._render_comparison(query_result.rows[0], metric_aliases)
         if {"current_entity_count", "baseline_entity_count"} <= columns and len(
             query_result.rows
         ) == 1:
@@ -133,7 +189,11 @@ class TemplateReportRenderer:
             "Son Dakika Randevu Analizi", "\n".join(lines), "cohort"
         )
 
-    def _render_comparison(self, row: dict[str, Any]) -> TemplateRenderResult:
+    def _render_comparison(
+        self,
+        row: dict[str, Any],
+        metric_aliases: dict[str, str] | None = None,
+    ) -> TemplateRenderResult:
         current = row.get("current_period_count")
         baseline = row.get("baseline_period_count")
         absolute = row.get("absolute_change")
@@ -158,10 +218,18 @@ class TemplateReportRenderer:
             direction = "azaldı"
         else:
             direction = "değişmedi"
+        # The headline numbers belong to the plan's PRIMARY metric, which is not
+        # always the generic total: "2024 ve 2025 gelmeyen randevu sayılarını
+        # karşılaştır" carries no_show_count. Naming it "randevu" presented
+        # no-show figures as total appointments — a confidently worded wrong
+        # answer (live testing, 2026-08-03). `metric_aliases` maps metric id ->
+        # emitted alias, so the metric aliased to current_period_count IS the
+        # primary; without it the wording degrades to the neutral "randevu".
+        primary_noun = _primary_metric_noun(metric_aliases)
         summary = (
-            f"{current_label} döneminde {format_number(current)} randevu, "
-            f"{baseline_label} döneminde {format_number(baseline)} randevu kaydedildi; "
-            f"randevu sayısı {format_number(abs(float(absolute)))} adet {direction}"
+            f"{current_label} döneminde {format_number(current)} {primary_noun}, "
+            f"{baseline_label} döneminde {format_number(baseline)} {primary_noun} kaydedildi; "
+            f"{primary_noun} {format_number(abs(float(absolute)))} adet {direction}"
         )
         if isinstance(percentage, Number):
             # The direction word already carries the sign ("azaldı"), so a
@@ -170,6 +238,12 @@ class TemplateReportRenderer:
             summary += f" ({format_percent(abs(float(percentage)))})"
         summary += "."
         lines = ["# Dönem Karşılaştırması", "", summary]
+        # A multi-metric comparison emits one current_/baseline_ pair per extra
+        # metric. Reporting only the primary silently dropped the very metric
+        # the question named, so every additional pair is stated too.
+        extra_lines = _secondary_metric_lines(row, current_label, baseline_label)
+        if extra_lines:
+            lines.extend(["", *extra_lines])
         return TemplateRenderResult("Dönem Karşılaştırması", "\n".join(lines), "comparison")
 
     def _render_entity_comparison(self, row: dict[str, Any]) -> TemplateRenderResult:

@@ -354,3 +354,76 @@ def test_report_classifier_logs_decision(caplog):
     assert record.intent == "LIST"
     assert record.report_type == "table"
     assert record.llm_invoked is False
+
+
+# ── Dönem karşılaştırması: metrik kimliği anlatıya taşınmalı ──────────────
+# Canlı test (2026-08-03): "2024 ve 2025 gelmeyen randevu sayılarını
+# karşılaştır" gelmeyen sayılarını "randevu" diye sunuyordu — kendinden emin
+# ifade edilmiş yanlış cevap. Ayrıca çok metrikli karşılaştırmada sorunun
+# adını verdiği metrik sessizce düşüyordu.
+
+_COMPARISON_COLUMNS = [
+    "current_period_label",
+    "baseline_period_label",
+    "current_period_count",
+    "baseline_period_count",
+    "absolute_change",
+    "percentage_change",
+]
+
+
+def _comparison_result(extra: dict | None = None) -> QueryResult:
+    row = {
+        "current_period_label": "2025",
+        "baseline_period_label": "2024",
+        "current_period_count": 19050,
+        "baseline_period_count": 30191,
+        "absolute_change": -11141,
+        "percentage_change": -36.9,
+    }
+    row.update(extra or {})
+    return _query_result(list(row.keys()), [row])
+
+
+def test_period_comparison_names_its_primary_metric():
+    renderer = TemplateReportRenderer()
+
+    result = renderer.render(
+        ReportType.ANALYTICAL,
+        _comparison_result(),
+        metric_aliases={"no_show_count": "current_period_count"},
+    )
+
+    assert result is not None
+    assert "gelmeyen randevu" in result.markdown
+    # Gelmeyen sayıları asla çıplak "randevu" olarak sunulmamalı.
+    assert "19.050 randevu" not in result.markdown
+
+
+def test_period_comparison_without_metric_aliases_keeps_neutral_wording():
+    renderer = TemplateReportRenderer()
+
+    result = renderer.render(ReportType.ANALYTICAL, _comparison_result())
+
+    assert result is not None
+    assert "19.050 randevu" in result.markdown
+
+
+def test_period_comparison_states_every_extra_metric():
+    renderer = TemplateReportRenderer()
+
+    result = renderer.render(
+        ReportType.ANALYTICAL,
+        _comparison_result(
+            {
+                "current_no_show_count": 19050,
+                "baseline_no_show_count": 30191,
+                "no_show_count_change": -11141,
+            }
+        ),
+        metric_aliases={"appointment_count": "current_period_count"},
+    )
+
+    assert result is not None
+    assert "Gelmeyen Randevu" in result.markdown
+    assert "19.050" in result.markdown and "30.191" in result.markdown

@@ -129,6 +129,9 @@ class GenerateReportNode(IAgentNode):
                 execution_id=state.workflow_id,
                 # Analytical reports reuse the insight narrative instead of a second LLM call.
                 insights=state.insights,
+                # Lets a typed comparison name its own metric instead of
+                # calling every headline number "randevu".
+                metric_aliases=state.generated_sql.metric_aliases,
             )
 
             report_dto = self._append_reasoning_sections(report_dto, state)

@@ -88,9 +88,12 @@ class _ScriptedExecutionWorkflowService:
             database_provider="mssql",
         )
 
-    async def execute_report_generation(self, question, sql, query_result, execution_id=None, insights=None):
+    async def execute_report_generation(
+        self, question, sql, query_result, execution_id=None, insights=None, metric_aliases=None
+    ):
         return await self.report_service.generate_report(
-            question, sql, query_result, execution_id, insights=insights
+            question, sql, query_result, execution_id, insights=insights,
+            metric_aliases=metric_aliases,
         )
 
 
