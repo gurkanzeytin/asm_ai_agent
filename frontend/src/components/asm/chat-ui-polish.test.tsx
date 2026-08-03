@@ -10,16 +10,12 @@ import { SqlChartPanel } from "./SqlChartPanel";
 import { EmptyState } from "./EmptyState";
 
 describe("sohbet arayüzü düzenlemeleri", () => {
-  it("boş ekrandaki sütun-temelli örnek soruyu tek tıkla gönderir", () => {
-    const onPrompt = vi.fn();
-    render(<EmptyState onPrompt={onPrompt} />);
+  it("açılış ekranında örnek soru kartı göstermez", () => {
+    // Kartlar bilinçli kaldırıldı; kazara geri gelirse bu test yakalar.
+    render(<EmptyState onPrompt={vi.fn()} />);
 
-    const starter = screen.getByRole("button", {
-      name: "2024 yılındaki ortalama randevu süresi nedir?",
-    });
-    fireEvent.click(starter);
-
-    expect(onPrompt).toHaveBeenCalledWith("2024 yılındaki ortalama randevu süresi nedir?");
+    expect(screen.queryByText(/Şunlardan biriyle başlayabilirsiniz/)).toBeNull();
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
   });
 
   it("kontrollü yanıttan sonra backend önerilerini tıklanabilir gösterir", () => {
